@@ -1439,6 +1439,92 @@ describe("EnrollmentWorkspace", () => {
     }
   })
 
+  it("shows the Registrar Head opening enrollment within seconds, without a reload", async () => {
+    let open = false
+    const scheduleFor = (isOpen: boolean) => ({
+      data: {
+        type: "enrollment_schedule",
+        academic_term_id: 2,
+        status: "semester_ongoing",
+        enrollment_opens_at: null,
+        enrollment_closes_at: null,
+        audiences: [],
+        viewer: {
+          audience: "irregular",
+          label: "Irregular Students",
+          opens_at: isOpen ? "2026-07-01T00:00:00Z" : "2028-08-01T00:00:00Z",
+          closes_at: isOpen ? "2028-08-31T00:00:00Z" : null,
+          is_open: isOpen,
+          reason: isOpen ? "open" : "before_window",
+        },
+        add_drop: {
+          is_open: false,
+          reason: "enrollment_still_open",
+          reason_message:
+            "The add/drop window opens once enrollment closes for this term.",
+          opens_at: null,
+          closes_at: null,
+        },
+      },
+    })
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (
+        target.includes("/academic-terms") &&
+        target.includes("enrollment-windows")
+      )
+        return Promise.resolve(
+          new Response(JSON.stringify(scheduleFor(open))),
+        )
+      if (target.includes("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (target.includes("/eligible-subjects"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [eligibleSubject] })),
+        )
+      if (target.includes("/enrollments"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      renderWithSession(<EnrollmentWorkspace />, {
+        session: {
+          userId: "1",
+          displayName: "Student",
+          role: "student",
+          signedInAt: "2026-07-30T00:00:00Z",
+        },
+      })
+
+      expect(
+        await screen.findByText("Enrollment has not opened yet"),
+      ).toBeInTheDocument()
+
+      // The Registrar Head opens enrollment; nobody on this page touches anything.
+      open = true
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000)
+      })
+
+      expect(await screen.findByText("Enrollment is open")).toBeInTheDocument()
+      expect(
+        screen.queryByText("Enrollment has not opened yet"),
+      ).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("a regular student selects an inline section, confirms, and submits", async () => {
     const user = userEvent.setup()
     let submitCall: [RequestInfo | URL, RequestInit | undefined] | null = null

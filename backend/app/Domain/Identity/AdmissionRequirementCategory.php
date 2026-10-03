@@ -34,6 +34,8 @@ enum AdmissionRequirementCategory: string
             StudentType::Freshman => [self::Freshman, self::Additional],
             StudentType::Transferee => [self::Transferee, self::Additional],
             StudentType::Returnee => [self::Additional],
+            // Assumption (not an approved policy): an existing student is asked for the Additional list only.
+            StudentType::ExistingStudent => [self::Additional],
             null => [self::Additional],
         };
     }

@@ -14,9 +14,14 @@ export const enrollmentScheduleQueryKey = (
   userId: string | null,
 ) => ["enrollment-schedule", academicTermId, userId] as const
 
+/**
+ * `refetchIntervalMs` re-reads the schedule while the tab is visible (and when it is focused again),
+ * so a student sees the Registrar Head open enrollment without reloading. Off by default.
+ */
 export function useEnrollmentScheduleQuery(
   academicTermId: number | null,
   enabled = true,
+  { refetchIntervalMs }: { refetchIntervalMs?: number } = {},
 ) {
   const { session } = useAuth()
 
@@ -24,6 +29,13 @@ export function useEnrollmentScheduleQuery(
     queryKey: enrollmentScheduleQueryKey(academicTermId, session?.userId ?? null),
     queryFn: ({ signal }) => getEnrollmentSchedule(academicTermId!, signal),
     enabled: enabled && session !== null && academicTermId !== null,
+    ...(refetchIntervalMs === undefined
+      ? {}
+      : {
+          refetchInterval: refetchIntervalMs,
+          refetchIntervalInBackground: false,
+          refetchOnWindowFocus: "always" as const,
+        }),
   })
 }
 

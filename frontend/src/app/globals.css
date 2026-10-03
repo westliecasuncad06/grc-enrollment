@@ -4052,3 +4052,165 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Queue Kiosk: the Welcome screen that opens before the device sign-in. It looks nothing like the
+   Student sign-in card that follows on the same device. */
+.queue-kiosk-welcome {
+  position: relative;
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  overflow: hidden;
+  padding: clamp(1.5rem, 6vw, 4rem);
+  color: #fff;
+  text-align: center;
+  background:
+    radial-gradient(
+      120% 90% at 50% 0%,
+      color-mix(in srgb, var(--primary) 78%, #fff 22%),
+      var(--primary) 45%,
+      color-mix(in srgb, var(--primary) 55%, #000) 100%
+    );
+}
+
+.queue-kiosk-welcome__glow {
+  position: absolute;
+  inset: auto -20% -35% -20%;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.28), transparent);
+  filter: blur(2rem);
+  animation: queue-kiosk-glow 5s ease-in-out infinite alternate;
+}
+
+.queue-kiosk-welcome__content {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: clamp(0.5rem, 1.5vw, 1rem);
+}
+
+.queue-kiosk-welcome__eyebrow {
+  margin: 0;
+  font-size: clamp(0.75rem, 1.6vw, 1rem);
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: queue-kiosk-rise 700ms 100ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.queue-kiosk-welcome__title {
+  margin: 0;
+  font-family: "Newsreader Variable", Georgia, serif;
+  font-size: clamp(3.5rem, 15vw, 10rem);
+  font-weight: 560;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.queue-kiosk-welcome__title span {
+  display: inline-block;
+  opacity: 0;
+  animation: queue-kiosk-letter 800ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.queue-kiosk-welcome__subtitle {
+  margin: 0;
+  font-size: clamp(1.1rem, 3vw, 2rem);
+  font-weight: 500;
+  opacity: 0;
+  animation: queue-kiosk-rise 700ms 900ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.queue-kiosk-welcome__rule {
+  display: block;
+  width: 0;
+  height: 0.2rem;
+  border-radius: 999px;
+  background: #fff;
+  animation: queue-kiosk-rule 900ms 1100ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.queue-kiosk-welcome__skip {
+  margin-top: 1.25rem;
+  padding: 0.6rem 1.4rem;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgb(255 255 255 / 0.12);
+  border: 1px solid rgb(255 255 255 / 0.55);
+  border-radius: 999px;
+  opacity: 0;
+  animation: queue-kiosk-rise 600ms 1700ms ease-out forwards;
+}
+
+.queue-kiosk-welcome__skip:hover {
+  background: rgb(255 255 255 / 0.22);
+}
+
+.queue-kiosk-welcome :focus-visible {
+  outline: 0.2rem solid #fff;
+  outline-offset: 0.25rem;
+}
+
+@keyframes queue-kiosk-letter {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em) scale(0.92);
+    filter: blur(0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+@keyframes queue-kiosk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 0.92;
+    transform: none;
+  }
+}
+
+@keyframes queue-kiosk-rule {
+  from {
+    width: 0;
+  }
+  to {
+    width: min(14rem, 50vw);
+  }
+}
+
+@keyframes queue-kiosk-glow {
+  from {
+    transform: translateY(0) scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: translateY(-4%) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-kiosk-welcome__glow,
+  .queue-kiosk-welcome__eyebrow,
+  .queue-kiosk-welcome__title span,
+  .queue-kiosk-welcome__subtitle,
+  .queue-kiosk-welcome__rule,
+  .queue-kiosk-welcome__skip {
+    animation: none !important;
+    opacity: 1;
+  }
+
+  .queue-kiosk-welcome__rule {
+    width: min(14rem, 50vw);
+  }
+}

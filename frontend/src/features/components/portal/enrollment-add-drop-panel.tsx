@@ -27,7 +27,7 @@ import {
 } from "@/features/components/ui/select"
 import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
 import { Textarea } from "@/features/components/ui/textarea"
-import { useEligibleSubjectsQuery } from "@/features/hooks/use-enrollment"
+import { useProspectusQuery } from "@/features/hooks/use-academic-record"
 import {
   useCreateEnrollmentChangeRequestMutation,
   useEnrollmentChangeRequestsQuery,
@@ -36,6 +36,7 @@ import {
   useSectionsQuery,
   useSubjectsQuery,
 } from "@/features/hooks/use-reference-data"
+import { markTone } from "@/features/lib/grade-presentation"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
 import { isApiClientError } from "@/features/services/api-client"
 
@@ -89,12 +90,9 @@ export function EnrollmentAddDropPanel({
 }) {
   const subjectsQuery = useSubjectsQuery({ enabled: windowOpen })
   const sectionsQuery = useSectionsQuery({ enabled: windowOpen })
-  // The picker's source of truth: only the student's OWN curriculum, already
-  // narrowed to subjects with an open section they may take (the same pool the
-  // enrollment flow uses; TanStack dedupes it with EnrollmentWorkspace's fetch).
-  const eligibleQuery = useEligibleSubjectsQuery(
-    windowOpen ? enrollment.academic_term_id : null,
-  )
+  // The picker's source of truth is the student's own prospectus (their curriculum), the same
+  // list they see under Grades. TanStack dedupes it with the Grades page's fetch.
+  const prospectusQuery = useProspectusQuery(undefined, { enabled: windowOpen })
   const requestsQuery = useEnrollmentChangeRequestsQuery(
     { page: 1, per_page: 20 },
     { enabled: windowOpen },
@@ -118,14 +116,47 @@ export function EnrollmentAddDropPanel({
       .filter((subject) => subject.status !== "dropped")
       .map((subject) => subject.subject_code),
   )
-  // Curriculum-scoped, searchable candidates: eligible, with a seat to take,
-  // and not already on this enrollment.
-  const addableEntries = (eligibleQuery.data ?? []).filter(
-    (entry) =>
-      entry.is_eligible &&
-      entry.available_sections.length > 0 &&
-      !heldSubjectCodes.has(entry.code),
+  // Searchable candidates: every subject of the student's prospectus they have not passed yet and do
+  // not already hold on this enrollment. The server accepts any subject of the student's own
+  // curriculum that has a published, conflict-free section with a seat in this term (it does not
+  // re-run the prerequisite pool), so the picker no longer hides subjects behind that stricter pool.
+  const termSections = sections.filter(
+    (section) =>
+      section.academic_term_id === enrollment.academic_term_id &&
+      section.status === "published" &&
+      section.remaining_seats > 0,
   )
+  const prospectusSubjects = new Map<
+    number,
+    { subject_id: number; code: string; title: string }
+  >()
+  for (const semester of prospectusQuery.data?.semesters ?? []) {
+    for (const entry of semester.entries) {
+      if (
+        markTone(entry.mark) !== "passed" &&
+        !heldSubjectCodes.has(entry.code) &&
+        !prospectusSubjects.has(entry.subject_id)
+      ) {
+        prospectusSubjects.set(entry.subject_id, entry)
+      }
+    }
+  }
+  const remainingProspectusSubjects = [...prospectusSubjects.values()].map(
+    (entry) => ({
+      subject_id: entry.subject_id,
+      code: entry.code,
+      title: entry.title,
+      available_sections: termSections.filter(
+        (section) => section.subject_id === entry.subject_id,
+      ),
+    }),
+  )
+  const addableEntries = remainingProspectusSubjects.filter(
+    (entry) => entry.available_sections.length > 0,
+  )
+  // Said out loud under the picker so a missing subject is explained, not mysterious.
+  const withoutOpenSectionCount =
+    remainingProspectusSubjects.length - addableEntries.length
   const addSubjectOptions = addableEntries.map((entry) => ({
     value: String(entry.subject_id),
     label: `${entry.code} — ${entry.title}`,
@@ -141,11 +172,15 @@ export function EnrollmentAddDropPanel({
   const effectiveChangeSubjectId =
     pending?.kind === "change_section" ? changeSubjectId : null
 
-  const subjectPickerEmptyMessage = eligibleQuery.isPending
-    ? "Loading your curriculum subjects…"
-    : eligibleQuery.isError
-      ? "Your curriculum subjects could not be loaded."
-      : "No subject in your curriculum matches that search."
+  const subjectsLoading = prospectusQuery.isPending || sectionsQuery.isPending
+  const subjectsFailed = prospectusQuery.isError || sectionsQuery.isError
+  const subjectPickerEmptyMessage = subjectsLoading
+    ? "Loading your prospectus subjects…"
+    : subjectsFailed
+      ? "Your prospectus subjects could not be loaded."
+      : addableEntries.length === 0
+        ? "None of your remaining prospectus subjects has an open section this term."
+        : "No subject in your prospectus matches that search."
 
   let changeSubjectOptions: { value: string; label: string }[] = []
   let sectionsForChange: readonly SectionChoice[] = []
@@ -381,10 +416,10 @@ export function EnrollmentAddDropPanel({
             <AlertDescription>{addError}</AlertDescription>
           </Alert>
         )}
-        {eligibleQuery.isError && (
+        {subjectsFailed && (
           <Alert variant="destructive">
             <AlertDescription>
-              The subjects in your curriculum could not be loaded. Try again in
+              The subjects in your prospectus could not be loaded. Try again in
               a moment.
             </AlertDescription>
           </Alert>
@@ -401,12 +436,19 @@ export function EnrollmentAddDropPanel({
               setAddSectionId(null)
             }}
             placeholder={
-              eligibleQuery.isPending
-                ? "Loading your curriculum subjects…"
+              subjectsLoading
+                ? "Loading your prospectus subjects…"
                 : "Search or choose a subject"
             }
             emptyMessage={subjectPickerEmptyMessage}
           />
+          {!subjectsLoading && !subjectsFailed && withoutOpenSectionCount > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {withoutOpenSectionCount === 1
+                ? "1 more subject from your prospectus has no open section this term."
+                : `${withoutOpenSectionCount} more subjects from your prospectus have no open section this term.`}
+            </p>
+          )}
         </Field>
         {addSubjectId !== null && (
           <Field>

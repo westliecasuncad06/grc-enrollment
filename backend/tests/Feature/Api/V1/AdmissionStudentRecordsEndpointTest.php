@@ -144,6 +144,8 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             'student_number' => '2027-08-01088',
             'program_id' => $newProgram->id,
             'year_level' => 2,
+            'enrollment_category' => 'irregular',
+            'student_type' => 'transferee',
             'financial_status' => 'payee',
             'admission_status' => 'admitted',
             'reason' => 'Corrected after reviewing the submitted admission documents.',
@@ -152,8 +154,7 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             ->assertJsonPath('data.name', 'Corrected Student')
             ->assertJsonPath('data.program_id', $newProgram->id)
             ->assertJsonPath('data.curriculum_id', $newCurriculum->id)
-            // Year Level 2 => Irregular/Transferee, derived automatically
-            // (Stakeholder Doc 17) — not sent in the request above.
+            // The category and type are what Admission sent (stakeholder Doc 20), not derived from the year level.
             ->assertJsonPath('data.enrollment_category', 'irregular')
             ->assertJsonPath('data.student_type', 'transferee');
 
@@ -223,6 +224,33 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             ->assertJsonStructure([
                 'error' => ['errors' => ['reason', 'identity_verified_in_person']],
             ]);
+    }
+
+    public function test_changing_the_year_level_no_longer_overwrites_the_category_and_type_admission_chose(): void
+    {
+        $admission = $this->user(UserRole::AdmissionStaff, 'Admission Keeper', 'admission.keeper@grc.test');
+        $student = $this->student('Keeper Student', 'keeper.student@grc.test', '2026-08-01099');
+        Sanctum::actingAs($admission);
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'enrollment_category' => 'regular',
+            'student_type' => 'existing_student',
+            'reason' => 'Existing student given an account.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.enrollment_category', 'regular')
+            ->assertJsonPath('data.student_type', 'existing_student')
+            ->assertJsonPath('data.student_type_label', 'Existing Student');
+
+        // A later year-level correction leaves those two alone (it used to recompute them).
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'year_level' => 3,
+            'reason' => 'Year level corrected.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.year_level', 3)
+            ->assertJsonPath('data.enrollment_category', 'regular')
+            ->assertJsonPath('data.student_type', 'existing_student');
     }
 
     public function test_admission_can_correct_personal_fields_but_not_academic_setup_after_the_first_enrollment(): void

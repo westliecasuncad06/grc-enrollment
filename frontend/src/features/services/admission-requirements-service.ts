@@ -59,14 +59,14 @@ export async function setAdmissionRequirementSubmitted(
   )
 }
 
-/** The requirements that apply to a new student of `yearLevel`: Freshman for Year 1, Transferee for 2-4, plus Additional. */
+/** The requirements that apply to a new student of the type Admission picked, plus the Additional list. */
 export async function getAdmissionRequirementSelection(
-  yearLevel: number,
+  studentType: string,
   signal?: AbortSignal,
 ): Promise<AdmissionRequirementSelection> {
   const result = admissionRequirementSelectionEnvelopeSchema.safeParse(
     await getAuthenticatedJson(
-      `/api/v1/admission-requirement-types?year_level=${yearLevel}`,
+      `/api/v1/admission-requirement-types?student_type=${encodeURIComponent(studentType)}`,
       signal,
     ),
   )

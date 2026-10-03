@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { CheckCircle2, MailWarning, Search, UserRoundPlus } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -74,11 +74,8 @@ import {
   useUpdateStudentProfileMutation,
 } from "@/features/hooks/use-student-records"
 import { useProgramsQuery } from "@/features/hooks/use-reference-data"
-import {
-  deriveEnrollmentCategoryFromYearLevel,
-  deriveStudentTypeFromYearLevel,
-} from "@/features/lib/admission-defaults"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
+import { focusFirstInvalidField } from "@/features/lib/focus-first-invalid"
 import { formatYearLevel } from "@/features/lib/format-year-level"
 import { generateStudentNumber } from "@/features/lib/student-number"
 import {
@@ -112,7 +109,7 @@ function CreateAccountPanel() {
   const [initialStudentNumber] = useState(generateStudentNumber)
   const {
     control,
-    formState: { errors, isSubmitted },
+    formState: { errors },
     handleSubmit,
     register,
     reset,
@@ -133,12 +130,14 @@ function CreateAccountPanel() {
       year_level: 1,
       financial_status: null,
       requirement_type_ids: [],
-      requirements_verified: false as true,
     },
   })
-  const yearLevel = watch("year_level")
+  const formRef = useRef<HTMLFormElement>(null)
+  const studentType = watch("student_type")
   const checkedIds = watch("requirement_type_ids")
-  const requirementsQuery = useAdmissionRequirementSelectionQuery(yearLevel)
+  const requirementsQuery = useAdmissionRequirementSelectionQuery(
+    studentType ?? null,
+  )
   const applicableIds = useMemo(
     () =>
       (requirementsQuery.data?.categories ?? []).flatMap((group) =>
@@ -146,17 +145,8 @@ function CreateAccountPanel() {
       ),
     [requirementsQuery.data],
   )
-  const requirementsComplete =
-    requirementsQuery.isSuccess &&
-    applicableIds.every((id) => (checkedIds ?? []).includes(id))
 
-  // The checklist, not a separate box, decides whether Admission has everything: the form's
-  // confirmation follows it, and a year level change drops ticks that no longer apply.
-  useEffect(() => {
-    setValue("requirements_verified", requirementsComplete as true, {
-      shouldValidate: isSubmitted,
-    })
-  }, [requirementsComplete, isSubmitted, setValue])
+  // A different student type lists different requirements: drop ticks that no longer apply.
   useEffect(() => {
     if (!requirementsQuery.isSuccess) return
     const current = checkedIds ?? []
@@ -182,11 +172,15 @@ function CreateAccountPanel() {
         email: "",
         address: "",
         student_number: generateStudentNumber(),
+        // Each account gets a deliberate choice: the category and type are not carried over.
+        enrollment_category: undefined,
+        student_type: undefined,
         requirement_type_ids: [],
-        requirements_verified: false as true,
       })
     } catch (error) {
       applyApiFieldErrors(error, setError)
+      // Take Admission to the field the server did not accept.
+      focusFirstInvalidField(formRef.current)
       toast.error("Failed to create the account.")
     }
   }
@@ -205,8 +199,14 @@ function CreateAccountPanel() {
           </CardHeader>
           <CardContent>
             <form
+              ref={formRef}
               noValidate
-              onSubmit={(event) => void handleSubmit(submit)(event)}
+              onSubmit={(event) =>
+                void handleSubmit(submit, () =>
+                  // A field is wrong: go to the first one instead of leaving the message out of sight.
+                  focusFirstInvalidField(formRef.current),
+                )(event)
+              }
             >
               <FieldGroup className="grid gap-4 md:grid-cols-2">
                 <Field data-invalid={Boolean(errors.first_name)}>
@@ -311,14 +311,17 @@ function CreateAccountPanel() {
                           <SelectValue placeholder="Select a program" />
                         </SelectTrigger>
                         <SelectContent>
-                          {(programsQuery.data ?? []).map((program) => (
-                            <SelectItem
-                              key={program.id}
-                              value={String(program.id)}
-                            >
-                              {program.code} — {program.name}
-                            </SelectItem>
-                          ))}
+                          {/* A program that is switched off (BS Criminology) cannot take new students. */}
+                          {(programsQuery.data ?? [])
+                            .filter((program) => program.status === "active")
+                            .map((program) => (
+                              <SelectItem
+                                key={program.id}
+                                value={String(program.id)}
+                              >
+                                {program.code} — {program.name}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -354,40 +357,78 @@ function CreateAccountPanel() {
                     )}
                   />
                 </Field>
-                <Field>
-                  <FieldLabel>Enrollment category</FieldLabel>
-                  <Badge variant="outline" className="w-fit">
-                    {deriveEnrollmentCategoryFromYearLevel(yearLevel) ===
-                    "regular"
-                      ? "Regular"
-                      : "Irregular"}
-                  </Badge>
-                  <FieldDescription>
-                    Set automatically from year level.
-                  </FieldDescription>
+                <Field data-invalid={Boolean(errors.enrollment_category)}>
+                  <FieldLabel htmlFor="record-category">
+                    Enrollment category
+                  </FieldLabel>
+                  <Controller
+                    control={control}
+                    name="enrollment_category"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ?? ""}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger
+                          id="record-category"
+                          className="w-full"
+                          aria-invalid={Boolean(errors.enrollment_category)}
+                        >
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="regular">Regular</SelectItem>
+                          <SelectItem value="irregular">Irregular</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <FieldError>{errors.enrollment_category?.message}</FieldError>
                 </Field>
-                <Field>
-                  <FieldLabel>Student type</FieldLabel>
-                  <Badge variant="outline" className="w-fit">
-                    {deriveStudentTypeFromYearLevel(yearLevel) === "freshman"
-                      ? "Freshman"
-                      : "Transferee"}
-                  </Badge>
-                  <FieldDescription>
-                    Set automatically from year level.
-                  </FieldDescription>
+                <Field data-invalid={Boolean(errors.student_type)}>
+                  <FieldLabel htmlFor="record-student-type">
+                    Student type
+                  </FieldLabel>
+                  <Controller
+                    control={control}
+                    name="student_type"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ?? ""}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger
+                          id="record-student-type"
+                          className="w-full"
+                          aria-invalid={Boolean(errors.student_type)}
+                        >
+                          <SelectValue placeholder="Select a student type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="transferee">Transferee</SelectItem>
+                          <SelectItem value="returnee">Returnee</SelectItem>
+                          <SelectItem value="existing_student">
+                            Existing Student
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <FieldError>{errors.student_type?.message}</FieldError>
                 </Field>
                 <Field
                   className="md:col-span-2"
-                  data-invalid={Boolean(errors.requirements_verified)}
+                  data-invalid={Boolean(errors.requirement_type_ids)}
                 >
                   <AdmissionIntakeRequirements
                     state={
-                      requirementsQuery.isError
-                        ? "error"
-                        : requirementsQuery.isSuccess
-                          ? "ready"
-                          : "loading"
+                      !studentType
+                        ? "idle"
+                        : requirementsQuery.isError
+                          ? "error"
+                          : requirementsQuery.isSuccess
+                            ? "ready"
+                            : "loading"
                     }
                     selection={requirementsQuery.data}
                     checkedIds={checkedIds ?? []}
@@ -398,9 +439,7 @@ function CreateAccountPanel() {
                     }
                     disabled={mutation.isPending}
                   />
-                  <FieldError>
-                    {errors.requirements_verified?.message}
-                  </FieldError>
+                  <FieldError>{errors.requirement_type_ids?.message}</FieldError>
                 </Field>
                 {mutation.isError && (
                   <Alert className="md:col-span-2" variant="destructive">
@@ -520,11 +559,9 @@ function StudentRecordDialog({
   const programsQuery = useProgramsQuery()
   const update = useUpdateStudentProfileMutation()
   const resend = useResendAccountSetupInvitationMutation()
-  const { control, handleSubmit, register, reset, watch } =
-    useForm<EditValues>({
-      resolver: zodResolver(editSchema),
-    })
-  const yearLevel = watch("year_level") ?? profile?.year_level ?? 1
+  const { control, handleSubmit, register, reset } = useForm<EditValues>({
+    resolver: zodResolver(editSchema),
+  })
 
   useEffect(() => {
     if (!profile) return
@@ -540,6 +577,8 @@ function StudentRecordDialog({
             student_number: profile.student_number,
             program_id: profile.program_id,
             year_level: profile.year_level,
+            enrollment_category: profile.enrollment_category ?? undefined,
+            student_type: profile.student_type ?? undefined,
             admission_status: profile.admission_status,
           }
         : {}),
@@ -664,27 +703,60 @@ function StudentRecordDialog({
                     />
                   </Field>
                   <Field>
-                    <FieldLabel>Enrollment category</FieldLabel>
-                    <Badge variant="outline" className="w-fit">
-                      {deriveEnrollmentCategoryFromYearLevel(yearLevel) ===
-                      "regular"
-                        ? "Regular"
-                        : "Irregular"}
-                    </Badge>
-                    <FieldDescription>
-                      Set automatically from year level.
-                    </FieldDescription>
+                    <FieldLabel htmlFor="edit-category">
+                      Enrollment category
+                    </FieldLabel>
+                    <Controller
+                      control={control}
+                      name="enrollment_category"
+                      render={({ field }) => (
+                        <Select
+                          value={field.value ?? ""}
+                          onValueChange={field.onChange}
+                        >
+                          <SelectTrigger id="edit-category" className="w-full">
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="regular">Regular</SelectItem>
+                            <SelectItem value="irregular">Irregular</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
                   </Field>
                   <Field>
-                    <FieldLabel>Student type</FieldLabel>
-                    <Badge variant="outline" className="w-fit">
-                      {deriveStudentTypeFromYearLevel(yearLevel) === "freshman"
-                        ? "Freshman"
-                        : "Transferee"}
-                    </Badge>
-                    <FieldDescription>
-                      Set automatically from year level.
-                    </FieldDescription>
+                    <FieldLabel htmlFor="edit-student-type">
+                      Student type
+                    </FieldLabel>
+                    <Controller
+                      control={control}
+                      name="student_type"
+                      render={({ field }) => (
+                        <Select
+                          value={field.value ?? ""}
+                          onValueChange={field.onChange}
+                        >
+                          <SelectTrigger
+                            id="edit-student-type"
+                            className="w-full"
+                          >
+                            <SelectValue placeholder="Select a student type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {/* Freshman is no longer a choice for new accounts, but an existing record may still be one. */}
+                            {profile.student_type === "freshman" && (
+                              <SelectItem value="freshman">Freshman</SelectItem>
+                            )}
+                            <SelectItem value="transferee">Transferee</SelectItem>
+                            <SelectItem value="returnee">Returnee</SelectItem>
+                            <SelectItem value="existing_student">
+                              Existing Student
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="edit-admission">

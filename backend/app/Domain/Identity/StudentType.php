@@ -18,6 +18,8 @@ enum StudentType: string
     case Freshman = 'freshman';
     case Transferee = 'transferee';
     case Returnee = 'returnee';
+    /** Already a student of the school; Admission only needs to give them an account (stakeholder Doc 20). */
+    case ExistingStudent = 'existing_student';
 
     public function label(): string
     {
@@ -25,6 +27,7 @@ enum StudentType: string
             self::Freshman => 'Freshman',
             self::Transferee => 'Transferee',
             self::Returnee => 'Returnee',
+            self::ExistingStudent => 'Existing Student',
         };
     }
 }

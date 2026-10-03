@@ -18,7 +18,8 @@ const input: ProvisionStudentInput = {
   student_number: "2027-08-01001",
   program_id: 11,
   year_level: 1,
-  requirements_verified: true,
+  enrollment_category: "regular",
+  student_type: "transferee",
 }
 
 const profile = {
@@ -73,7 +74,7 @@ describe("admission-service", () => {
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("provisions with address and requirements verification without a password or curriculum override", async () => {
+  it("provisions with address, category and type without a password or curriculum override", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ data: profile }), { status: 201 }),
     )
@@ -91,8 +92,11 @@ describe("admission-service", () => {
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
     expect(body).not.toHaveProperty("entry_year")
-    expect(body).not.toHaveProperty("enrollment_category")
-    expect(body).not.toHaveProperty("student_type")
+    // Admission's own choices travel with the request (stakeholder Doc 20).
+    expect(body).toMatchObject({
+      enrollment_category: "regular",
+      student_type: "transferee",
+    })
   })
 
   it("searches the Admission directory by name, student number, or email", async () => {

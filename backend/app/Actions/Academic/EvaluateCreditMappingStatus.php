@@ -17,7 +17,8 @@ final readonly class EvaluateCreditMappingStatus
             ? $student->student_type
             : StudentType::tryFrom((string) $student->student_type);
 
-        if ($studentType === null || $studentType === StudentType::Freshman) {
+        // An existing student already has a record at the school: nothing to map before enrolling.
+        if ($studentType === null || $studentType === StudentType::Freshman || $studentType === StudentType::ExistingStudent) {
             return new CreditMappingStatusResult(
                 isCompleted: true,
                 requiresCreditMapping: false,

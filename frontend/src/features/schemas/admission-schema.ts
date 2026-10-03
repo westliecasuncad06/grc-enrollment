@@ -3,7 +3,12 @@ import { z } from "zod"
 import { strongPasswordSchema } from "@/features/schemas/password-schema"
 
 export const enrollmentCategorySchema = z.enum(["regular", "irregular"])
-export const studentTypeSchema = z.enum(["freshman", "transferee", "returnee"])
+export const studentTypeSchema = z.enum([
+  "freshman",
+  "transferee",
+  "returnee",
+  "existing_student",
+])
 export const financialStatusSchema = z.enum(["scholar", "payee"])
 export const admissionStatusSchema = z.enum([
   "pending",
@@ -44,19 +49,20 @@ export const provisionStudentSchema = z
         "Student number must be in YYYY-MM-NNNNN format (e.g. 2026-08-07107).",
       ),
     program_id: z.number().int().positive("Select a program."),
-    // entry_year, enrollment_category, and student_type are deliberately
-    // absent: the server derives all three (entry_year from the current
-    // ongoing academic term, category/type from year_level) and rejects
-    // them outright if sent (Stakeholder Doc 17).
+    // entry_year is deliberately absent: the server derives it from the current ongoing academic
+    // term and rejects it if sent. The category and the type are chosen by Admission
+    // (stakeholder Doc 20), no longer derived from year_level.
     year_level: z.number().int().min(1).max(4),
-    financial_status: financialStatusSchema.nullable().optional(),
-    // The requirements Admission ticked off for this student (stakeholder Doc 20). The server
-    // requires every requirement that applies to the student type to be in this list.
-    requirement_type_ids: z.array(z.number().int().positive()).optional(),
-    // True only when every listed requirement is ticked; the form sets it from the checklist.
-    requirements_verified: z.literal(true, {
-      error: "Check every requirement the student handed in.",
+    enrollment_category: z.enum(["regular", "irregular"], {
+      error: "Select the enrollment category.",
     }),
+    student_type: z.enum(["transferee", "returnee", "existing_student"], {
+      error: "Select the student type.",
+    }),
+    financial_status: financialStatusSchema.nullable().optional(),
+    // The requirements Admission ticked off for this student (stakeholder Doc 20). Some may still be
+    // missing: the account can be created anyway and the rest stay on the student's checklist.
+    requirement_type_ids: z.array(z.number().int().positive()).optional(),
   })
   .strict()
 
@@ -148,10 +154,11 @@ export const updateStudentProfileSchema = z
       .regex(/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/)
       .optional(),
     program_id: z.number().int().positive().optional(),
-    // entry_year, enrollment_category, and student_type are deliberately
-    // absent — see provisionStudentSchema above; the same server-side
-    // derivation and rejection applies to updates.
+    // entry_year is deliberately absent (see provisionStudentSchema). The category and the type are
+    // Admission's choice, corrected here until the first enrollment.
     year_level: z.number().int().min(1).max(4).optional(),
+    enrollment_category: z.enum(["regular", "irregular"]).optional(),
+    student_type: studentTypeSchema.optional(),
     financial_status: financialStatusSchema.nullable().optional(),
     admission_status: admissionStatusSchema.optional(),
     reason: z.string().trim().min(1),

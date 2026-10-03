@@ -93,6 +93,29 @@ final class AdmissionRequirementsEndpointTest extends TestCase
         self::assertSame(['transferee', 'additional'], array_column($later->json('data.categories'), 'category'));
     }
 
+    public function test_the_requirement_list_follows_the_student_type_admission_chose(): void
+    {
+        $token = $this->token($this->user(UserRole::AdmissionStaff));
+
+        $expected = [
+            'freshman' => ['freshman', 'additional'],
+            'transferee' => ['transferee', 'additional'],
+            'returnee' => ['additional'],
+            'existing_student' => ['additional'],
+        ];
+        foreach ($expected as $type => $categories) {
+            $response = $this->withToken($token)->getJson('/api/v1/admission-requirement-types?student_type='.$type)
+                ->assertOk()
+                ->assertJsonPath('data.student_type', $type);
+            self::assertSame($categories, array_column($response->json('data.categories'), 'category'), $type);
+        }
+        $this->withToken($token)->getJson('/api/v1/admission-requirement-types?student_type=existing_student')
+            ->assertJsonPath('data.student_type_label', 'Existing Student');
+
+        $this->withToken($token)->getJson('/api/v1/admission-requirement-types?student_type=visitor')->assertUnprocessable();
+        $this->withToken($token)->getJson('/api/v1/admission-requirement-types')->assertUnprocessable();
+    }
+
     public function test_the_requirement_list_for_a_year_level_is_for_admission_staff_only_and_needs_a_valid_year(): void
     {
         $this->getJson('/api/v1/admission-requirement-types?year_level=1')->assertUnauthorized();

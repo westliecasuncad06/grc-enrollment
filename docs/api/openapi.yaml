@@ -5534,28 +5534,38 @@ paths:
   /api/v1/admission-requirement-types:
     get:
       operationId: listAdmissionRequirementTypes
-      summary: The Admission requirements that apply to a new student of a year level
+      summary: The Admission requirements that apply to a new student of a type
       description: >
         Admission Staff only. Feeds the Create Account checklist (stakeholder Doc 20) before a
-        student record exists. The student type is derived from the year level the way
-        provisioning derives it: Year 1 is a Freshman, Years 2-4 are Transferees; the Additional
-        list applies to everyone. Only active requirements are listed.
+        student record exists. The lists follow the student type Admission picked: Freshman and
+        Transferee each add their own list, Returnee and Existing Student get the Additional list
+        only, and Additional applies to everyone. Only active requirements are listed. `year_level`
+        is still accepted for older callers and is turned into a type the old way (Year 1 Freshman,
+        Years 2-4 Transferee).
       security:
         - bearerAuth: []
       tags:
         - Student Records
       parameters:
         - $ref: "#/components/parameters/RequestId"
+        - name: student_type
+          in: query
+          required: false
+          description: Required unless `year_level` is sent.
+          schema:
+            type: string
+            enum: [freshman, transferee, returnee, existing_student]
         - name: year_level
           in: query
-          required: true
+          required: false
+          description: Legacy alternative to `student_type`.
           schema:
             type: integer
             minimum: 1
             maximum: 4
       responses:
         "200":
-          description: The requirement lists for that year level.
+          description: The requirement lists for that student type.
           content:
             application/json:
               schema:
@@ -5565,7 +5575,7 @@ paths:
                     type: object
                     properties:
                       type: { type: string, const: admission_requirement_selection }
-                      student_type: { type: string, enum: [freshman, transferee] }
+                      student_type: { type: string, enum: [freshman, transferee, returnee, existing_student] }
                       student_type_label: { type: string }
                       categories:
                         type: array
@@ -10285,11 +10295,10 @@ components:
         - last_name
         - email
         - address
-        - requirements_verified
         - student_number
         - program_id
-        - entry_year
         - year_level
+        - enrollment_category
         - student_type
       properties:
         first_name:
@@ -10323,32 +10332,33 @@ components:
           items:
             type: integer
           description: >
-            The Admission requirements ticked off for the new student (stakeholder Doc 20). It must
-            contain every active requirement that applies to the student type derived from
-            `year_level` (see `GET /admission-requirement-types`) and nothing else, otherwise the
-            request is refused with 422 on `requirement_type_ids`. Each id is recorded as submitted
-            on the new student's checklist.
+            The Admission requirements ticked off for the new student (stakeholder Doc 20). It may be
+            partial or empty: the account is created and the missing ones stay on the student's
+            checklist. It may only name active requirements that apply to the chosen `student_type`
+            (see `GET /admission-requirement-types`), otherwise the request is refused with 422 on
+            `requirement_type_ids`. Each id is recorded as submitted. `requirements_verified_at` on
+            the new profile is set only when every applicable requirement was ticked (or, with no
+            list, when `requirements_verified` was sent).
         student_number:
           type: string
           maxLength: 255
           pattern: '^\d{4}-(0[1-9]|1[0-2])-\d{5}$'
         program_id:
           type: integer
-        entry_year:
-          type: integer
-          minimum: 1000
-          maximum: 9999
         year_level:
           type: integer
           minimum: 1
           maximum: 4
         enrollment_category:
-          type: [string, 'null']
-          enum: [regular, irregular, null]
+          type: string
+          description: Chosen by Admission on the form (stakeholder Doc 20); no longer derived from `year_level`.
+          enum: [regular, irregular]
         student_type:
           type: string
-          description: Whether the student entered as a Freshman or a Transferee. Required at admission provisioning.
-          enum: [freshman, transferee]
+          description: >
+            Chosen by Admission on the form (stakeholder Doc 20). The form offers Transferee,
+            Returnee and Existing Student; Freshman is still a valid value for older records.
+          enum: [freshman, transferee, returnee, existing_student]
         financial_status:
           type: [string, 'null']
           enum: [scholar, payee, null]

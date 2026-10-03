@@ -75,6 +75,14 @@ const programs = {
       status: "active",
       status_label: "Active",
     },
+    {
+      type: "program",
+      id: 13,
+      code: "BSCRIM",
+      name: "BS Criminology",
+      status: "inactive",
+      status_label: "Inactive",
+    },
   ],
 }
 
@@ -240,7 +248,7 @@ describe("Student Records workspace", () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
-  it("uses one three-part workspace and creates an account only after every requirement is checked", async () => {
+  it("uses one three-part workspace and creates an account with the category, type and ticked requirements Admission chose", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -254,15 +262,10 @@ describe("Student Records workspace", () => {
     ])
     expect(screen.queryByLabelText("Curriculum")).not.toBeInTheDocument()
     expect(screen.queryByText(/temporary credential/i)).not.toBeInTheDocument()
-    // Entry year, Enrollment category, and Student type are no longer
-    // separate inputs — the server derives all three (Stakeholder Doc 17).
+    // The server still derives the entry year; the category and the type are Admission's choice.
     expect(screen.queryByLabelText("Entry year")).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("combobox", { name: "Enrollment category" }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("combobox", { name: "Student type" }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Enrollment category")).toBeInTheDocument()
+    expect(screen.getByLabelText("Student type")).toBeInTheDocument()
 
     await user.type(screen.getByLabelText("First name"), profile.first_name)
     await user.type(screen.getByLabelText("Last name"), profile.last_name)
@@ -282,28 +285,29 @@ describe("Student Records workspace", () => {
     const submit = screen.getByRole("button", {
       name: "Create account and email setup",
     })
-    // The single "verified" box is gone: the requirements are listed, one checkbox each.
+    // The single "verified" box is gone, and with no student type picked there is nothing to tick yet.
     expect(
       screen.queryByLabelText("Requirements submitted and verified"),
     ).not.toBeInTheDocument()
     expect(
-      await screen.findByRole("checkbox", { name: "Form 137" }),
-    ).not.toBeChecked()
-    expect(screen.getByText("0 of 3 checked")).toBeInTheDocument()
-
-    await user.click(submit)
-    expect(
-      await screen.findByText("Check every requirement the student handed in."),
+      screen.getByText(
+        "Choose the student type to see the Admission requirements that apply.",
+      ),
     ).toBeInTheDocument()
 
-    // Ticking all but one is still not enough.
-    await user.click(screen.getByRole("checkbox", { name: "Form 137" }))
-    await user.click(screen.getByRole("checkbox", { name: "Form 138" }))
-    expect(screen.getByText("2 of 3 checked")).toBeInTheDocument()
+    // Submitting without the two choices stops at the form and takes Admission to the first one.
+    const scrollIntoView = vi
+      .spyOn(window.HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined)
     await user.click(submit)
     expect(
-      await screen.findByText("Check every requirement the student handed in."),
+      await screen.findByText("Select the enrollment category."),
     ).toBeInTheDocument()
+    expect(screen.getByText("Select the student type.")).toBeInTheDocument()
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    // The first thing that needs fixing is the first invalid field on the form, not the button.
+    expect(scrollIntoView.mock.contexts[0]).toBeInstanceOf(HTMLElement)
+    scrollIntoView.mockRestore()
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
@@ -312,10 +316,20 @@ describe("Student Records workspace", () => {
       ),
     ).toBe(false)
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Original Birth Certificate (PSA)" }),
-    )
-    expect(screen.getByText("3 of 3 checked")).toBeInTheDocument()
+    await user.click(screen.getByLabelText("Enrollment category"))
+    await user.click(await screen.findByRole("option", { name: "Regular" }))
+    await user.click(screen.getByLabelText("Student type"))
+    await user.click(await screen.findByRole("option", { name: "Transferee" }))
+
+    expect(
+      await screen.findByRole("checkbox", { name: "Form 137" }),
+    ).not.toBeChecked()
+    expect(screen.getByText("0 of 3 checked")).toBeInTheDocument()
+
+    // Two of the three handed in: the account is still created, the third stays missing.
+    await user.click(screen.getByRole("checkbox", { name: "Form 137" }))
+    await user.click(screen.getByRole("checkbox", { name: "Form 138" }))
+    expect(screen.getByText("2 of 3 checked")).toBeInTheDocument()
     await user.click(submit)
 
     expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
@@ -335,11 +349,15 @@ describe("Student Records workspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Admission requirements" }),
     ).toBeInTheDocument()
-    // One "Form 137" is the new student's saved checklist, the other is the (reset) intake list
-    // ready for the next account.
     expect(
-      await screen.findAllByRole("checkbox", { name: "Form 137" }),
-    ).toHaveLength(2)
+      await screen.findByRole("checkbox", { name: "Form 137" }),
+    ).toBeInTheDocument()
+    // The form is ready for the next account: nothing carried over.
+    expect(
+      screen.getByText(
+        "Choose the student type to see the Admission requirements that apply.",
+      ),
+    ).toBeInTheDocument()
     await user.click(resendBtn)
     await waitFor(() => {
       expect(
@@ -362,30 +380,65 @@ describe("Student Records workspace", () => {
       first_name: profile.first_name,
       last_name: profile.last_name,
       address: profile.address,
-      requirement_type_ids: [1, 2, 7],
-      requirements_verified: true,
+      enrollment_category: "regular",
+      student_type: "transferee",
+      requirement_type_ids: [1, 2],
     })
+    expect(body).not.toHaveProperty("requirements_verified")
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
     expect(body).not.toHaveProperty("entry_year")
-    expect(body).not.toHaveProperty("enrollment_category")
-    expect(body).not.toHaveProperty("student_type")
   })
 
-  it("derives Enrollment Category and Student Type from Year Level, live, with no manual selector", async () => {
+  it("never offers a program that is switched off, such as BS Criminology", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
-    expect(screen.getByText("Regular")).toBeInTheDocument()
-    expect(screen.getByText("Freshman")).toBeInTheDocument()
+    await user.click(screen.getByLabelText("Program"))
 
+    expect(
+      await screen.findByRole("option", {
+        name: "BSIT — Bachelor of Science in Information Technology",
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("option", { name: /BS Criminology/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("lets Admission choose the enrollment category and student type from dropdowns, with nothing set automatically", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    // No value is filled in for them, whatever the year level.
+    expect(screen.getByLabelText("Enrollment category")).toHaveTextContent(
+      "Select a category",
+    )
+    expect(screen.getByLabelText("Student type")).toHaveTextContent(
+      "Select a student type",
+    )
+
+    await user.click(screen.getByLabelText("Enrollment category"))
+    expect(
+      (await screen.findAllByRole("option")).map((option) => option.textContent),
+    ).toEqual(["Regular", "Irregular"])
+    await user.click(screen.getByRole("option", { name: "Irregular" }))
+
+    await user.click(screen.getByLabelText("Student type"))
+    expect(
+      (await screen.findAllByRole("option")).map((option) => option.textContent),
+    ).toEqual(["Transferee", "Returnee", "Existing Student"])
+    await user.click(screen.getByRole("option", { name: "Existing Student" }))
+
+    // Changing the year level no longer rewrites what was chosen.
     await user.click(screen.getByLabelText("Year level"))
     await user.click(await screen.findByRole("option", { name: "2nd Year" }))
-
-    expect(screen.getByText("Irregular")).toBeInTheDocument()
-    expect(screen.getByText("Transferee")).toBeInTheDocument()
-    expect(screen.queryByText("Regular")).not.toBeInTheDocument()
-    expect(screen.queryByText("Freshman")).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Enrollment category")).toHaveTextContent(
+      "Irregular",
+    )
+    expect(screen.getByLabelText("Student type")).toHaveTextContent(
+      "Existing Student",
+    )
   })
 
   it("searches by name and opens the full student profile editor", async () => {

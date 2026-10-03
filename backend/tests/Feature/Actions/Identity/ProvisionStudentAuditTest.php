@@ -46,6 +46,8 @@ final class ProvisionStudentAuditTest extends TestCase
                 'program_id' => $program->id,
                 'year_level' => 2,
                 'requirements_verified' => true,
+                'enrollment_category' => 'irregular',
+                'student_type' => 'transferee',
             ]);
 
         $response->assertCreated();
@@ -156,6 +158,8 @@ final class ProvisionStudentAuditTest extends TestCase
                     'program_id' => $program->id,
                     'year_level' => 3,
                     'requirements_verified' => true,
+                    'enrollment_category' => 'irregular',
+                    'student_type' => 'transferee',
                 ]);
         } catch (RuntimeException $exception) {
             $caughtException = $exception;

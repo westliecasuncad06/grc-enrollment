@@ -6,10 +6,11 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Curriculum\CurriculumVersion;
+use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AcademicStanding;
-use App\Domain\Identity\AdmissionIntakeDefaults;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\PersonName;
+use App\Domain\Identity\StudentType;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
@@ -31,10 +32,13 @@ use Illuminate\Validation\ValidationException;
  */
 final class ProvisionStudent
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly ListApplicableAdmissionRequirements $applicableRequirements,
+    ) {}
 
     /**
-     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, year_level: int, financial_status?: ?string, requirement_type_ids?: list<int>}  $data
+     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, year_level: int, enrollment_category: string, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>}  $data
      */
     public function handle(
         array $data,
@@ -84,6 +88,17 @@ final class ProvisionStudent
                 'account_setup_completed_at' => null,
             ]);
 
+            $category = EnrollmentCategory::from($data['enrollment_category']);
+            $studentType = StudentType::from($data['student_type']);
+            // The checklist is the evidence of what was handed in. The account counts as "requirements
+            // verified" only when every requirement that applies was ticked (or, for an older caller that
+            // sends no list, when it confirmed so); otherwise the missing ones stay on the checklist.
+            $ticked = isset($data['requirement_type_ids'])
+                ? array_map('intval', $data['requirement_type_ids'])
+                : null;
+            $requirementsComplete = $ticked === null
+                || array_diff($this->applicableRequirements->applicableIds($studentType), $ticked) === [];
+
             $profile = StudentProfile::create([
                 'user_id' => $user->id,
                 'student_number' => $data['student_number'],
@@ -91,18 +106,18 @@ final class ProvisionStudent
                 'curriculum_id' => $curriculum->id,
                 'entry_year' => $entryYear,
                 'year_level' => $yearLevel,
-                // Provisioning defaults only (Stakeholder Doc 17) — never
+                // Chosen by Admission on the form (stakeholder Doc 20) — never
                 // written to enrollment_category_derived_at, which is
                 // reserved for ADR 0021's separate, later, grade-based
                 // per-term reclassification.
-                'enrollment_category' => AdmissionIntakeDefaults::enrollmentCategoryFor($yearLevel)->value,
-                'student_type' => AdmissionIntakeDefaults::studentTypeFor($yearLevel)->value,
+                'enrollment_category' => $category->value,
+                'student_type' => $studentType->value,
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
                 'financial_status' => $data['financial_status'] ?? null,
                 'address' => $data['address'],
-                'requirements_verified_at' => now(),
-                'requirements_verified_by' => $actor->id,
+                'requirements_verified_at' => $requirementsComplete ? now() : null,
+                'requirements_verified_by' => $requirementsComplete ? $actor->id : null,
             ]);
             $profile->refresh();
 

@@ -96,6 +96,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
 
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
@@ -149,9 +151,11 @@ final class StudentProfilesEndpointTest extends TestCase
      * @param  list<int>  $requirementTypeIds
      * @return array<string, mixed>
      */
-    private function provisionPayload(Program $program, string $email, array $requirementTypeIds, int $yearLevel = 1): array
+    private function provisionPayload(Program $program, string $email, array $requirementTypeIds, int $yearLevel = 1, string $studentType = 'freshman'): array
     {
         return [
+            'enrollment_category' => 'regular',
+            'student_type' => $studentType,
             'first_name' => 'Checklist',
             'last_name' => 'Student',
             'email' => $email,
@@ -189,20 +193,74 @@ final class StudentProfilesEndpointTest extends TestCase
             ->assertJsonPath('data.summary.missing_count', 0);
     }
 
-    public function test_provisioning_is_refused_while_a_requirement_on_the_list_is_not_ticked(): void
+    public function test_provisioning_may_go_ahead_with_requirements_still_missing_and_records_only_the_ticked_ones(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
         $this->setCurrentTerm('2027-2028');
-        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.checklist.missing@grc.test');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.checklist.partial@grc.test');
+        Mail::fake();
         $ids = $this->applicableRequirementIds('freshman');
         array_pop($ids);
 
-        $this->withToken($token)->postJson(
+        $response = $this->withToken($token)->postJson(
             '/api/v1/student-profiles',
-            $this->provisionPayload($program, 'checklist.missing@grc.test', $ids),
-        )->assertUnprocessable()->assertJsonPath('error.errors.requirement_type_ids.0', 'Every requirement must be submitted before the account is created.');
+            $this->provisionPayload($program, 'checklist.partial@grc.test', $ids),
+        );
 
-        $this->assertDatabaseMissing('users', ['email' => 'checklist.missing@grc.test']);
+        $response->assertCreated();
+        $profileId = (int) $response->json('data.id');
+        self::assertSame(
+            count($ids),
+            StudentAdmissionRequirement::query()->where('student_profile_id', $profileId)->where('is_submitted', true)->count(),
+        );
+        // Not everything was handed in, so the account is not marked "requirements verified".
+        $this->assertDatabaseHas('student_profiles', [
+            'id' => $profileId,
+            'requirements_verified_at' => null,
+            'requirements_verified_by' => null,
+        ]);
+        // The missing one stays on the student's checklist for Admission to tick later.
+        $this->withToken($token)->getJson("/api/v1/student-profiles/{$profileId}/admission-requirements")
+            ->assertOk()
+            ->assertJsonPath('data.summary.complete', false)
+            ->assertJsonPath('data.summary.missing_count', 1);
+    }
+
+    public function test_provisioning_may_go_ahead_with_no_requirement_ticked_at_all(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.checklist.none@grc.test');
+        Mail::fake();
+
+        $response = $this->withToken($token)->postJson(
+            '/api/v1/student-profiles',
+            $this->provisionPayload($program, 'checklist.none@grc.test', []),
+        );
+
+        $response->assertCreated();
+        self::assertSame(0, StudentAdmissionRequirement::query()->where('student_profile_id', $response->json('data.id'))->count());
+    }
+
+    public function test_a_complete_checklist_marks_the_requirements_verified(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.checklist.verified@grc.test');
+        Mail::fake();
+
+        $response = $this->withToken($token)->postJson(
+            '/api/v1/student-profiles',
+            $this->provisionPayload($program, 'checklist.verified@grc.test', $this->applicableRequirementIds('transferee'), 2, 'transferee'),
+        );
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('student_profiles', [
+            'id' => (int) $response->json('data.id'),
+            'student_type' => 'transferee',
+            'requirements_verified_by' => User::query()->where('email', 'admission.checklist.verified@grc.test')->value('id'),
+        ]);
+        self::assertNotNull(StudentProfile::query()->findOrFail($response->json('data.id'))->requirements_verified_at);
     }
 
     public function test_provisioning_refuses_a_requirement_that_does_not_apply_to_the_student_type(): void
@@ -210,7 +268,7 @@ final class StudentProfilesEndpointTest extends TestCase
         [$program] = $this->makeProgramAndCurriculum();
         $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.checklist.wrongtype@grc.test');
-        // Year 1 is a Freshman; a Transferee requirement is not theirs to hand in.
+        // A Freshman is not asked for Transferee requirements, so ticking one is refused.
         $ids = [...$this->applicableRequirementIds('freshman'), ...$this->applicableRequirementIds('transferee')];
 
         $this->withToken($token)->postJson(
@@ -239,6 +297,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
 
         $response->assertCreated();
@@ -302,10 +362,14 @@ final class StudentProfilesEndpointTest extends TestCase
             'requirements_verified' => true,
         ]);
 
+        // Admission now chooses the category and type (stakeholder Doc 20), so only the genuinely
+        // server-controlled fields are refused.
         $response->assertUnprocessable()
             ->assertJsonStructure([
-                'error' => ['errors' => ['password', 'curriculum_id', 'entry_year', 'enrollment_category', 'student_type']],
+                'error' => ['errors' => ['password', 'curriculum_id', 'entry_year']],
             ]);
+        $this->assertArrayNotHasKey('enrollment_category', $response->json('error.errors'));
+        $this->assertArrayNotHasKey('student_type', $response->json('error.errors'));
         $this->assertDatabaseMissing('users', ['email' => 'unsafe.contract@grc.test']);
     }
 
@@ -326,6 +390,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ])->assertCreated();
 
         $setupCode = null;
@@ -390,6 +456,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ])->assertCreated();
 
         $setupCode = null;
@@ -436,6 +504,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
 
         $response->assertCreated()
@@ -464,6 +534,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
@@ -487,6 +559,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'year_level' => 1,
             'financial_status' => 'scholar',
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
         $scholar->assertCreated();
         $scholar->assertJsonPath('data.financial_status', 'scholar');
@@ -501,6 +575,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
         $unset->assertCreated();
         $unset->assertJsonPath('data.financial_status', null);
@@ -508,14 +584,13 @@ final class StudentProfilesEndpointTest extends TestCase
     }
 
     /**
-     * Stakeholder Doc 17: Admission no longer picks Enrollment Category or
-     * Student Type directly — both are derived from Year Level at intake
-     * (1 => Regular/Freshman, 2-4 => Irregular/Transferee) and the client
-     * can't override them (see test_provisioning_rejects_client_overrides_of_server_controlled_fields).
-     * `enrollment_category_derived_at` must stay NULL: this is a
-     * provisioning default, not ADR 0021's grade-based re-derivation.
+     * Stakeholder Doc 20: Admission picks the Enrollment Category and the Student Type on the form
+     * (they are no longer derived from Year Level as Stakeholder Doc 17 did), so whatever is sent is
+     * what is stored, whatever the year level.
+     * `enrollment_category_derived_at` must stay NULL: this is an intake choice, not ADR 0021's
+     * grade-based re-derivation.
      */
-    public function test_enrollment_category_and_student_type_are_derived_from_year_level(): void
+    public function test_enrollment_category_and_student_type_are_what_admission_chose(): void
     {
         $program = Program::create(['code' => 'BSUNI', 'name' => 'BS Universal', 'status' => ProgramStatus::Active]);
         Curriculum::create([
@@ -524,40 +599,67 @@ final class StudentProfilesEndpointTest extends TestCase
             'effective_end_year' => null, 'status' => CurriculumStatus::Active,
         ]);
         $this->setCurrentTerm('2027-2028');
-        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.yearlevel@grc.test');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.chosen@grc.test');
         Mail::fake();
 
-        $expectations = [
-            1 => ['regular', 'freshman'],
-            2 => ['irregular', 'transferee'],
-            3 => ['irregular', 'transferee'],
-            4 => ['irregular', 'transferee'],
+        // The same year level (1) gets a different answer each time: nothing is derived from it.
+        $choices = [
+            ['regular', 'transferee', 'Transferee'],
+            ['irregular', 'returnee', 'Returnee'],
+            ['regular', 'existing_student', 'Existing Student'],
+            ['irregular', 'existing_student', 'Existing Student'],
         ];
 
-        foreach ($expectations as $yearLevel => [$expectedCategory, $expectedType]) {
-            $email = "year-level-{$yearLevel}@grc.test";
+        foreach ($choices as $index => [$category, $type, $label]) {
+            $email = "chosen-{$index}@grc.test";
             $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
-                'first_name' => 'Year',
-                'last_name' => "Level {$yearLevel}",
+                'first_name' => 'Chosen',
+                'last_name' => "Type {$index}",
                 'email' => $email,
-                'address' => "{$yearLevel} Derivation Road, Caloocan City",
-                'student_number' => "2027-08-200{$yearLevel}0",
+                'address' => "{$index} Choice Road, Caloocan City",
+                'student_number' => "2027-08-210{$index}0",
                 'program_id' => $program->id,
-                'year_level' => $yearLevel,
-                'requirements_verified' => true,
+                'year_level' => 1,
+                'enrollment_category' => $category,
+                'student_type' => $type,
+                'requirement_type_ids' => [],
             ]);
 
             $response->assertCreated();
-            $response->assertJsonPath('data.enrollment_category', $expectedCategory);
-            $response->assertJsonPath('data.student_type', $expectedType);
-            $response->assertJsonPath('data.student_type_label', ucfirst($expectedType));
+            $response->assertJsonPath('data.enrollment_category', $category);
+            $response->assertJsonPath('data.student_type', $type);
+            $response->assertJsonPath('data.student_type_label', $label);
             $this->assertDatabaseHas('student_profiles', [
                 'user_id' => User::query()->where('email', $email)->value('id'),
-                'enrollment_category' => $expectedCategory,
-                'student_type' => $expectedType,
+                'enrollment_category' => $category,
+                'student_type' => $type,
                 'enrollment_category_derived_at' => null,
             ]);
         }
+    }
+
+    public function test_the_enrollment_category_and_student_type_are_required_and_must_be_known_values(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.required.choice@grc.test');
+        $payload = $this->provisionPayload($program, 'required.choice@grc.test', []);
+        unset($payload['enrollment_category'], $payload['student_type']);
+
+        $missing = $this->withToken($token)->postJson('/api/v1/student-profiles', $payload);
+        $missing->assertUnprocessable();
+        self::assertArrayHasKey('enrollment_category', $missing->json('error.errors'));
+        self::assertArrayHasKey('student_type', $missing->json('error.errors'));
+
+        $unknown = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            ...$payload,
+            'enrollment_category' => 'sometimes',
+            'student_type' => 'visitor',
+        ]);
+        $unknown->assertUnprocessable();
+        self::assertArrayHasKey('enrollment_category', $unknown->json('error.errors'));
+        self::assertArrayHasKey('student_type', $unknown->json('error.errors'));
+        $this->assertDatabaseMissing('users', ['email' => 'required.choice@grc.test']);
     }
 
     public function test_a_non_admission_staff_role_cannot_provision_a_student(): void
@@ -602,6 +704,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
@@ -639,6 +743,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 4,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
 
         $response->assertCreated()
@@ -662,6 +768,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
@@ -683,6 +791,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');

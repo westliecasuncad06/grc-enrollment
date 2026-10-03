@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests\Api\V1\StudentProfile;
 
+use App\Domain\Identity\StudentType;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
- * `year_level` decides which requirement lists apply (Freshman for Year 1, Transferee for Years 2-4,
- * plus Additional); see `ListApplicableAdmissionRequirements`.
+ * `student_type` decides which requirement lists apply (see `ListApplicableAdmissionRequirements`).
+ * `year_level` is still accepted for older callers and is turned into a type the way Admission
+ * intake used to derive it (Year 1 Freshman, Years 2-4 Transferee).
  */
 final class IndexAdmissionRequirementTypesRequest extends FormRequest
 {
@@ -21,7 +24,8 @@ final class IndexAdmissionRequirementTypesRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'year_level' => ['required', 'integer', 'between:1,4'],
+            'student_type' => ['required_without:year_level', Rule::enum(StudentType::class)],
+            'year_level' => ['required_without:student_type', 'integer', 'between:1,4'],
         ];
     }
 }

@@ -309,7 +309,9 @@ function submitFailureMessage(error: unknown): string {
 export function EnrollmentWorkspace() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
-  const termsQuery = useAcademicTermsQuery()
+  // The student's Enrollment page follows the Registrar Head live: when enrollment is opened (or
+  // closed) the terms and the schedule are re-read every 10 s, like the student's own enrollment.
+  const termsQuery = useAcademicTermsQuery({ refetchIntervalMs: 10_000 })
   const { selectedTermId } = useTermSelection(termsQuery.data)
   const eligibleSubjectsQuery = useEligibleSubjectsQuery(selectedTermId)
   const enrollmentsQuery = useEnrollmentsQuery()
@@ -317,7 +319,9 @@ export function EnrollmentWorkspace() {
     enabled: session?.role === "student",
   })
   const studentProfileQuery = useOwnStudentProfileQuery()
-  const scheduleQuery = useEnrollmentScheduleQuery(selectedTermId)
+  const scheduleQuery = useEnrollmentScheduleQuery(selectedTermId, true, {
+    refetchIntervalMs: 10_000,
+  })
   const viewer = scheduleQuery.data?.viewer
   const selectedTerm = termsQuery.data?.find(
     (term) => term.id === selectedTermId,

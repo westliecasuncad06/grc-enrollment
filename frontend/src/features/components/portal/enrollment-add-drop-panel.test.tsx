@@ -99,6 +99,10 @@ const addableSection = {
   remaining_seats: 40,
 }
 
+const section150 = { ...addableSection, id: 21, subject_id: 13, section_code: "D" }
+const section210 = { ...addableSection, id: 31, subject_id: 15, section_code: "E" }
+const section050 = { ...addableSection, id: 41, subject_id: 14, section_code: "F" }
+
 const subjects = [
   {
     type: "subject",
@@ -131,6 +135,86 @@ const subjects = [
     is_completion_only: false,
   },
 ] as const
+
+function prospectusEntry(
+  subjectId: number,
+  code: string,
+  title: string,
+  mark: string | null = null,
+) {
+  return {
+    subject_id: subjectId,
+    code,
+    title,
+    units: 3,
+    is_required: true,
+    offered_either_semester: false,
+    is_completion_only: false,
+    mark,
+    mark_label: mark === null ? null : "Very Good",
+    final_grade: null,
+    status: mark === null ? null : "locked",
+    status_label: mark === null ? null : "Locked",
+    academic_term_id: mark === null ? null : 1,
+    term_label: mark === null ? null : "2025-2026 · 1st",
+    attempt_count: mark === null ? 0 : 1,
+    prerequisites: [],
+  }
+}
+
+/**
+ * What `GET /prospectus` returns for this student: their own curriculum only. The global
+ * `/subjects` catalog also holds OTHER900, which is not in it (Doc 12: other curricula's subjects
+ * must never reach the Add subject picker). CS101 is on the enrollment already, CS050 was passed,
+ * CS301 has no open section, CS210 needs a prerequisite the student has not met yet.
+ */
+function prospectusResponse() {
+  return Promise.resolve(
+    new Response(
+      JSON.stringify({
+        data: {
+          type: "prospectus",
+          student_id: 4,
+          student_number: "2026-0001",
+          program_code: "BSIT",
+          program_name: "BS Information Technology",
+          curriculum_id: 1,
+          curriculum_name: "BSIT 2023 Curriculum",
+          effective_school_year: "2023-2024",
+          year_level: 1,
+          enrollment_category: "regular",
+          enrollment_category_label: "Regular",
+          enrollment_category_derived_at: null,
+          semesters: [
+            {
+              year_level: 1,
+              semester: "1st",
+              semester_label: "1st Semester",
+              entries: [
+                prospectusEntry(14, "CS050", "Intro to Computing", "1.50"),
+                prospectusEntry(7, "CS101", "Programming 1"),
+                prospectusEntry(8, "CS102", "Data Structures"),
+                prospectusEntry(13, "CS150", "Discrete Mathematics"),
+              ],
+            },
+            {
+              year_level: 2,
+              semester: "1st",
+              semester_label: "1st Semester",
+              entries: [
+                prospectusEntry(12, "CS301", "Operating Systems"),
+                prospectusEntry(15, "CS210", "Algorithms"),
+              ],
+            },
+          ],
+          unplaced_entries: [],
+          curriculum_transition: null,
+          transferee_credits: [],
+        },
+      }),
+    ),
+  )
+}
 
 /**
  * What `GET /eligible-subjects` returns: only subjects from the student's OWN
@@ -264,12 +348,23 @@ function mockRoutes(overrides: { onPost?: () => unknown } = {}) {
           }),
         ),
       )
+    if (target.includes("/prospectus")) return prospectusResponse()
     if (target.includes("/eligible-subjects")) return eligibleSubjectsResponse()
     if (target.includes("/subjects"))
       return Promise.resolve(new Response(JSON.stringify({ data: subjects })))
     if (target.includes("/sections"))
       return Promise.resolve(
-        new Response(JSON.stringify({ data: [heldSection, addableSection] })),
+        new Response(
+          JSON.stringify({
+            data: [
+              heldSection,
+              addableSection,
+              section150,
+              section210,
+              section050,
+            ],
+          }),
+        ),
       )
     return Promise.resolve(new Response(JSON.stringify({ data: [] })))
   }
@@ -331,7 +426,17 @@ describe("EnrollmentAddDropPanel", () => {
         return Promise.resolve(new Response(JSON.stringify({ data: subjects })))
       if (target.includes("/sections"))
         return Promise.resolve(
-          new Response(JSON.stringify({ data: [heldSection, addableSection] })),
+          new Response(
+          JSON.stringify({
+            data: [
+              heldSection,
+              addableSection,
+              section150,
+              section210,
+              section050,
+            ],
+          }),
+        ),
         )
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
@@ -469,7 +574,7 @@ describe("EnrollmentAddDropPanel", () => {
     )
   })
 
-  it("offers only subjects from the student's own curriculum in a searchable picker and submits the add request", async () => {
+  it("offers the subjects of the student's own prospectus in a searchable picker and submits the add request", async () => {
     const user = userEvent.setup()
     let postBody: unknown = null
     fetchMock.mockImplementation((input, init) => {
@@ -496,23 +601,35 @@ describe("EnrollmentAddDropPanel", () => {
     await screen.findByRole("table", { name: "Your subjects" })
     const subjectPicker = screen.getByRole("combobox", { name: "Subject" })
 
-    // Curriculum scoping: the global catalog also holds OTHER900, and CS301
-    // has no open section; neither may be offered.
+    // Prospectus scoping: the global catalog also holds OTHER900, CS301 has no open section and
+    // CS050 was already passed; none of them may be offered.
     await user.click(subjectPicker)
     expect(
       await screen.findByRole("option", { name: /CS102/ }),
     ).toBeInTheDocument()
     expect(screen.getByRole("option", { name: /CS150/ })).toBeInTheDocument()
+    // CS210 needs a prerequisite the student has not met, but it is in their prospectus and has a
+    // section, and the server accepts it; the old eligible pool used to hide it.
+    expect(screen.getByRole("option", { name: /CS210/ })).toBeInTheDocument()
     expect(
       screen.queryByRole("option", { name: /OTHER900/ }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("option", { name: /CS301/ }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("option", { name: /CS050/ }),
+    ).not.toBeInTheDocument()
     // CS101 is already on the enrollment.
     expect(
       screen.queryByRole("option", { name: /CS101/ }),
     ).not.toBeInTheDocument()
+    // The missing one is explained.
+    expect(
+      screen.getByText(
+        "1 more subject from your prospectus has no open section this term.",
+      ),
+    ).toBeInTheDocument()
 
     // Typing filters the list.
     await user.type(subjectPicker, "data")
@@ -541,7 +658,7 @@ describe("EnrollmentAddDropPanel", () => {
     )
   })
 
-  it("says so when nothing in the curriculum matches the search", async () => {
+  it("says so when nothing in the prospectus matches the search", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockRoutes())
     renderWithSession(
@@ -564,12 +681,86 @@ describe("EnrollmentAddDropPanel", () => {
 
     expect(
       await screen.findByText(
-        "No subject in your curriculum matches that search.",
+        "No subject in your prospectus matches that search.",
       ),
     ).toBeInTheDocument()
   })
 
-  it("searches the curriculum's subjects inside the Change subject dialog too", async () => {
+  it("says why the picker is empty when none of the remaining subjects has an open section", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) =>
+      url(input).includes("/sections")
+        ? Promise.resolve(
+            new Response(JSON.stringify({ data: [heldSection, section050] })),
+          )
+        : mockRoutes()(input, init),
+    )
+    renderWithSession(
+      <EnrollmentAddDropPanel
+        enrollment={enrolledEnrollment}
+        windowOpen={true}
+        windowMessage="The add/drop window is open."
+        windowClosesAt={null}
+      />,
+      { session: studentSession },
+    )
+
+    await screen.findByRole("table", { name: "Your subjects" })
+    await user.click(screen.getByRole("combobox", { name: "Subject" }))
+
+    expect(
+      await screen.findByText(
+        "None of your remaining prospectus subjects has an open section this term.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "4 more subjects from your prospectus have no open section this term.",
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it("only offers sections of the term the enrollment belongs to", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) =>
+      url(input).includes("/sections")
+        ? Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: [
+                  heldSection,
+                  { ...addableSection, academic_term_id: 99 },
+                ],
+              }),
+            ),
+          )
+        : mockRoutes()(input, init),
+    )
+    renderWithSession(
+      <EnrollmentAddDropPanel
+        enrollment={enrolledEnrollment}
+        windowOpen={true}
+        windowMessage="The add/drop window is open."
+        windowClosesAt={null}
+      />,
+      { session: studentSession },
+    )
+
+    await screen.findByRole("table", { name: "Your subjects" })
+    await user.click(screen.getByRole("combobox", { name: "Subject" }))
+
+    // CS102's only section is in another term, so it cannot be added to this enrollment.
+    expect(
+      await screen.findByText(
+        "None of your remaining prospectus subjects has an open section this term.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("option", { name: /CS102/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("searches the prospectus subjects inside the Change subject dialog too", async () => {
     const user = userEvent.setup()
     let postBody: unknown = null
     fetchMock.mockImplementation((input, init) => {

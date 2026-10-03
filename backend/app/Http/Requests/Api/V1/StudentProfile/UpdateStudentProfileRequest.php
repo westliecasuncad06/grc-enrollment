@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Api\V1\StudentProfile;
 
+use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\FinancialStatus;
+use App\Domain\Identity\StudentType;
 use App\Models\StudentProfile;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -35,11 +37,10 @@ final class UpdateStudentProfileRequest extends FormRequest
             // StoreStudentProfileRequest and App\Actions\Identity\UpdateStudentProfile.
             'entry_year' => ['prohibited'],
             'year_level' => ['sometimes', 'integer', 'between:1,4'],
-            // Derived from year_level (Stakeholder Doc 17,
-            // App\Domain\Identity\AdmissionIntakeDefaults) — must never be
-            // client-supplied.
-            'enrollment_category' => ['prohibited'],
-            'student_type' => ['prohibited'],
+            // Chosen by Admission (stakeholder Doc 20), like year_level; academic setup fields stay
+            // editable only until the student's first enrollment.
+            'enrollment_category' => ['sometimes', Rule::enum(EnrollmentCategory::class)],
+            'student_type' => ['sometimes', Rule::enum(StudentType::class)],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
             'admission_status' => ['sometimes', Rule::enum(AdmissionStatus::class)],
             'curriculum_id' => ['prohibited'],

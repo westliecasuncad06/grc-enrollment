@@ -6,7 +6,6 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Curriculum\CurriculumVersion;
-use App\Domain\Identity\AdmissionIntakeDefaults;
 use App\Domain\Identity\PersonName;
 use App\Models\Curriculum;
 use App\Models\StudentProfile;
@@ -23,16 +22,17 @@ final class UpdateStudentProfile
     private const NAME_PART_FIELDS = ['first_name', 'middle_initial', 'last_name', 'suffix'];
 
     /**
-     * `entry_year`, `enrollment_category`, and `student_type` are
-     * deliberately absent: `StoreStudentProfileRequest`/
-     * `UpdateStudentProfileRequest` make all three `prohibited`
-     * (Stakeholder Doc 17), so they can never appear in `$data` — this
-     * Action derives them itself from `year_level` instead.
+     * `entry_year` is deliberately absent (derived from the ongoing term). `enrollment_category` and
+     * `student_type` are chosen by Admission (stakeholder Doc 20); they used to be derived from
+     * `year_level` here (Stakeholder Doc 17) and no longer are, so changing the year level never
+     * overwrites what Admission picked.
      */
     private const ACADEMIC_SETUP_FIELDS = [
         'student_number',
         'program_id',
         'year_level',
+        'enrollment_category',
+        'student_type',
         'financial_status',
         'admission_status',
     ];
@@ -93,6 +93,8 @@ final class UpdateStudentProfile
                 'student_number',
                 'program_id',
                 'year_level',
+                'enrollment_category',
+                'student_type',
                 'financial_status',
                 'admission_status',
             ]);
@@ -115,17 +117,6 @@ final class UpdateStudentProfile
                 }
 
                 $profileData['curriculum_id'] = $curriculum->id;
-            }
-
-            if (array_key_exists('year_level', $profileData)) {
-                // Stakeholder Doc 17: recompute the two intake defaults
-                // whenever Year Level changes, while this profile's academic
-                // setup is still editable (guarded above). Never touches
-                // enrollment_category_derived_at — that column is reserved
-                // for ADR 0021's separate, later, grade-based reclassification.
-                $yearLevel = (int) $profileData['year_level'];
-                $profileData['enrollment_category'] = AdmissionIntakeDefaults::enrollmentCategoryFor($yearLevel)->value;
-                $profileData['student_type'] = AdmissionIntakeDefaults::studentTypeFor($yearLevel)->value;
             }
 
             $locked->fill($profileData)->save();

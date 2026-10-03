@@ -30,8 +30,10 @@ export function useAdmissionChecklistQuery(studentId: number | null) {
   })
 }
 
-/** The Create Account checklist: what applies to a new student of this year level. */
-export function useAdmissionRequirementSelectionQuery(yearLevel: number) {
+/** The Create Account checklist: what applies to a new student of the chosen type (none until one is chosen). */
+export function useAdmissionRequirementSelectionQuery(
+  studentType: string | null,
+) {
   const { session } = useAuth()
 
   return useQuery({
@@ -39,10 +41,11 @@ export function useAdmissionRequirementSelectionQuery(yearLevel: number) {
       "admission-requirements",
       session?.userId ?? null,
       "selection",
-      yearLevel,
+      studentType,
     ] as const,
-    queryFn: ({ signal }) => getAdmissionRequirementSelection(yearLevel, signal),
-    enabled: session?.role === "admission_staff",
+    queryFn: ({ signal }) =>
+      getAdmissionRequirementSelection(studentType!, signal),
+    enabled: session?.role === "admission_staff" && studentType !== null,
   })
 }
 

@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -79,7 +86,7 @@ function renderPage() {
   })
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <QueueKioskPage requirePassword={false} />
+      <QueueKioskPage requirePassword={false} welcomeMs={0} />
     </QueryClientProvider>,
   )
   return { ...result, queryClient }
@@ -108,6 +115,88 @@ describe("QueueKioskPage", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     fetchMock.mockReset()
+  })
+
+  describe("the Welcome screen before the device sign-in", () => {
+    function renderWelcome() {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "UNAUTHENTICATED",
+              message: "Authentication is required.",
+              errors: {},
+              request_id: "request-1",
+            },
+          }),
+          { status: 401 },
+        ),
+      )
+      localStorage.setItem(kioskTokenStorageKey, "kiosk-token")
+      return render(
+        <QueryClientProvider client={queryClient}>
+          <QueueKioskPage requirePassword={false} welcomeMs={3000} />
+        </QueryClientProvider>,
+      )
+    }
+
+    afterEach(() => vi.useRealTimers())
+
+    it("plays a Welcome animation first and opens the device sign-in as a modal afterwards", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      renderWelcome()
+
+      expect(
+        await screen.findByRole("heading", { name: "Welcome" }),
+      ).toBeInTheDocument()
+      expect(screen.getByText("Cashier Queue Kiosk")).toBeInTheDocument()
+      // Nothing to sign in to yet: no form, no modal, no student card.
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      expect(screen.queryByLabelText("Device email")).not.toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+
+      const dialog = await screen.findByRole("dialog")
+      expect(
+        within(dialog).getByRole("heading", { name: "Queue Kiosk sign-in" }),
+      ).toBeInTheDocument()
+      expect(within(dialog).getByLabelText("Device email")).toBeInTheDocument()
+      expect(
+        within(dialog).getByRole("button", { name: "Open Student sign-in" }),
+      ).toBeInTheDocument()
+    })
+
+    it("lets a tap skip the animation", async () => {
+      const user = userEvent.setup()
+      renderWelcome()
+
+      await user.click(
+        await screen.findByRole("button", { name: "Tap to sign in" }),
+      )
+
+      expect(await screen.findByRole("dialog")).toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: "Tap to sign in" }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("keeps the device locked: the modal cannot be dismissed with Escape", async () => {
+      const user = userEvent.setup()
+      renderWelcome()
+      await user.click(
+        await screen.findByRole("button", { name: "Tap to sign in" }),
+      )
+      await screen.findByRole("dialog")
+
+      await user.keyboard("{Escape}")
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument()
+    })
   })
 
   it("moves from the restore status to the device sign-in form", async () => {
@@ -152,7 +241,7 @@ describe("QueueKioskPage", () => {
     })
     render(
       <QueryClientProvider client={queryClient}>
-        <QueueKioskPage />
+        <QueueKioskPage welcomeMs={0} />
       </QueryClientProvider>,
     )
     await screen.findByRole("heading", { name: "Queue Kiosk sign-in" })

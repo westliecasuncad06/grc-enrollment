@@ -6,7 +6,9 @@ use App\Actions\Identity\BuildAdmissionChecklist;
 use App\Actions\Identity\CreateAdmissionRequirementType;
 use App\Actions\Identity\ListApplicableAdmissionRequirements;
 use App\Actions\Identity\SetAdmissionRequirementSubmitted;
+use App\Domain\Identity\AdmissionIntakeDefaults;
 use App\Domain\Identity\AdmissionRequirementCategory;
+use App\Domain\Identity\StudentType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StudentProfile\IndexAdmissionRequirementTypesRequest;
 use App\Http\Requests\Api\V1\StudentProfile\SetAdmissionRequirementRequest;
@@ -79,7 +81,7 @@ final class AdmissionRequirementController extends Controller
     }
 
     /**
-     * The requirements that apply to a new student of a year level, for the Create Account checklist.
+     * The requirements that apply to a new student of a type, for the Create Account checklist.
      *
      * @throws AuthenticationException
      */
@@ -90,10 +92,14 @@ final class AdmissionRequirementController extends Controller
         $this->authenticatedUser($request);
         $this->authorize('viewAny', AdmissionRequirementType::class);
 
+        $studentType = $request->validated('student_type') !== null
+            ? StudentType::from((string) $request->validated('student_type'))
+            : AdmissionIntakeDefaults::studentTypeFor((int) $request->validated('year_level'));
+
         $response = response()->json([
             'data' => [
                 'type' => 'admission_requirement_selection',
-                ...$list->execute((int) $request->validated('year_level')),
+                ...$list->execute($studentType),
             ],
         ]);
         $response->headers->set('Cache-Control', 'no-store, private');

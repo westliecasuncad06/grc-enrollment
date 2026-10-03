@@ -2,24 +2,22 @@
 
 namespace App\Actions\Identity;
 
-use App\Domain\Identity\AdmissionIntakeDefaults;
 use App\Domain\Identity\AdmissionRequirementCategory;
+use App\Domain\Identity\StudentType;
 use App\Models\AdmissionRequirementType;
 
 /**
- * The Admission requirements a new student of a given year level is asked for, before any
- * student record exists (the Create Account checklist, stakeholder Doc 20). The student type is
- * derived from the year level exactly as `ProvisionStudent` derives it (`AdmissionIntakeDefaults`):
- * Year 1 is a Freshman, Years 2-4 are Transferees, and Additional applies to everyone.
+ * The Admission requirements a new student of a given type is asked for, before any student
+ * record exists (the Create Account checklist, stakeholder Doc 20). Admission chooses the student
+ * type on the form; the lists that apply come from `AdmissionRequirementCategory::forStudentType`.
  */
 final class ListApplicableAdmissionRequirements
 {
     /**
      * @return array{student_type: string, student_type_label: string, categories: list<array{category: string, label: string, items: list<array{requirement_type_id: int, name: string, is_system: bool}>}>}
      */
-    public function execute(int $yearLevel): array
+    public function execute(StudentType $studentType): array
     {
-        $studentType = AdmissionIntakeDefaults::studentTypeFor($yearLevel);
         $categories = AdmissionRequirementCategory::forStudentType($studentType);
 
         $types = AdmissionRequirementType::query()
@@ -55,10 +53,10 @@ final class ListApplicableAdmissionRequirements
     /**
      * @return list<int>
      */
-    public function applicableIds(int $yearLevel): array
+    public function applicableIds(StudentType $studentType): array
     {
         $ids = [];
-        foreach ($this->execute($yearLevel)['categories'] as $group) {
+        foreach ($this->execute($studentType)['categories'] as $group) {
             foreach ($group['items'] as $item) {
                 $ids[] = $item['requirement_type_id'];
             }

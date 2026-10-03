@@ -3,7 +3,9 @@
 namespace App\Http\Requests\Api\V1\StudentProfile;
 
 use App\Actions\Identity\ListApplicableAdmissionRequirements;
+use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\FinancialStatus;
+use App\Domain\Identity\StudentType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -57,41 +59,38 @@ final class StoreStudentProfileRequest extends FormRequest
             // `EnrollmentAudience::fromYearLevel()` only knows 1–4, and a
             // year level outside that range has no enrollment window at all.
             'year_level' => ['required', 'integer', 'between:1,4'],
-            // Derived from year_level (Stakeholder Doc 17,
-            // App\Domain\Identity\AdmissionIntakeDefaults) — must never be
-            // client-supplied.
-            'enrollment_category' => ['prohibited'],
-            'student_type' => ['prohibited'],
+            // Chosen by Admission on the form (stakeholder Doc 20); no longer derived from
+            // year_level as Stakeholder Doc 17 did.
+            'enrollment_category' => ['required', Rule::enum(EnrollmentCategory::class)],
+            'student_type' => ['required', Rule::enum(StudentType::class)],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
         ];
     }
 
     /**
-     * An account is created only after Admission has received the requirements: when a list is sent
-     * it must tick every requirement that applies to the student, and nothing that does not.
+     * Admission ticks off the requirements the student handed in; the account may be created with some
+     * still missing (stakeholder Doc 20). A list may only name requirements that apply to the chosen
+     * student type.
      */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
             $submitted = $this->input('requirement_type_ids');
-            $yearLevel = $this->input('year_level');
+            $studentType = StudentType::tryFrom((string) $this->input('student_type'));
 
             if (
                 ! is_array($submitted)
-                || ! is_numeric($yearLevel)
+                || $studentType === null
                 || $validator->errors()->has('requirement_type_ids')
                 || $validator->errors()->has('requirement_type_ids.*')
-                || $validator->errors()->has('year_level')
+                || $validator->errors()->has('student_type')
             ) {
                 return;
             }
 
-            $applicable = app(ListApplicableAdmissionRequirements::class)->applicableIds((int) $yearLevel);
-            $ids = array_map('intval', $submitted);
+            $applicable = app(ListApplicableAdmissionRequirements::class)->applicableIds($studentType);
 
-            if (array_diff($applicable, $ids) !== []) {
-                $validator->errors()->add('requirement_type_ids', 'Every requirement must be submitted before the account is created.');
-            } elseif (array_diff($ids, $applicable) !== []) {
+            if (array_diff(array_map('intval', $submitted), $applicable) !== []) {
                 $validator->errors()->add('requirement_type_ids', 'One of the checked requirements does not apply to this student.');
             }
         });

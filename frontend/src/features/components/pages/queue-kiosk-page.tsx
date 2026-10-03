@@ -3,10 +3,10 @@
 import { useState } from "react"
 import { LogOutIcon } from "lucide-react"
 
-import { QueueKioskDeviceLogin } from "@/features/components/kiosk/queue-kiosk-device-login"
 import { QueueKioskSignOutDialog } from "@/features/components/kiosk/queue-kiosk-sign-out-dialog"
 import { QueueKioskStudentLogin } from "@/features/components/kiosk/queue-kiosk-student-login"
 import { QueueKioskStudentSession } from "@/features/components/kiosk/queue-kiosk-student-session"
+import { QueueKioskWelcome } from "@/features/components/kiosk/queue-kiosk-welcome"
 import { Button } from "@/features/components/ui/button"
 import {
   Card,
@@ -19,8 +19,11 @@ import { useQueueKioskSession } from "@/features/hooks/use-queue-kiosk-session"
 
 export function QueueKioskPage({
   requirePassword = true,
+  welcomeMs,
 }: {
   requirePassword?: boolean
+  /** How long the Welcome animation plays before the device sign-in opens (default in `QueueKioskWelcome`). */
+  welcomeMs?: number
 } = {}) {
   const { state, finishStudent, signInDevice, signInStudent, signOutDevice } =
     useQueueKioskSession()
@@ -82,24 +85,11 @@ export function QueueKioskPage({
 
   if (state.status === "device-login") {
     return (
-      <main className="queue-kiosk-shell">
-        {deviceHeader}
-        <Card className="queue-kiosk-card">
-          <CardHeader>
-            <CardTitle>Queue Kiosk sign-in</CardTitle>
-            <CardDescription>
-              Authorized Cashier staff: unlock this device before assisting a
-              Student.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <QueueKioskDeviceLogin
-              error={state.error}
-              onSubmit={signInDevice}
-            />
-          </CardContent>
-        </Card>
-      </main>
+      <QueueKioskWelcome
+        error={state.error}
+        onSubmit={signInDevice}
+        welcomeMs={welcomeMs}
+      />
     )
   }
 

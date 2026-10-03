@@ -8,8 +8,8 @@ import type { AdmissionRequirementSelection } from "@/features/schemas/admission
 /**
  * The Admission requirements Admission ticks off while creating a student account (stakeholder
  * Doc 20): the list for the student's type, one checkbox each. It replaces the single
- * "Requirements submitted and verified" confirmation; the account can be created only when every
- * requirement is ticked.
+ * "Requirements submitted and verified" confirmation. Some may still be missing: the account is
+ * created anyway and the rest stay on the student's checklist for Admission to tick later.
  */
 export function AdmissionIntakeRequirements({
   state,
@@ -18,12 +18,19 @@ export function AdmissionIntakeRequirements({
   onChange,
   disabled = false,
 }: {
-  state: "loading" | "error" | "ready"
+  state: "idle" | "loading" | "error" | "ready"
   selection: AdmissionRequirementSelection | undefined
   checkedIds: readonly number[]
   onChange: (ids: number[]) => void
   disabled?: boolean
 }) {
+  if (state === "idle") {
+    return (
+      <p role="status" className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+        Choose the student type to see the Admission requirements that apply.
+      </p>
+    )
+  }
   if (state === "loading") {
     return (
       <p role="status" className="text-sm text-muted-foreground">
@@ -64,8 +71,9 @@ export function AdmissionIntakeRequirements({
         <div>
           <p className="font-medium">Admission requirements</p>
           <p className="text-sm text-muted-foreground">
-            Check each requirement the student handed in. The account is
-            created only when every requirement is checked.
+            Check each requirement the student handed in. You can still create
+            the account if some are missing; they stay on the student&apos;s
+            checklist.
           </p>
         </div>
         <div className="flex items-center gap-3">

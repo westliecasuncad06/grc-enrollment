@@ -33,15 +33,32 @@ interface ReferenceDataQueryOptions {
   enabled?: boolean
 }
 
+interface AcademicTermsQueryOptions extends ReferenceDataQueryOptions {
+  /**
+   * Re-read the terms on this interval while the tab is visible (and straight away when the tab is
+   * focused again). Off by default: only a page that must follow a Registrar's change live, such as
+   * the student's Enrollment page, turns it on.
+   */
+  refetchIntervalMs?: number
+}
+
 export function useAcademicTermsQuery({
   enabled = true,
-}: ReferenceDataQueryOptions = {}) {
+  refetchIntervalMs,
+}: AcademicTermsQueryOptions = {}) {
   const { session } = useAuth()
 
   return useQuery({
     queryKey: academicTermsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getAcademicTerms(signal),
     enabled: enabled && session !== null,
+    ...(refetchIntervalMs === undefined
+      ? {}
+      : {
+          refetchInterval: refetchIntervalMs,
+          refetchIntervalInBackground: false,
+          refetchOnWindowFocus: "always" as const,
+        }),
   })
 }
 
