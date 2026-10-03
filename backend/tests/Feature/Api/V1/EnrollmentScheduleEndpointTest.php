@@ -507,6 +507,24 @@ final class EnrollmentScheduleEndpointTest extends TestCase
         self::assertSame('Online', $row['enrollment_platform_label']);
     }
 
+    public function test_registrar_head_can_set_the_platform_to_both(): void
+    {
+        $term = AcademicTerm::create(['school_year' => '2028-2029', 'semester' => '1st', 'status' => AcademicTermStatus::Draft]);
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar-head.platform.both@grc.test');
+
+        $this->withToken($token)->patchJson(
+            "/api/v1/academic-terms/{$term->id}/enrollment-schedule",
+            $this->platformSchedulePayload(['enrollment_platform' => 'both']),
+        )->assertOk();
+
+        self::assertSame('both', $term->refresh()->enrollment_platform?->value);
+
+        $row = collect($this->withToken($token)->getJson('/api/v1/academic-terms')->assertOk()->json('data'))
+            ->firstWhere('id', $term->id);
+        self::assertSame('both', $row['enrollment_platform']);
+        self::assertSame('Both (Face-to-Face and Online)', $row['enrollment_platform_label']);
+    }
+
     public function test_an_unknown_platform_is_rejected(): void
     {
         $term = AcademicTerm::create(['school_year' => '2028-2029', 'semester' => '1st', 'status' => AcademicTermStatus::Draft]);

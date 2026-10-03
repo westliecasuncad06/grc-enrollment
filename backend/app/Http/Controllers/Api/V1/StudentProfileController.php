@@ -50,6 +50,7 @@ final class StudentProfileController extends Controller
             'suffix' => $request->validated('suffix'),
             'email' => $request->validated('email'),
             'address' => $request->validated('address'),
+            'has_existing_student_number' => $request->boolean('has_existing_student_number'),
             'student_number' => $request->validated('student_number'),
             'program_id' => $request->validated('program_id'),
             'entry_year' => $request->validated('entry_year'),

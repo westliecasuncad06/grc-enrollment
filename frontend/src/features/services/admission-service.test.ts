@@ -15,7 +15,7 @@ const input: ProvisionStudentInput = {
   last_name: "Santos",
   email: "amina.santos@grc.test",
   address: "123 Mabini Street, Caloocan City",
-  student_number: "2027-08-01001",
+  has_existing_student_number: false,
   program_id: 11,
   year_level: 1,
   enrollment_category: "regular",
@@ -26,7 +26,7 @@ const profile = {
   type: "student_profile",
   id: 31,
   user_id: 41,
-  student_number: input.student_number,
+  student_number: "2027-08-00001",
   name: "Amina S. Santos",
   first_name: input.first_name,
   middle_initial: input.middle_initial ?? null,
@@ -97,6 +97,50 @@ describe("admission-service", () => {
       enrollment_category: "regular",
       student_type: "transferee",
     })
+    // The server assigns the number: none is sent unless the existing-number option is ticked.
+    expect(body).not.toHaveProperty("student_number")
+  })
+
+  it("sends the number the student already has when the existing-number option is ticked", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: profile }), { status: 201 }),
+    )
+    const existing: ProvisionStudentInput = {
+      ...input,
+      student_type: "returnee",
+      has_existing_student_number: true,
+      student_number: "2024-06-00123",
+    }
+
+    await provisionStudent(existing)
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body =
+      typeof request.body === "string"
+        ? (JSON.parse(request.body) as Record<string, unknown>)
+        : {}
+
+    expect(body).toEqual(existing)
+  })
+
+  it("refuses an existing student number for a Freshman or Transferee before calling the API", async () => {
+    for (const studentType of ["freshman", "transferee"] as const) {
+      await expect(
+        provisionStudent({
+          ...input,
+          student_type: studentType,
+          has_existing_student_number: true,
+          student_number: "2024-06-00123",
+        }),
+      ).rejects.toThrow()
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a student number sent without the existing-number option", async () => {
+    await expect(
+      provisionStudent({ ...input, student_number: "2024-06-00123" }),
+    ).rejects.toThrow()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("searches the Admission directory by name, student number, or email", async () => {

@@ -109,7 +109,7 @@ export const saveEnrollmentScheduleInputSchema = z
     add_drop_closes_at: z.string().trim().optional(),
     // `null` clears the platform; leaving it out keeps what was saved.
     enrollment_platform: z
-      .enum(["online", "face_to_face"])
+      .enum(["online", "face_to_face", "both"])
       .nullable()
       .optional(),
     windows: z

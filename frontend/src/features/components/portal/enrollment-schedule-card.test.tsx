@@ -234,6 +234,50 @@ describe("EnrollmentScheduleCard", () => {
     )
   })
 
+  it("lets the Registrar pick Both Face-to-Face and Online", async () => {
+    const user = userEvent.setup()
+    let savedBody: Record<string, unknown> | null = null
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/schedule-proposals"))
+        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+      if (
+        init?.method === "PATCH" &&
+        url(input).includes("enrollment-schedule")
+      ) {
+        savedBody =
+          typeof init.body === "string"
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : null
+        return Promise.resolve(new Response(JSON.stringify(scheduleFixture())))
+      }
+      return Promise.resolve(new Response(JSON.stringify(scheduleFixture())))
+    })
+
+    renderWithSession(
+      <EnrollmentScheduleCard
+        currentTerm={{
+          ...draftTerm,
+          enrollment_platform: "online",
+          enrollment_platform_label: "Online",
+        }}
+      />,
+      { session: registrarSession() },
+    )
+
+    const platform = await screen.findByLabelText("Platform for this term")
+    await waitFor(() => expect(platform).toHaveValue("online"))
+    expect(
+      screen.getByRole("option", { name: "Both (Face-to-Face and Online)" }),
+    ).toBeInTheDocument()
+
+    await user.selectOptions(platform, "both")
+    await user.click(
+      screen.getByRole("button", { name: "Save enrollment schedule" }),
+    )
+
+    await waitFor(() => expect(savedBody?.enrollment_platform).toBe("both"))
+  })
+
   it("sends null to clear the platform when it is set back to Not set", async () => {
     const user = userEvent.setup()
     let savedBody: Record<string, unknown> | null = null

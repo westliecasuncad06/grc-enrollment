@@ -28,6 +28,8 @@ final class StoreStudentProfileRequest extends FormRequest
      */
     public function rules(): array
     {
+        $hasExistingNumber = $this->boolean('has_existing_student_number');
+
         return [
             'first_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['sometimes', 'nullable', 'string', 'max:10'],
@@ -41,11 +43,14 @@ final class StoreStudentProfileRequest extends FormRequest
             'requirement_type_ids' => ['sometimes', 'array'],
             'requirement_type_ids.*' => ['integer', 'distinct', 'exists:admission_requirement_types,id'],
             'requirements_verified' => [Rule::excludeIf(fn (): bool => $this->has('requirement_type_ids')), 'required', 'accepted'],
-            // YYYY-MM-NNNNN — the year and month provisioned, then a random
-            // 5-digit suffix. The frontend generates this by default
-            // (features/lib/student-number.ts); this rule is the actual
-            // enforcement boundary for anyone calling the API directly.
-            'student_number' => ['required', 'string', 'max:255', 'regex:/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/', 'unique:student_profiles,student_number'],
+            // The server assigns the number (ADR 0042). Admission may instead enter the number a
+            // Returnee or an Existing Student already has: then it is required, in the same
+            // YYYY-MM-NNNNN format, and unique. Otherwise a client-sent number is refused rather
+            // than quietly ignored, so an older frontend that still makes its own number is told.
+            'has_existing_student_number' => ['sometimes', 'boolean'],
+            'student_number' => $hasExistingNumber
+                ? ['required', 'string', 'max:255', 'regex:/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/', 'unique:student_profiles,student_number']
+                : ['prohibited'],
             'program_id' => ['required', 'integer', 'exists:programs,id'],
             // Rejected outright, not merely ignored: curriculum assignment is
             // automatic from program + entry year and must never be
@@ -68,13 +73,27 @@ final class StoreStudentProfileRequest extends FormRequest
     }
 
     /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'student_number.unique' => 'This student number is already in use.',
+            'student_number.regex' => 'Student number must be in YYYY-MM-NNNNN format (e.g. 2026-08-07107).',
+            'student_number.prohibited' => 'A student number is assigned automatically. Tick "Student already has a student number" to enter one.',
+        ];
+    }
+
+    /**
      * Admission ticks off the requirements the student handed in; the account may be created with some
      * still missing (stakeholder Doc 20). A list may only name requirements that apply to the chosen
-     * student type.
+     * student type. An existing student number is only for a type that has records at the school.
      */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $this->validateExistingNumberType($validator);
+
             $submitted = $this->input('requirement_type_ids');
             $studentType = StudentType::tryFrom((string) $this->input('student_type'));
 
@@ -94,5 +113,21 @@ final class StoreStudentProfileRequest extends FormRequest
                 $validator->errors()->add('requirement_type_ids', 'One of the checked requirements does not apply to this student.');
             }
         });
+    }
+
+    private function validateExistingNumberType(Validator $validator): void
+    {
+        if (! $this->boolean('has_existing_student_number') || $validator->errors()->has('student_type')) {
+            return;
+        }
+
+        $studentType = StudentType::tryFrom((string) $this->input('student_type'));
+
+        if ($studentType !== null && ! $studentType->canHaveExistingStudentNumber()) {
+            $validator->errors()->add(
+                'has_existing_student_number',
+                'Only a Returnee or an Existing Student can already have a student number.',
+            );
+        }
     }
 }

@@ -66,7 +66,7 @@ const AUDIENCE_FALLBACK_LABEL: Record<EnrollmentAudience, string> = {
 
 interface AudienceFormValues {
   /** "" means no platform is set. */
-  enrollment_platform: "" | "online" | "face_to_face"
+  enrollment_platform: "" | "online" | "face_to_face" | "both"
   enrollment_opens_at: string
   enrollment_closes_at: string
   add_drop_opens_at: string
@@ -583,6 +583,9 @@ export function EnrollmentScheduleCard({
                       <option value="">Not set</option>
                       <option value="online">Online</option>
                       <option value="face_to_face">Face-to-Face</option>
+                      <option value="both">
+                        Both (Face-to-Face and Online)
+                      </option>
                     </select>
                   )}
                 />

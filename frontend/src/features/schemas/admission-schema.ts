@@ -36,18 +36,32 @@ export const personNameFieldsSchema = {
     .optional(),
 }
 
+/** `YYYY-MM-NNNNN`: the year and month the account was created in, then a 5-digit running number. */
+export const STUDENT_NUMBER_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-\d{5}$/
+const STUDENT_NUMBER_FORMAT_MESSAGE =
+  "Student number must be in YYYY-MM-NNNNN format (e.g. 2026-08-07107)."
+const EXISTING_NUMBER_TYPE_MESSAGE =
+  "Only a Returnee or an Existing Student can already have a student number."
+
+/**
+ * Only these types can already hold a GRC student number (ADR 0042): a Freshman
+ * has none yet and a Transferee's number belongs to the school they came from.
+ */
+export function studentTypeCanHaveExistingNumber(
+  studentType: string | null | undefined,
+): boolean {
+  return studentType === "returnee" || studentType === "existing_student"
+}
+
 export const provisionStudentSchema = z
   .object({
     ...personNameFieldsSchema,
     email: z.email("Enter a valid email address."),
     address: z.string().trim().min(1, "Enter the student's complete address."),
-    student_number: z
-      .string()
-      .trim()
-      .regex(
-        /^\d{4}-(0[1-9]|1[0-2])-\d{5}$/,
-        "Student number must be in YYYY-MM-NNNNN format (e.g. 2026-08-07107).",
-      ),
+    // `false`: the server assigns the next number and none is sent. `true`: Admission types the
+    // number a Returnee or an Existing Student already has.
+    has_existing_student_number: z.boolean(),
+    student_number: z.string().trim().optional(),
     program_id: z.number().int().positive("Select a program."),
     // entry_year is deliberately absent: the server derives it from the current ongoing academic
     // term and rejects it if sent. The category and the type are chosen by Admission
@@ -66,6 +80,40 @@ export const provisionStudentSchema = z
     requirement_type_ids: z.array(z.number().int().positive()).optional(),
   })
   .strict()
+  .superRefine((value, ctx) => {
+    if (!value.has_existing_student_number) {
+      if (value.student_number) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["student_number"],
+          message: "A new student number is assigned automatically.",
+        })
+      }
+      return
+    }
+
+    if (!studentTypeCanHaveExistingNumber(value.student_type)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["has_existing_student_number"],
+        message: EXISTING_NUMBER_TYPE_MESSAGE,
+      })
+    }
+
+    if (!value.student_number) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["student_number"],
+        message: "Enter the student's existing student number.",
+      })
+    } else if (!STUDENT_NUMBER_PATTERN.test(value.student_number)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["student_number"],
+        message: STUDENT_NUMBER_FORMAT_MESSAGE,
+      })
+    }
+  })
 
 export const studentProfileSchema = z
   .object({

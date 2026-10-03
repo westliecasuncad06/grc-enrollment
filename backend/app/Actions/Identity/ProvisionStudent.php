@@ -35,10 +35,11 @@ final class ProvisionStudent
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
         private readonly ListApplicableAdmissionRequirements $applicableRequirements,
+        private readonly AssignStudentNumber $assignStudentNumber,
     ) {}
 
     /**
-     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, year_level: int, enrollment_category: string, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>}  $data
+     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, has_existing_student_number?: bool, student_number?: ?string, program_id: int, year_level: int, enrollment_category: string, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>}  $data
      */
     public function handle(
         array $data,
@@ -99,9 +100,16 @@ final class ProvisionStudent
             $requirementsComplete = $ticked === null
                 || array_diff($this->applicableRequirements->applicableIds($studentType), $ticked) === [];
 
+            // Admission typed the number a Returnee or an Existing Student already has, or the
+            // next sequential number is taken inside this transaction (ADR 0042).
+            $hasExistingNumber = (bool) ($data['has_existing_student_number'] ?? false);
+            $studentNumber = $hasExistingNumber
+                ? (string) $data['student_number']
+                : $this->assignStudentNumber->handle();
+
             $profile = StudentProfile::create([
                 'user_id' => $user->id,
-                'student_number' => $data['student_number'],
+                'student_number' => $studentNumber,
                 'program_id' => $data['program_id'],
                 'curriculum_id' => $curriculum->id,
                 'entry_year' => $entryYear,
@@ -153,6 +161,7 @@ final class ProvisionStudent
                     'admission_status' => $profile->admission_status->value,
                     'academic_standing' => $profile->academic_standing->value,
                     'financial_status' => $profile->financial_status?->value,
+                    'student_number_source' => $hasExistingNumber ? 'existing' : 'assigned',
                 ],
                 null,
                 $context,

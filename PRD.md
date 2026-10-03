@@ -966,13 +966,18 @@ All names use Laravel/MySQL conventions. The final schema must be represented by
 - `student_profiles`
   - `id`
   - `user_id` unique foreign key
-  - `student_number` unique
+  - `student_number` unique; assigned by the server as `YYYY-MM-NNNNN` from a per-year running counter, or entered by Admission for a Returnee or Existing Student who already has one (ADR 0042)
   - `program_id`
   - `curriculum_id`
   - `year_level`
   - `admission_status`
   - `academic_standing`
   - approved contact fields
+  - timestamps
+
+- `student_number_sequences`
+  - `year` primary key
+  - `last_value` (last 5-digit suffix handed out that year)
   - timestamps
 
 - `programs`

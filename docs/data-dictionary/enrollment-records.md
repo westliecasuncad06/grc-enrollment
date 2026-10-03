@@ -17,7 +17,7 @@ landed the full API for every table on this page — see each table's own
 |---|---|---|---|
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
 | `user_id` | `BIGINT UNSIGNED` | not null, **unique**, FK → `users.id`, `CASCADE` on delete | One profile per user account |
-| `student_number` | `VARCHAR(255)` | not null, **unique** | |
+| `student_number` | `VARCHAR(255)` | not null, **unique** | `YYYY-MM-NNNNN`. Assigned by the server from `student_number_sequences` at account creation (ADR 0042), or typed by Admission for a Returnee or Existing Student who already has one. Older rows also hold `HIST-YYYY-NNNNN` and `TEST-…` seed numbers |
 | `program_id` | `BIGINT UNSIGNED` | not null, FK → `programs.id`, `RESTRICT` on delete | |
 | `curriculum_id` | `BIGINT UNSIGNED` | not null, FK → `curricula.id`, `RESTRICT` on delete | |
 | `year_level` | `TINYINT UNSIGNED` | not null | Cast to `integer` on the model |
@@ -28,6 +28,19 @@ landed the full API for every table on this page — see each table's own
 PRD §10.1's "approved contact fields" are deliberately **not** included —
 which contact details GRC authorizes storing is unconfirmed; they arrive with
 the approved student-provisioning slice.
+
+## `student_number_sequences`
+
+The running counter behind sequential student numbers (ADR 0042). One row per
+calendar year (Asia/Manila); `App\Actions\Identity\AssignStudentNumber` locks
+the year's row, adds one, and builds `YYYY-MM-NNNNN`. Migration
+`2026_10_04_000001_create_student_number_sequences_table.php`.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `year` | `SMALLINT UNSIGNED` | primary key | The year in the number |
+| `last_value` | `INT UNSIGNED` | not null, default `0` | Last 5-digit suffix handed out that year; never above `99999`. The row is created on first use from the highest existing `YYYY-MM-NNNNN` suffix of that year |
+| `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 
 ## `enrollments`
 

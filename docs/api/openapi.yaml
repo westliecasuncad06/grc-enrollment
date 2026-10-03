@@ -7038,14 +7038,15 @@ components:
           format: date-time
         enrollment_platform:
           type: [string, 'null']
-          enum: [online, face_to_face, null]
+          enum: [online, face_to_face, both, null]
           description: >
             How classes are delivered for everyone enrolling this term, set by
             the Registrar Head through PATCH /academic-terms/{id}/enrollment-schedule
-            and printed on each Certificate of Registration. Null until set.
+            and printed on each Certificate of Registration. `both` means classes meet
+            face-to-face and online. Null until set.
         enrollment_platform_label:
           type: [string, 'null']
-          description: Online or Face-to-Face; null when the platform is not set.
+          description: Online, Face-to-Face or Both (Face-to-Face and Online); null when the platform is not set.
         closed_at:
           type: [string, 'null']
           format: date-time
@@ -10295,7 +10296,6 @@ components:
         - last_name
         - email
         - address
-        - student_number
         - program_id
         - year_level
         - enrollment_category
@@ -10339,10 +10339,25 @@ components:
             `requirement_type_ids`. Each id is recorded as submitted. `requirements_verified_at` on
             the new profile is set only when every applicable requirement was ticked (or, with no
             list, when `requirements_verified` was sent).
+        has_existing_student_number:
+          type: boolean
+          default: false
+          description: >
+            `false` (the default): the server assigns the next sequential student number
+            (`YYYY-MM-NNNNN`, one running counter per year, year and month in Asia/Manila) and
+            `student_number` must not be sent. `true`: Admission enters the number a Returnee or an
+            Existing Student already has, `student_number` is required, and the counter is not
+            touched. Only `returnee` and `existing_student` may use it, otherwise 422 on this field
+            (ADR 0042).
         student_number:
           type: string
           maxLength: 255
           pattern: '^\d{4}-(0[1-9]|1[0-2])-\d{5}$'
+          description: >
+            Only with `has_existing_student_number: true`: required then, in `YYYY-MM-NNNNN` format,
+            and unique ("This student number is already in use." on 422). Sending it without the
+            flag is refused with 422 rather than ignored. The assigned or kept number is returned
+            as `student_number` on the created profile.
         program_id:
           type: integer
         year_level:

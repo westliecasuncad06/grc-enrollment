@@ -174,6 +174,29 @@ function renderWorkspace() {
   })
 }
 
+async function fillAccountBasics(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("First name"), profile.first_name)
+  await user.type(screen.getByLabelText("Last name"), profile.last_name)
+  await user.type(screen.getByLabelText("Email address"), profile.email)
+  await user.type(screen.getByLabelText("Complete address"), profile.address)
+  await user.click(screen.getByLabelText("Program"))
+  await user.click(
+    await screen.findByRole("option", {
+      name: "BSIT — Bachelor of Science in Information Technology",
+    }),
+  )
+  await user.click(screen.getByLabelText("Enrollment category"))
+  await user.click(await screen.findByRole("option", { name: "Regular" }))
+}
+
+async function chooseStudentType(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await user.click(screen.getByLabelText("Student type"))
+  await user.click(await screen.findByRole("option", { name }))
+}
+
 describe("Student Records workspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
 
@@ -192,7 +215,11 @@ describe("Student Records workspace", () => {
           new Response(JSON.stringify({ data: profile }), { status: 201 }),
         )
       }
-      if (url.includes(`/api/v1/student-profiles/${profile.id}/admission-requirements`)) {
+      if (
+        url.includes(
+          `/api/v1/student-profiles/${profile.id}/admission-requirements`,
+        )
+      ) {
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -248,6 +275,15 @@ describe("Student Records workspace", () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
+  function provisioningBody(): Record<string, unknown> {
+    const call = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        urlOf(input).endsWith("/api/v1/student-profiles") &&
+        init?.method === "POST",
+    )
+    return bodyOf(call?.[1])
+  }
+
   it("uses one three-part workspace and creates an account with the category, type and ticked requirements Admission chose", async () => {
     const user = userEvent.setup()
     renderWorkspace()
@@ -273,6 +309,14 @@ describe("Student Records workspace", () => {
     await user.type(screen.getByLabelText("Complete address"), profile.address)
     const studentNumberField = screen.getByLabelText("Student number")
     expect(studentNumberField).toHaveAttribute("readonly")
+    // The number is assigned by the server in order: there is nothing to generate.
+    expect(
+      screen.queryByRole("button", { name: "Generate" }),
+    ).not.toBeInTheDocument()
+    expect(studentNumberField).toHaveAttribute(
+      "placeholder",
+      "Assigned automatically",
+    )
     await user.type(studentNumberField, "0000-00-00000")
     expect(studentNumberField).not.toHaveValue("0000-00-00000")
     await user.click(screen.getByLabelText("Program"))
@@ -333,6 +377,8 @@ describe("Student Records workspace", () => {
     await user.click(submit)
 
     expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
+    // The success panel shows the number the server assigned.
+    expect(screen.getByText(profile.student_number)).toBeInTheDocument()
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith(
         `Account created and setup email sent to ${profile.email}.`,
@@ -382,12 +428,172 @@ describe("Student Records workspace", () => {
       address: profile.address,
       enrollment_category: "regular",
       student_type: "transferee",
+      has_existing_student_number: false,
       requirement_type_ids: [1, 2],
     })
     expect(body).not.toHaveProperty("requirements_verified")
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
     expect(body).not.toHaveProperty("entry_year")
+    expect(body).not.toHaveProperty("student_number")
+  })
+
+  it("only lets a Returnee or an Existing Student say the student already has a student number", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Student already has a student number",
+    })
+    expect(checkbox).toBeDisabled()
+    expect(
+      screen.queryByRole("button", { name: "Generate" }),
+    ).not.toBeInTheDocument()
+
+    await chooseStudentType(user, "Freshman")
+    expect(checkbox).toBeDisabled()
+    await chooseStudentType(user, "Transferee")
+    expect(checkbox).toBeDisabled()
+    await chooseStudentType(user, "Returnee")
+    expect(checkbox).toBeEnabled()
+    await chooseStudentType(user, "Existing Student")
+    expect(checkbox).toBeEnabled()
+  })
+
+  it("sends the number the student already has instead of a new one", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await fillAccountBasics(user)
+    await chooseStudentType(user, "Returnee")
+
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Student already has a student number",
+      }),
+    )
+    const field = screen.getByLabelText("Existing student number")
+    expect(field).not.toHaveAttribute("readonly")
+    await user.type(field, "2024-06-00123")
+    await user.click(
+      screen.getByRole("button", { name: "Create account and email setup" }),
+    )
+
+    expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
+    expect(provisioningBody()).toMatchObject({
+      student_type: "returnee",
+      has_existing_student_number: true,
+      student_number: "2024-06-00123",
+    })
+  })
+
+  it("stops an existing student number in the wrong format before calling the API", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await fillAccountBasics(user)
+    await chooseStudentType(user, "Existing Student")
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Student already has a student number",
+      }),
+    )
+    await user.type(
+      screen.getByLabelText("Existing student number"),
+      "2024-6-123",
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Create account and email setup" }),
+    )
+
+    expect(
+      await screen.findByText(
+        "Student number must be in YYYY-MM-NNNNN format (e.g. 2026-08-07107).",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          urlOf(input).endsWith("/api/v1/student-profiles") &&
+          init?.method === "POST",
+      ),
+    ).toBe(false)
+  })
+
+  it("drops a typed existing number when the type changes to one that gets a new number", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await fillAccountBasics(user)
+    await chooseStudentType(user, "Returnee")
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Student already has a student number",
+    })
+    await user.click(checkbox)
+    await user.type(
+      screen.getByLabelText("Existing student number"),
+      "2024-06-00123",
+    )
+
+    await chooseStudentType(user, "Freshman")
+
+    await waitFor(() => expect(checkbox).not.toBeChecked())
+    expect(checkbox).toBeDisabled()
+    expect(screen.getByLabelText("Student number")).toHaveValue("")
+    await user.click(
+      screen.getByRole("button", { name: "Create account and email setup" }),
+    )
+    expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
+    const body = provisioningBody()
+    expect(body).toMatchObject({
+      student_type: "freshman",
+      has_existing_student_number: false,
+    })
+    expect(body).not.toHaveProperty("student_number")
+  })
+
+  it("shows the server's message on the field when the existing number is already in use", async () => {
+    const user = userEvent.setup()
+    const defaultImplementation = fetchMock.getMockImplementation()
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        urlOf(input).endsWith("/api/v1/student-profiles") &&
+        init?.method === "POST"
+      ) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_FAILED",
+                message: "The given data was invalid.",
+                errors: {
+                  student_number: ["This student number is already in use."],
+                },
+                request_id: "test-request",
+              },
+            }),
+            { status: 422 },
+          ),
+        )
+      }
+      return defaultImplementation!(input, init)
+    })
+    renderWorkspace()
+    await fillAccountBasics(user)
+    await chooseStudentType(user, "Returnee")
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Student already has a student number",
+      }),
+    )
+    await user.type(
+      screen.getByLabelText("Existing student number"),
+      "2024-06-00123",
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Create account and email setup" }),
+    )
+
+    expect(
+      await screen.findByText("This student number is already in use."),
+    ).toBeInTheDocument()
   })
 
   it("never offers a program that is switched off, such as BS Criminology", async () => {
@@ -418,7 +624,9 @@ describe("Student Records workspace", () => {
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          urlOf(input).includes("admission-requirement-types?student_type=freshman"),
+          urlOf(input).includes(
+            "admission-requirement-types?student_type=freshman",
+          ),
         ),
       ).toBe(true),
     )
@@ -441,13 +649,17 @@ describe("Student Records workspace", () => {
 
     await user.click(screen.getByLabelText("Enrollment category"))
     expect(
-      (await screen.findAllByRole("option")).map((option) => option.textContent),
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
     ).toEqual(["Regular", "Irregular"])
     await user.click(screen.getByRole("option", { name: "Irregular" }))
 
     await user.click(screen.getByLabelText("Student type"))
     expect(
-      (await screen.findAllByRole("option")).map((option) => option.textContent),
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
     ).toEqual(["Freshman", "Transferee", "Returnee", "Existing Student"])
     await user.click(screen.getByRole("option", { name: "Existing Student" }))
 
@@ -488,9 +700,7 @@ describe("Student Records workspace", () => {
     // The student number/email line must be allowed to wrap on a narrow
     // phone screen instead of forcing horizontal scroll (Stakeholder Doc 17).
     expect(
-      within(table).getByText(
-        `${profile.student_number} · ${profile.email}`,
-      ),
+      within(table).getByText(`${profile.student_number} · ${profile.email}`),
     ).toHaveClass("whitespace-normal")
     // The phone card list must carry the same student-number/email text too
     // — it is its own, separate rendering, not just a CSS-hidden duplicate.

@@ -18,6 +18,7 @@ use App\Models\StudentAdmissionRequirement;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use RuntimeException;
@@ -82,6 +83,7 @@ final class StudentProfilesEndpointTest extends TestCase
 
     public function test_admission_staff_can_provision_a_student(): void
     {
+        $this->travelTo(Carbon::parse('2027-08-15 10:00:00', 'Asia/Manila'));
         [$program, $curriculum] = $this->makeProgramAndCurriculum();
         $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.provision@grc.test');
@@ -92,7 +94,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'new.student@grc.test',
             'address' => '123 Test Street, Caloocan City',
-            'student_number' => '2027-08-10001',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
@@ -101,7 +102,7 @@ final class StudentProfilesEndpointTest extends TestCase
         ]);
 
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
-        $response->assertJsonPath('data.student_number', '2027-08-10001');
+        $response->assertJsonPath('data.student_number', '2027-08-00001');
         $response->assertJsonPath('data.address', '123 Test Street, Caloocan City');
         $response->assertJsonPath('data.entry_year', 2027);
         $response->assertJsonPath('data.enrollment_category', 'regular');
@@ -119,7 +120,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'account_setup_completed_at' => null,
         ]);
         $this->assertDatabaseHas('student_profiles', [
-            'student_number' => '2027-08-10001',
+            'student_number' => '2027-08-00001',
             'address' => '123 Test Street, Caloocan City',
             'requirements_verified_by' => User::query()->where('email', 'admission.provision@grc.test')->value('id'),
         ]);
@@ -160,7 +161,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => $email,
             'address' => '123 Test Street, Caloocan City',
-            'student_number' => '2027-08-'.str_pad((string) random_int(10000, 99999), 5, '0', STR_PAD_LEFT),
             'program_id' => $program->id,
             'year_level' => $yearLevel,
             'requirement_type_ids' => $requirementTypeIds,
@@ -293,7 +293,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'suffix' => 'iii',
             'email' => 'casing.student@grc.test',
             'address' => '1 Casing Street, Caloocan City',
-            'student_number' => '2027-08-10009',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
@@ -327,7 +326,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'Incomplete',
             'last_name' => 'Applicant',
             'email' => 'incomplete.applicant@grc.test',
-            'student_number' => '2027-08-10009',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => false,
@@ -352,7 +350,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'email' => 'unsafe.contract@grc.test',
             'address' => '789 Contract Road, Caloocan City',
             'password' => 'client-chosen-password',
-            'student_number' => '2027-08-10011',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
             'entry_year' => 2027,
@@ -386,7 +383,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'pending.student@grc.test',
             'address' => '456 Setup Avenue, Caloocan City',
-            'student_number' => '2027-08-10010',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
@@ -452,7 +448,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'expiring.student@grc.test',
             'address' => '60 Minute Avenue, Caloocan City',
-            'student_number' => '2027-08-10012',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
@@ -500,7 +495,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'mail.failure.student@grc.test',
             'address' => 'Retry Street, Caloocan City',
-            'student_number' => '2027-08-10013',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
@@ -520,25 +514,20 @@ final class StudentProfilesEndpointTest extends TestCase
         self::assertSame(1, AuditLog::query()->where('action', AuditAction::STUDENT_ACCOUNT_SETUP_INVITATION_FAILED)->count());
     }
 
-    public function test_student_number_must_match_the_yyyy_mm_nnnnn_format(): void
+    public function test_an_existing_student_number_must_match_the_yyyy_mm_nnnnn_format(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.badformat@grc.test');
 
         $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
-            'first_name' => 'New',
-            'last_name' => 'Student',
-            'email' => 'badformat.student@grc.test',
-            'address' => '100 Invalid Format Road, Caloocan City',
+            ...$this->provisionPayload($program, 'badformat.student@grc.test', [], 1, 'returnee'),
+            'has_existing_student_number' => true,
             'student_number' => 'STU-2027-0001',
-            'program_id' => $program->id,
-            'year_level' => 1,
-            'requirements_verified' => true,
-            'enrollment_category' => 'regular',
-            'student_type' => 'freshman',
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertArrayHasKey('student_number', $response->json('error.errors'));
         $this->assertDatabaseMissing('users', ['email' => 'badformat.student@grc.test']);
     }
 
@@ -554,7 +543,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'scholar.student@grc.test',
             'address' => '101 Scholar Avenue, Caloocan City',
-            'student_number' => '2027-08-10002',
             'program_id' => $program->id,
             'year_level' => 1,
             'financial_status' => 'scholar',
@@ -571,7 +559,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'unset.student@grc.test',
             'address' => '102 Default Avenue, Caloocan City',
-            'student_number' => '2027-08-10003',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
@@ -617,7 +604,6 @@ final class StudentProfilesEndpointTest extends TestCase
                 'last_name' => "Type {$index}",
                 'email' => $email,
                 'address' => "{$index} Choice Road, Caloocan City",
-                'student_number' => "2027-08-210{$index}0",
                 'program_id' => $program->id,
                 'year_level' => 1,
                 'enrollment_category' => $category,
@@ -662,6 +648,135 @@ final class StudentProfilesEndpointTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'required.choice@grc.test']);
     }
 
+    public function test_the_server_assigns_the_next_student_number_in_the_manila_year_and_month(): void
+    {
+        $this->travelTo(Carbon::parse('2027-08-15 10:00:00', 'Asia/Manila'));
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.sequence@grc.test');
+        Mail::fake();
+
+        $first = $this->withToken($token)->postJson(
+            '/api/v1/student-profiles',
+            $this->provisionPayload($program, 'sequence.one@grc.test', []),
+        );
+        $second = $this->withToken($token)->postJson(
+            '/api/v1/student-profiles',
+            $this->provisionPayload($program, 'sequence.two@grc.test', []),
+        );
+
+        $first->assertCreated()->assertJsonPath('data.student_number', '2027-08-00001');
+        $second->assertCreated()->assertJsonPath('data.student_number', '2027-08-00002');
+        $this->assertDatabaseHas('student_number_sequences', ['year' => 2027, 'last_value' => 2]);
+    }
+
+    public function test_a_student_number_sent_without_the_existing_number_option_is_refused(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.oldclient@grc.test');
+
+        // An older frontend still sends the random number it made itself.
+        $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            ...$this->provisionPayload($program, 'oldclient.student@grc.test', []),
+            'student_number' => '2027-08-12345',
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertArrayHasKey('student_number', $response->json('error.errors'));
+        $this->assertDatabaseMissing('users', ['email' => 'oldclient.student@grc.test']);
+        $this->assertDatabaseCount('student_number_sequences', 0);
+    }
+
+    public function test_a_returnee_or_an_existing_student_can_keep_the_number_they_already_have(): void
+    {
+        $this->travelTo(Carbon::parse('2027-08-15 10:00:00', 'Asia/Manila'));
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.existingnumber@grc.test');
+        Mail::fake();
+
+        foreach ([['returnee', '2026-06-00123'], ['existing_student', '2026-06-00124']] as $index => [$type, $number]) {
+            $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+                ...$this->provisionPayload($program, "existing-number-{$index}@grc.test", [], 1, $type),
+                'has_existing_student_number' => true,
+                'student_number' => $number,
+            ]);
+
+            $response->assertCreated()->assertJsonPath('data.student_number', $number);
+        }
+
+        // The running counter was never asked for a number.
+        $this->assertDatabaseCount('student_number_sequences', 0);
+        $sources = AuditLog::query()
+            ->where('action', AuditAction::STUDENT_PROFILE_PROVISIONED)
+            ->get()
+            ->map(fn (AuditLog $audit): mixed => $audit->after_values['student_number_source'])
+            ->all();
+        self::assertSame(['existing', 'existing'], $sources);
+    }
+
+    public function test_an_existing_student_number_is_refused_for_a_freshman_or_a_transferee(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.existingrefused@grc.test');
+
+        foreach (['freshman', 'transferee'] as $type) {
+            $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+                ...$this->provisionPayload($program, "refused-{$type}@grc.test", [], 1, $type),
+                'has_existing_student_number' => true,
+                'student_number' => '2026-06-00200',
+            ]);
+
+            $response->assertUnprocessable()->assertJsonPath(
+                'error.errors.has_existing_student_number.0',
+                'Only a Returnee or an Existing Student can already have a student number.',
+            );
+            $this->assertDatabaseMissing('users', ['email' => "refused-{$type}@grc.test"]);
+        }
+    }
+
+    public function test_an_existing_student_number_that_is_already_in_use_is_refused(): void
+    {
+        [$program, $curriculum] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $owner = User::create(['name' => 'Owner', 'email' => 'owner.number@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active]);
+        StudentProfile::create([
+            'user_id' => $owner->id, 'student_number' => '2026-06-00300', 'program_id' => $program->id,
+            'curriculum_id' => $curriculum->id, 'year_level' => 1,
+            'admission_status' => 'admitted', 'academic_standing' => 'good',
+        ]);
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.existingduplicate@grc.test');
+
+        $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            ...$this->provisionPayload($program, 'duplicate.number@grc.test', [], 1, 'returnee'),
+            'has_existing_student_number' => true,
+            'student_number' => '2026-06-00300',
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath(
+            'error.errors.student_number.0',
+            'This student number is already in use.',
+        );
+        $this->assertDatabaseMissing('users', ['email' => 'duplicate.number@grc.test']);
+    }
+
+    public function test_the_existing_number_option_needs_the_number(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.existingmissing@grc.test');
+
+        $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            ...$this->provisionPayload($program, 'missing.number@grc.test', [], 1, 'existing_student'),
+            'has_existing_student_number' => true,
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('student_number', $response->json('error.errors'));
+    }
+
     public function test_a_non_admission_staff_role_cannot_provision_a_student(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
@@ -672,7 +787,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'blocked.student@grc.test',
             'address' => '103 Blocked Avenue, Caloocan City',
-            'student_number' => '2027-08-10004',
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
@@ -700,7 +814,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'mismatch.student@grc.test',
             'address' => '104 Missing Curriculum Road, Caloocan City',
-            'student_number' => '2035-08-10005',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
@@ -739,7 +852,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'automatic.curriculum@grc.test',
             'address' => '105 Automatic Curriculum Road, Caloocan City',
-            'student_number' => '2023-08-10007',
             'program_id' => $program->id,
             'year_level' => 4,
             'requirements_verified' => true,
@@ -764,7 +876,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Term',
             'email' => 'no.term.student@grc.test',
             'address' => '110 No Term Road, Caloocan City',
-            'student_number' => '2027-08-10016',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
@@ -787,7 +898,6 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'Student',
             'email' => 'existing@grc.test',
             'address' => '106 Duplicate Road, Caloocan City',
-            'student_number' => '2027-08-10006',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,

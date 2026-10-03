@@ -30,4 +30,15 @@ enum StudentType: string
             self::ExistingStudent => 'Existing Student',
         };
     }
+
+    /**
+     * Whether Admission may enter a student number the student already has
+     * instead of getting a new one (ADR 0042). Only a Returnee and an Existing
+     * Student have records at the school; a Freshman has no number yet and a
+     * Transferee's number belongs to the school they came from.
+     */
+    public function canHaveExistingStudentNumber(): bool
+    {
+        return $this === self::Returnee || $this === self::ExistingStudent;
+    }
 }

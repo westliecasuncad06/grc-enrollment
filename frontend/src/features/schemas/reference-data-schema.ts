@@ -31,7 +31,7 @@ export const academicTermSchema = z
     add_drop_deadline_at: optionalUtcDateTimeSchema,
     // Set once per term by the Registrar Head; printed on every COR of the term.
     enrollment_platform: z
-      .enum(["online", "face_to_face"])
+      .enum(["online", "face_to_face", "both"])
       .nullable()
       .optional(),
     enrollment_platform_label: z.string().nullable().optional(),

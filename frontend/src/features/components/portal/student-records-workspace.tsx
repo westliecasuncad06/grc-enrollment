@@ -10,7 +10,10 @@ import { z } from "zod"
 import { AdmissionIntakeRequirements } from "@/features/components/portal/admission-intake-requirements"
 import { AdmissionRequirementsChecklist } from "@/features/components/portal/admission-requirements-checklist"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
-import { DataTable, type DataTableColumn } from "@/features/components/portal/data-table"
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/features/components/portal/data-table"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   Alert,
@@ -77,9 +80,9 @@ import { useProgramsQuery } from "@/features/hooks/use-reference-data"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { focusFirstInvalidField } from "@/features/lib/focus-first-invalid"
 import { formatYearLevel } from "@/features/lib/format-year-level"
-import { generateStudentNumber } from "@/features/lib/student-number"
 import {
   provisionStudentSchema,
+  studentTypeCanHaveExistingNumber,
   updateStudentProfileSchema,
   type ProfileChangeRequest,
   type StudentProfile,
@@ -106,8 +109,8 @@ function CreateAccountPanel() {
   const mutation = useProvisionStudentMutation()
   const resend = useResendAccountSetupInvitationMutation()
   const [created, setCreated] = useState<StudentProfile | null>(null)
-  const [initialStudentNumber] = useState(generateStudentNumber)
   const {
+    clearErrors,
     control,
     formState: { errors },
     handleSubmit,
@@ -125,7 +128,7 @@ function CreateAccountPanel() {
       suffix: "",
       email: "",
       address: "",
-      student_number: initialStudentNumber,
+      has_existing_student_number: false,
       program_id: 0,
       year_level: 1,
       financial_status: null,
@@ -135,6 +138,8 @@ function CreateAccountPanel() {
   const formRef = useRef<HTMLFormElement>(null)
   const studentType = watch("student_type")
   const checkedIds = watch("requirement_type_ids")
+  const hasExistingNumber = watch("has_existing_student_number")
+  const canHaveExistingNumber = studentTypeCanHaveExistingNumber(studentType)
   const requirementsQuery = useAdmissionRequirementSelectionQuery(
     studentType ?? null,
   )
@@ -156,13 +161,21 @@ function CreateAccountPanel() {
     }
   }, [applicableIds, checkedIds, requirementsQuery.isSuccess, setValue])
 
+  // A Freshman or a Transferee gets a new number: drop the option, and any number typed for it,
+  // as soon as the type changes to one of those.
+  useEffect(() => {
+    if (hasExistingNumber && !canHaveExistingNumber) {
+      setValue("has_existing_student_number", false)
+      setValue("student_number", undefined)
+      clearErrors(["student_number", "has_existing_student_number"])
+    }
+  }, [canHaveExistingNumber, clearErrors, hasExistingNumber, setValue])
+
   const submit = async (values: CreateValues) => {
     try {
       const profile = await mutation.mutateAsync(values)
       setCreated(profile)
-      toast.success(
-        `Account created and setup email sent to ${profile.email}.`,
-      )
+      toast.success(`Account created and setup email sent to ${profile.email}.`)
       reset({
         ...values,
         first_name: "",
@@ -171,7 +184,8 @@ function CreateAccountPanel() {
         suffix: "",
         email: "",
         address: "",
-        student_number: generateStudentNumber(),
+        has_existing_student_number: false,
+        student_number: undefined,
         // Each account gets a deliberate choice: the category and type are not carried over.
         enrollment_category: undefined,
         student_type: undefined,
@@ -272,30 +286,66 @@ function CreateAccountPanel() {
                 </Field>
                 <Field data-invalid={Boolean(errors.student_number)}>
                   <FieldLabel htmlFor="record-number">
-                    Student number
+                    {hasExistingNumber
+                      ? "Existing student number"
+                      : "Student number"}
                   </FieldLabel>
-                  <div className="flex gap-2">
+                  {hasExistingNumber ? (
+                    <Input
+                      id="record-number"
+                      autoComplete="off"
+                      placeholder="YYYY-MM-NNNNN"
+                      aria-invalid={Boolean(errors.student_number)}
+                      {...register("student_number")}
+                    />
+                  ) : (
                     <Input
                       id="record-number"
                       readOnly
-                      {...register("student_number")}
+                      value=""
+                      placeholder="Assigned automatically"
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        setValue("student_number", generateStudentNumber(), {
-                          shouldValidate: true,
-                        })
-                      }
-                    >
-                      Generate
-                    </Button>
-                  </div>
+                  )}
                   <FieldDescription>
-                    Generated automatically — it can&apos;t be typed in.
+                    {hasExistingNumber
+                      ? "Enter it exactly as it appears on the student's records (YYYY-MM-NNNNN)."
+                      : "Assigned in order (Year-Month-Sequence) when the account is created."}
                   </FieldDescription>
                   <FieldError>{errors.student_number?.message}</FieldError>
+                  <div className="flex items-start gap-2 pt-1">
+                    <Controller
+                      control={control}
+                      name="has_existing_student_number"
+                      render={({ field }) => (
+                        <Checkbox
+                          id="record-has-number"
+                          checked={field.value}
+                          disabled={!canHaveExistingNumber}
+                          onCheckedChange={(value) => {
+                            const checked = value === true
+                            field.onChange(checked)
+                            if (!checked) {
+                              setValue("student_number", undefined)
+                              clearErrors("student_number")
+                            }
+                          }}
+                        />
+                      )}
+                    />
+                    <FieldLabel
+                      htmlFor="record-has-number"
+                      className="font-normal"
+                    >
+                      Student already has a student number
+                    </FieldLabel>
+                  </div>
+                  <FieldDescription>
+                    Only for a Returnee or an Existing Student. Everyone else
+                    gets a new number.
+                  </FieldDescription>
+                  <FieldError>
+                    {errors.has_existing_student_number?.message}
+                  </FieldError>
                 </Field>
                 <Field data-invalid={Boolean(errors.program_id)}>
                   <FieldLabel htmlFor="record-program">Program</FieldLabel>
@@ -440,7 +490,9 @@ function CreateAccountPanel() {
                     }
                     disabled={mutation.isPending}
                   />
-                  <FieldError>{errors.requirement_type_ids?.message}</FieldError>
+                  <FieldError>
+                    {errors.requirement_type_ids?.message}
+                  </FieldError>
                 </Field>
                 {mutation.isError && (
                   <Alert className="md:col-span-2" variant="destructive">
@@ -746,7 +798,9 @@ function StudentRecordDialog({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="freshman">Freshman</SelectItem>
-                            <SelectItem value="transferee">Transferee</SelectItem>
+                            <SelectItem value="transferee">
+                              Transferee
+                            </SelectItem>
                             <SelectItem value="returnee">Returnee</SelectItem>
                             <SelectItem value="existing_student">
                               Existing Student
@@ -787,10 +841,9 @@ function StudentRecordDialog({
                 <Alert className="md:col-span-2">
                   <AlertDescription>
                     Student number, program, year level, and admission status
-                    are locked because this student already has an
-                    enrollment. Entry year, enrollment category, and student
-                    type are always set automatically and are never directly
-                    editable.
+                    are locked because this student already has an enrollment.
+                    Entry year, enrollment category, and student type are always
+                    set automatically and are never directly editable.
                   </AlertDescription>
                 </Alert>
               )}

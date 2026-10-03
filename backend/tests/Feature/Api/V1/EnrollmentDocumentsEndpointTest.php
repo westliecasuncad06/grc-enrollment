@@ -646,6 +646,22 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         $this->assertSame('Face-to-Face', $snapshot['student']['platform']);
     }
 
+    public function test_a_cor_prints_both_when_the_registrar_set_both_platforms(): void
+    {
+        $term = $this->makeTerm();
+        $term->update(['enrollment_platform' => 'both']);
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.bothplatform@grc.test', '2026-0304');
+        $document = $this->makeDocument($student, $term);
+
+        $snapshot = $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->json('data.snapshot');
+
+        $this->assertSame('Both (Face-to-Face and Online)', $snapshot['student']['platform']);
+    }
+
     public function test_a_cor_still_says_not_provided_while_no_platform_is_set(): void
     {
         $term = $this->makeTerm();

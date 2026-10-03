@@ -15,6 +15,7 @@ use App\Models\Curriculum;
 use App\Models\Program;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 use Tests\TestCase;
@@ -27,6 +28,7 @@ final class ProvisionStudentAuditTest extends TestCase
 
     public function test_provisioning_records_only_the_exact_safe_student_profile_audit(): void
     {
+        $this->travelTo(Carbon::parse('2027-08-15 10:00:00', 'Asia/Manila'));
         [$program, $curriculum] = $this->makeProgramAndCurriculum();
         $this->setCurrentTerm('2027-2028');
         [$actor, $token] = $this->tokenFor(
@@ -42,7 +44,6 @@ final class ProvisionStudentAuditTest extends TestCase
                 'last_name' => 'Student Name',
                 'email' => 'sensitive.student@grc.test',
                 'address' => '1 Sensitive Street, Caloocan City',
-                'student_number' => '2027-08-30001',
                 'program_id' => $program->id,
                 'year_level' => 2,
                 'requirements_verified' => true,
@@ -76,6 +77,7 @@ final class ProvisionStudentAuditTest extends TestCase
             'admission_status' => 'admitted',
             'academic_standing' => 'good',
             'financial_status' => null,
+            'student_number_source' => 'assigned',
         ], $audit->after_values);
         self::assertNull($audit->reason);
         self::assertSame('student-provision-request', $audit->request_id);
@@ -86,7 +88,8 @@ final class ProvisionStudentAuditTest extends TestCase
         self::assertStringNotContainsString('Sensitive Student Name', $serializedAudit);
         self::assertStringNotContainsString('sensitive.student@grc.test', $serializedAudit);
         self::assertStringNotContainsString('temporary-secret-password', $serializedAudit);
-        self::assertStringNotContainsString('2027-08-30001', $serializedAudit);
+        self::assertSame('2027-08-00001', $response->json('data.student_number'));
+        self::assertStringNotContainsString('2027-08-00001', $serializedAudit);
         self::assertStringNotContainsString('"password"', strtolower($serializedAudit));
         self::assertStringNotContainsString('password_confirmation', strtolower($serializedAudit));
     }
@@ -154,7 +157,6 @@ final class ProvisionStudentAuditTest extends TestCase
                     'last_name' => 'Student',
                     'email' => 'rollback.student@grc.test',
                     'address' => '2 Rollback Street, Caloocan City',
-                    'student_number' => '2027-08-30002',
                     'program_id' => $program->id,
                     'year_level' => 3,
                     'requirements_verified' => true,
@@ -171,7 +173,9 @@ final class ProvisionStudentAuditTest extends TestCase
         self::assertNotNull($caughtException, 'The injected audit failure must escape the transaction.');
         self::assertSame('Injected student audit write failure.', $caughtException->getMessage());
         $this->assertDatabaseMissing('users', ['email' => 'rollback.student@grc.test']);
-        $this->assertDatabaseMissing('student_profiles', ['student_number' => '2027-08-30002']);
+        $this->assertDatabaseCount('student_profiles', 0);
+        // The number taken inside the failed transaction is given back.
+        $this->assertDatabaseCount('student_number_sequences', 0);
         self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
