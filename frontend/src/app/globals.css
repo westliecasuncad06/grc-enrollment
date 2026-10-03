@@ -4018,6 +4018,39 @@
   width: 100%;
 }
 
+.queue-kiosk-autoclear {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: var(--radius);
+}
+
+.queue-kiosk-autoclear p {
+  margin: 0;
+}
+
+.queue-kiosk-autoclear__bar {
+  display: block;
+  width: 100%;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: var(--primary);
+  transform-origin: left;
+  animation: queue-kiosk-autoclear var(--autoclear-seconds, 5s) linear forwards;
+}
+
+@keyframes queue-kiosk-autoclear {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 .queue-kiosk-restoring {
   width: fit-content;
   margin: auto;

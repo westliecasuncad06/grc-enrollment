@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
 import { LogOutIcon, TicketCheckIcon } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -29,16 +29,68 @@ import { isApiClientError } from "@/features/services/api-client"
 
 type ActiveState = Extract<QueueKioskSessionState, { status: "student-active" }>
 
+/**
+ * Once the Student's queue number is on screen the kiosk counts down and then finishes the session
+ * by itself, exactly as pressing Done does, so a Student who walks away without pressing it never
+ * leaves their name and ticket on a shared device.
+ */
+export const QUEUE_KIOSK_AUTO_DONE_SECONDS = 5
+
+/**
+ * "This screen clears itself in N seconds", then calls `onElapsed`. Mounted only while a ticket is
+ * shown, so its count starts afresh each time and stops when the ticket goes away.
+ */
+function QueueKioskAutoClear({
+  seconds,
+  onElapsed,
+}: {
+  seconds: number
+  onElapsed: () => void | Promise<void>
+}) {
+  const [secondsLeft, setSecondsLeft] = useState(seconds)
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setSecondsLeft((current) => current - 1),
+      1000,
+    )
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (secondsLeft <= 0) void onElapsed()
+  }, [secondsLeft, onElapsed])
+
+  if (secondsLeft <= 0) return null
+
+  return (
+    <div
+      className="queue-kiosk-autoclear"
+      role="timer"
+      aria-live="off"
+      style={{ "--autoclear-seconds": `${seconds}s` } as CSSProperties}
+    >
+      <p>
+        This screen clears itself in <strong>{secondsLeft}</strong>{" "}
+        {secondsLeft === 1 ? "second" : "seconds"}. Press Done to finish now.
+      </p>
+      <span className="queue-kiosk-autoclear__bar" aria-hidden="true" />
+    </div>
+  )
+}
+
 export function QueueKioskStudentSession({
   state,
   finishStudent,
   signOutDevice,
   requirePassword = true,
+  autoDoneSeconds = QUEUE_KIOSK_AUTO_DONE_SECONDS,
 }: {
   state: ActiveState
   finishStudent: () => void
   signOutDevice: () => void
   requirePassword?: boolean
+  autoDoneSeconds?: number
 }) {
   const queryClient = useQueryClient()
   const generation = useRef(0)
@@ -90,11 +142,18 @@ export function QueueKioskStudentSession({
     void cancellation
   }, [clearQueue, finishStudent, queueQuery.error, queueQuery.isError])
 
-  const done = async () => {
+  const finished = useRef(false)
+  const done = useCallback(async () => {
+    if (finished.current) return
+    finished.current = true
     const cancellation = clearQueue()
     finishStudent()
     await cancellation
-  }
+  }, [clearQueue, finishStudent])
+
+  // The countdown runs only while a ticket is shown (just claimed, or one the Student already had).
+  const hasTicket = Boolean(queueQuery.data?.ticket)
+
   const signOut = async () => {
     const cancellation = clearQueue()
     signOutDevice()
@@ -228,6 +287,9 @@ export function QueueKioskStudentSession({
               <StudentQueueLivePanel queue={queueQuery.data} mode="kiosk" />
             )}
           </>
+        )}
+        {hasTicket && (
+          <QueueKioskAutoClear seconds={autoDoneSeconds} onElapsed={done} />
         )}
         <Button
           className="queue-kiosk-done"

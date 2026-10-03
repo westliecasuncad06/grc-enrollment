@@ -13,6 +13,7 @@ import { axe } from "vitest-axe"
 
 import { kioskTokenStorageKey } from "@/features/kiosk/kiosk-token"
 import { QueueKioskPage } from "@/features/components/pages/queue-kiosk-page"
+import { QUEUE_KIOSK_AUTO_DONE_SECONDS } from "@/features/components/kiosk/queue-kiosk-student-session"
 
 const kioskUser = {
   type: "user" as const,
@@ -86,7 +87,7 @@ function renderPage() {
   })
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <QueueKioskPage requirePassword={false} welcomeMs={0} />
+      <QueueKioskPage requirePassword={false} welcomeMs={0} autoDoneSeconds={3600} />
     </QueryClientProvider>,
   )
   return { ...result, queryClient }
@@ -241,7 +242,7 @@ describe("QueueKioskPage", () => {
     })
     render(
       <QueryClientProvider client={queryClient}>
-        <QueueKioskPage welcomeMs={0} />
+        <QueueKioskPage welcomeMs={0} autoDoneSeconds={3600} />
       </QueryClientProvider>,
     )
     await screen.findByRole("heading", { name: "Queue Kiosk sign-in" })
@@ -365,6 +366,159 @@ describe("QueueKioskPage", () => {
     expect(fetchMock.mock.calls[3]?.[1]?.headers).toMatchObject({
       Authorization: "Bearer student-token",
       "X-Queue-Kiosk-Token": "kiosk-token",
+    })
+  })
+
+  describe("clearing the screen by itself once the queue number is shown", () => {
+    const ticket = {
+      ticket_number: "Q001",
+      status: "waiting",
+      status_label: "Waiting",
+      priority: "regular",
+      priority_label: "Regular",
+      position: 0,
+    }
+
+    function renderWithCountdown(seconds?: number) {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      return render(
+        <QueryClientProvider client={queryClient}>
+          <QueueKioskPage
+            requirePassword={false}
+            welcomeMs={0}
+            autoDoneSeconds={seconds}
+          />
+        </QueryClientProvider>,
+      )
+    }
+
+    it("shows a 5 second countdown by default, with Done still available", async () => {
+      expect(QUEUE_KIOSK_AUTO_DONE_SECONDS).toBe(5)
+      fetchMock
+        .mockResolvedValueOnce(auth("kiosk-token", kioskUser))
+        .mockResolvedValueOnce(auth("student-token", studentUser))
+        .mockResolvedValueOnce(queue("pending_payment", { ticket }))
+        .mockResolvedValue(new Response(null, { status: 204 }))
+      const user = userEvent.setup()
+      renderWithCountdown()
+      await screen.findByRole("heading", { name: "Queue Kiosk sign-in" })
+      await signInDeviceAndStudent(user)
+      expect(await screen.findByText("Q001")).toBeInTheDocument()
+
+      expect(screen.getByRole("timer")).toHaveTextContent(
+        "This screen clears itself in 5 seconds. Press Done to finish now.",
+      )
+      expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument()
+    })
+
+    it("counts down, then returns to the Student sign-in and signs the Student out by itself", async () => {
+      fetchMock
+        .mockResolvedValueOnce(auth("kiosk-token", kioskUser))
+        .mockResolvedValueOnce(auth("student-token", studentUser))
+        .mockResolvedValueOnce(queue("pending_payment", { ticket }))
+        .mockResolvedValue(new Response(null, { status: 204 }))
+      const user = userEvent.setup()
+      renderWithCountdown(2)
+      await screen.findByRole("heading", { name: "Queue Kiosk sign-in" })
+      await signInDeviceAndStudent(user)
+      expect(await screen.findByText("Q001")).toBeInTheDocument()
+      expect(screen.getByRole("timer")).toHaveTextContent("in 2 seconds")
+
+      // One second later it is down to 1 and the Student's ticket is still there.
+      await waitFor(
+        () =>
+          expect(screen.getByRole("timer")).toHaveTextContent("in 1 second."),
+        { timeout: 2500 },
+      )
+      expect(screen.getByText("Q001")).toBeInTheDocument()
+
+      // Then, with nobody pressing Done, the screen is cleared.
+      expect(
+        await screen.findByRole(
+          "heading",
+          { name: "Student sign-in" },
+          { timeout: 2500 },
+        ),
+      ).toBeInTheDocument()
+      expect(screen.queryByText("Q001")).not.toBeInTheDocument()
+      expect(screen.queryByText(/Student One/)).not.toBeInTheDocument()
+      expect(screen.queryByRole("timer")).not.toBeInTheDocument()
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).includes("logout") &&
+            (init?.headers as Record<string, string> | undefined)
+              ?.Authorization === "Bearer student-token",
+        ),
+      ).toBe(true)
+    })
+
+    it("starts the countdown only after a queue number has been claimed", async () => {
+      fetchMock
+        .mockResolvedValueOnce(auth("kiosk-token", kioskUser))
+        .mockResolvedValueOnce(auth("student-token", studentUser))
+        .mockResolvedValueOnce(queue("pending_payment", { canClaim: true }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "queue_ticket",
+                id: 1,
+                enrollment_id: 1,
+                student_number: "S1",
+                ticket_number: "Q001",
+                queue_date: "2026-08-23",
+                status: "waiting",
+                status_label: "Waiting",
+                priority: "regular",
+                priority_label: "Regular",
+                created_at: "2026-08-23T00:00:00Z",
+                served_at: null,
+                requeued_at: null,
+              },
+            }),
+            { status: 201 },
+          ),
+        )
+        .mockResolvedValueOnce(queue("pending_payment", { ticket }))
+        .mockResolvedValue(new Response(null, { status: 204 }))
+      const user = userEvent.setup()
+      renderWithCountdown(60)
+      await screen.findByRole("heading", { name: "Queue Kiosk sign-in" })
+      await signInDeviceAndStudent(user)
+      const claim = await screen.findByRole("button", {
+        name: "Claim queue number",
+      })
+
+      // Before the number is claimed there is nothing on a timer.
+      expect(screen.queryByRole("timer")).not.toBeInTheDocument()
+
+      await user.click(claim)
+      expect(await screen.findByText("Q001")).toBeInTheDocument()
+      expect(screen.getByRole("timer")).toHaveTextContent("60 seconds")
+    })
+
+    it("lets Done end it straight away instead of waiting for the countdown", async () => {
+      fetchMock
+        .mockResolvedValueOnce(auth("kiosk-token", kioskUser))
+        .mockResolvedValueOnce(auth("student-token", studentUser))
+        .mockResolvedValueOnce(queue("pending_payment", { ticket }))
+        .mockResolvedValue(new Response(null, { status: 204 }))
+      const user = userEvent.setup()
+      renderWithCountdown(60)
+      await screen.findByRole("heading", { name: "Queue Kiosk sign-in" })
+      await signInDeviceAndStudent(user)
+      await screen.findByText("Q001")
+      expect(screen.getByRole("timer")).toHaveTextContent("60 seconds")
+
+      await user.click(screen.getByRole("button", { name: "Done" }))
+
+      expect(
+        await screen.findByRole("heading", { name: "Student sign-in" }),
+      ).toBeInTheDocument()
+      expect(screen.queryByRole("timer")).not.toBeInTheDocument()
     })
   })
 

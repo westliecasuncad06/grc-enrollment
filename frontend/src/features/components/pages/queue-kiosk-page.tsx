@@ -20,8 +20,11 @@ import { useQueueKioskSession } from "@/features/hooks/use-queue-kiosk-session"
 export function QueueKioskPage({
   requirePassword = true,
   welcomeMs,
+  autoDoneSeconds,
 }: {
   requirePassword?: boolean
+  /** Seconds a Student's queue number stays up before the kiosk clears it by itself (default in the session). */
+  autoDoneSeconds?: number
   /** How long the Welcome animation plays before the device sign-in opens (default in `QueueKioskWelcome`). */
   welcomeMs?: number
 } = {}) {
@@ -123,6 +126,7 @@ export function QueueKioskPage({
       finishStudent={finishStudent}
       signOutDevice={signOutDevice}
       requirePassword={requirePassword}
+      autoDoneSeconds={autoDoneSeconds}
     />
   )
 }
