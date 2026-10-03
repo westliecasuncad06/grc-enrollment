@@ -1,6 +1,26 @@
 # GRC Enrollment System — Development Progress
 
-## 2026-10-03 (night) — Freshman is back in the Student type dropdown (DONE; committed and pushed to publish)
+## 2026-10-03 (night) — `system-for-defense` branch pushed as a frozen snapshot (DONE; no code change)
+
+- **Owner request:** keep the current system as-is on GitHub because revisions are coming for the defense, and find out what `feat/ci-quality-gates` is for.
+- **Done:** created `system-for-defense` (git does not allow spaces in a branch name) at `5402431`, identical to `origin/main` at that moment, and pushed it to `origin` with upstream tracking. No new commit was made, so the working tree stayed on `main` with its uncommitted `PROGRESS.md` and the untracked GradingSheet xlsx untouched. The xlsx must still never be committed.
+- **PROGRESS.md follow-up:** the pending entry below named a real student's email address, which AGENTS.md forbids committing, so it was left out of the first push. At the owner's request all 4 occurrences of that address in this file were replaced with `[email redacted]`, and PROGRESS.md was then committed onto `system-for-defense` so the snapshot carries the tracker. The address still exists in older git history; only the working file was cleaned.
+- **`feat/ci-quality-gates` deleted from GitHub at the owner's request.** Nothing was lost: its only commit `21c8b7f` is an ancestor of `main`.
+- **`feat/ci-quality-gates`:** its only commit is `21c8b7f` (2026-07-28), "add CI quality gates via GitHub Actions" (`.github/workflows/ci.yml` with backend, frontend, ml-service and docs jobs, plus ADR 0012). It has 0 commits that `main` lacks and is an ancestor of `main` (358 commits behind), and `ci.yml` is still on `main`. It is fully merged and safe to delete on GitHub if the owner wants a tidy list; it was left alone.
+- **Side finding, not touched:** the local repo has many broken `desktop.ini` refs (under `refs/codex`, `refs/heads`, `refs/tags` and others), which make `git fetch --prune` fail with "bad object refs/codex/desktop.ini" and spam warnings on every git command. Pushing is unaffected.
+
+## 2026-10-03 (night, 15:00 local) — Presentation database re-applied to Hostinger a fourth time (DONE; no code change)
+
+- **Owner request:** the same database spec pasted again, right after the Freshman deploy.
+- **Why it was needed:** production had drifted again. Compared with the local presentation database before restoring: term 6 (2025-2026 · 2nd) had been **archived** and the current slot pointed at a new term (id 38, the next semester), +1 academic term, +405 sections, +4 queue tickets and +1 queue cycle, +1 student account (`[email redacted]`, Existing Student, created 14:45) with +1 enrollment/assessment/payment/COR, +4 grades, +405 faculty recommendations, +110 demand forecasts, +2 schedule runs, and 407 extra audit rows. That is the "ahead of 2025-2026" data the spec says to delete, so the restore removed it.
+- **Done:** VPS backup first (`/root/pre-reset4-20261003-0701.sql.gz`, complete). Local exported fresh (7.0 MB gz) and restored into the Dokploy MySQL container with no errors. Deleted the dump's 195 session tokens and its 3 stale OTP challenges, but only those created before the restore, so people who had already signed in again were not logged out; `config:cache` and `route:cache` re-run; no pending migrations; `/api/v1/health` 200, `/api/v1/enrollments` 401.
+- **Verified on production afterwards:** term 6 `semester_ongoing`, current slot 6, enrollment closed 2026-05-31, add/drop 2026-06-15; 26,023 grades `locked` and none anywhere not locked; 2,089 enrolled + 67 withdrawn, none without grades; 757 published sections, no section after term 6; CBAE, CCS, COA, COE `published`; no queue tickets; no pending enrollments; no test accounts. Every table count equals local except `personal_access_tokens` (3 fresh sign-ins), 5 audit rows (4 logins + 1 below) and 1 notification.
+- **One real difference left on purpose:** after the restore a student (profile 2315, user 2885) signed in and the system reclassified them **Regular to Irregular** ("LEAD2 cannot be taken yet", the seed has no earlier LEAD grade), so production shows irregular 97 / regular 2,946 against local 96 / 2,947. I did not undo it: it is a genuine event with its own audit row and notification, and it will repeat the next time that student opens the page. Say so if the presentation needs the numbers identical and I will revert it and the log rows.
+- **To undo:** restore the VPS backup above; it still holds the next-term test data and the archived term 6.
+
+## 2026-10-03 (night) — Freshman is back in the Student type dropdown (DONE; committed `5402431` and pushed; live on Vercel)
+
+- **Live check:** the deployed Admission chunk lists `Freshman` before `Transferee` in the Student type select.
 
 - **Owner request:** "nawala yung freshman dito sa admission sa student type please padagdag" — and deploy at once. This answers open item (1) of the second-batch entry below.
 - **Change (frontend only):** `provisionStudentSchema.student_type` accepts `freshman`; the Create Account Student type dropdown lists Freshman, Transferee, Returnee, Existing Student; the edit dialog now always lists Freshman (it was shown only for a record that already was one). No backend, migration or database change: `POST /student-profiles` already took `freshman`, and the checklist for a Freshman is the Freshman list plus Additional (`AdmissionRequirementCategory::forStudentType`).
@@ -475,7 +495,7 @@ Checks run so far: backend `StudentProfilesEndpointTest`/`AdmissionRequirementsE
     - `npm run typecheck`: Passed with 0 errors across the entire frontend.
     - Vitest: `student-credit-mapping-dialog.test.tsx` (5/5 passed), `enrollment-workspace.test.tsx` (32/32 passed).
   - **End-to-End API Verification (Hostinger VPS & Local):**
-    - Danhil Baluyot (`baluyotdandan@gmail.com`):
+    - Danhil Baluyot (`[email redacted]`):
       - `GET /api/v1/eligible-subjects?academic_term_id=37`: 94 total subjects returned, **0 eligible (100% blocked)**, reason code `credit_mapping_pending`.
       - `POST /api/v1/enrollments`: HTTP 422 Unprocessable Entity: `"Credit mapping has not been submitted or completed yet. Please wait for the Program Head / Registrar to evaluate your credits from your previous school."`
     - Mark Frederick Boado (`derickboado1@gmail.com`):
@@ -3058,12 +3078,12 @@ Doc `1lJ_dV8p9SZn9Q8afkofmc84Nzvfb-rZ3a9VxidvJWdo`: four items, five screenshots
    - TypeScript Check: `npm run typecheck` passed with 0 errors.
    - Fast Linter: `npm run lint:fast` passed with 0 errors across 499 files.
    - Live End-to-End Browser Automation (`frontend/scripts/capture_status.mjs`):
-     - Verified pre-population of `email` and `code` from query parameters (`baluyotdandan@gmail.com` and setup token).
+     - Verified pre-population of `email` and `code` from query parameters (`[email redacted]` and setup token).
      - Verified clicking "Resend setup email" invokes the public endpoint and renders the success confirmation message.
      - Captured artifacts: `account_setup_prefilled.png` and `account_setup_resent_success.png`.
 
 4. **Database Test Accounts Cleanup**:
-   - Safely purged test accounts from the database via atomic transactions: `westliecasuncad06@gmail.com`, `baluyotdandan@gmail.com`, `westragma@gmail.com`, and `derickboado1@gmail.com` (Faculty User ID `6932`).
+   - Safely purged test accounts from the database via atomic transactions: `westliecasuncad06@gmail.com`, `[email redacted]`, `westragma@gmail.com`, and `derickboado1@gmail.com` (Faculty User ID `6932`).
    - Cleared associated foreign records across `audit_logs`, `notifications`, `password_reset_tokens`, `student_profiles`, and `users`. Verified 0 remaining records.
 
 ## 2026-09-06 — Branded GRC Loading Logo for "Restoring your session…" (Auth Route Guards)
