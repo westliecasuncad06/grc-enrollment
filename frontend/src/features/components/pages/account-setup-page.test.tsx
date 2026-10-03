@@ -143,11 +143,11 @@ describe("AccountSetupPage", () => {
 
   it("pre-populates email and code from URL search parameters and shows 24-hour expiration", () => {
     renderWithAuthProvider(<AccountSetupPage />, {
-      route: "/account-setup?email=baluyotdandan%40gmail.com&code=123456",
+      route: "/account-setup?email=student%40grc.test&code=123456",
     })
 
     expect(screen.getByLabelText("Email address")).toHaveValue(
-      "baluyotdandan@gmail.com",
+      "student@grc.test",
     )
     expect(screen.getByLabelText("One-time setup code")).toHaveValue("123456")
     expect(
