@@ -56,9 +56,10 @@ export const provisionStudentSchema = z
     enrollment_category: z.enum(["regular", "irregular"], {
       error: "Select the enrollment category.",
     }),
-    student_type: z.enum(["transferee", "returnee", "existing_student"], {
-      error: "Select the student type.",
-    }),
+    student_type: z.enum(
+      ["freshman", "transferee", "returnee", "existing_student"],
+      { error: "Select the student type." },
+    ),
     financial_status: financialStatusSchema.nullable().optional(),
     // The requirements Admission ticked off for this student (stakeholder Doc 20). Some may still be
     // missing: the account can be created anyway and the rest stay on the student's checklist.

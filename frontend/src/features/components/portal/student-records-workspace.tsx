@@ -405,6 +405,7 @@ function CreateAccountPanel() {
                           <SelectValue placeholder="Select a student type" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="freshman">Freshman</SelectItem>
                           <SelectItem value="transferee">Transferee</SelectItem>
                           <SelectItem value="returnee">Returnee</SelectItem>
                           <SelectItem value="existing_student">
@@ -744,10 +745,7 @@ function StudentRecordDialog({
                             <SelectValue placeholder="Select a student type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {/* Freshman is no longer a choice for new accounts, but an existing record may still be one. */}
-                            {profile.student_type === "freshman" && (
-                              <SelectItem value="freshman">Freshman</SelectItem>
-                            )}
+                            <SelectItem value="freshman">Freshman</SelectItem>
                             <SelectItem value="transferee">Transferee</SelectItem>
                             <SelectItem value="returnee">Returnee</SelectItem>
                             <SelectItem value="existing_student">

@@ -10356,8 +10356,8 @@ components:
         student_type:
           type: string
           description: >
-            Chosen by Admission on the form (stakeholder Doc 20). The form offers Transferee,
-            Returnee and Existing Student; Freshman is still a valid value for older records.
+            Chosen by Admission on the form (stakeholder Doc 20). The form offers Freshman,
+            Transferee, Returnee and Existing Student.
           enum: [freshman, transferee, returnee, existing_student]
         financial_status:
           type: [string, 'null']

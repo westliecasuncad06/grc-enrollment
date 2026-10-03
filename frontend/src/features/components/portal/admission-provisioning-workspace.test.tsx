@@ -406,6 +406,27 @@ describe("Student Records workspace", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("offers Freshman as a student type and lists the Freshman requirements for it", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(screen.getByLabelText("Student type"))
+    await user.click(await screen.findByRole("option", { name: "Freshman" }))
+
+    expect(screen.getByLabelText("Student type")).toHaveTextContent("Freshman")
+    // The checklist for that type is requested (not the Transferee one).
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          urlOf(input).includes("admission-requirement-types?student_type=freshman"),
+        ),
+      ).toBe(true),
+    )
+    expect(
+      await screen.findByRole("checkbox", { name: "Form 137" }),
+    ).toBeInTheDocument()
+  })
+
   it("lets Admission choose the enrollment category and student type from dropdowns, with nothing set automatically", async () => {
     const user = userEvent.setup()
     renderWorkspace()
@@ -427,7 +448,7 @@ describe("Student Records workspace", () => {
     await user.click(screen.getByLabelText("Student type"))
     expect(
       (await screen.findAllByRole("option")).map((option) => option.textContent),
-    ).toEqual(["Transferee", "Returnee", "Existing Student"])
+    ).toEqual(["Freshman", "Transferee", "Returnee", "Existing Student"])
     await user.click(screen.getByRole("option", { name: "Existing Student" }))
 
     // Changing the year level no longer rewrites what was chosen.

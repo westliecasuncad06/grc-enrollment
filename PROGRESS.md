@@ -1,5 +1,12 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-03 (night) — Freshman is back in the Student type dropdown (DONE; committed and pushed to publish)
+
+- **Owner request:** "nawala yung freshman dito sa admission sa student type please padagdag" — and deploy at once. This answers open item (1) of the second-batch entry below.
+- **Change (frontend only):** `provisionStudentSchema.student_type` accepts `freshman`; the Create Account Student type dropdown lists Freshman, Transferee, Returnee, Existing Student; the edit dialog now always lists Freshman (it was shown only for a record that already was one). No backend, migration or database change: `POST /student-profiles` already took `freshman`, and the checklist for a Freshman is the Freshman list plus Additional (`AdmissionRequirementCategory::forStudentType`).
+- **Tests:** the dropdown-options test now expects the four options; a new test picks Freshman and checks that the form requests `admission-requirement-types?student_type=freshman` and shows a Freshman requirement (Form 137). `admission-provisioning-workspace` and `admission-service` test files: 11 passed; `tsc --noEmit` clean; ESLint clean on the schema file.
+- **Docs:** ADR 0041 (decision 1, 2 and the undecided note), OpenAPI `student_type` description. The data dictionary row already described all four values.
+
 ## 2026-10-03 (night) — Local database for offline use: the team's dump refreshed to the presentation state (DONE, committed and pushed)
 
 - **Owner request:** make the localhost database the same as the presentation state so the team can run locally if the internet fails.
