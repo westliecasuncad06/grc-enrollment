@@ -56,6 +56,8 @@ use App\Http\Controllers\Api\V1\FacultyProfileController;
 use App\Http\Controllers\Api\V1\FacultySpecializationController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
+use App\Http\Controllers\Api\V1\FreshmanEnrolleeController;
+use App\Http\Controllers\Api\V1\FreshmanPaymentController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\GraduateController;
 use App\Http\Controllers\Api\V1\HealthController;
@@ -68,6 +70,7 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProgramController;
 use App\Http\Controllers\Api\V1\ProspectusController;
+use App\Http\Controllers\Api\V1\PublicQueueViewController;
 use App\Http\Controllers\Api\V1\QueueCycleController;
 use App\Http\Controllers\Api\V1\QueueKioskCredentialController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
@@ -83,6 +86,7 @@ use App\Http\Controllers\Api\V1\SectionProfessorController;
 use App\Http\Controllers\Api\V1\StaffInvitationController;
 use App\Http\Controllers\Api\V1\StatementOfAccountController;
 use App\Http\Controllers\Api\V1\StudentAccountController;
+use App\Http\Controllers\Api\V1\StudentCreditMappingController;
 use App\Http\Controllers\Api\V1\StudentProfileChangeRequestController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
 use App\Http\Controllers\Api\V1\StudentQueueViewController;
@@ -92,13 +96,13 @@ use App\Http\Controllers\Api\V1\SubjectOfferingController;
 use App\Http\Controllers\Api\V1\SubjectWaiverController;
 use App\Http\Controllers\Api\V1\SuperAdmin\ActingContextController;
 use App\Http\Controllers\Api\V1\SuperAdmin\UserAccountController;
-use App\Http\Middleware\EnsureSuperAdminIsNotActing;
 use App\Http\Controllers\Api\V1\TorDocumentController;
 use App\Http\Controllers\Api\V1\TransfereeCreditController;
 use App\Http\Controllers\Api\V1\WithdrawalRequestController;
 use App\Http\Middleware\ApplySuperAdminActingContext;
 use App\Http\Middleware\EnsureQueueKioskUsesDeviceSurface;
 use App\Http\Middleware\EnsureStudentQueueClaimUsesKiosk;
+use App\Http\Middleware\EnsureSuperAdminIsNotActing;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Support\Facades\Route;
 
@@ -106,6 +110,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::get('/health', HealthController::class)
         ->middleware('throttle:60,1')
         ->name('health');
+
+    // ADR 0044: a freshman's emailed "view my queue number" link. No sign-in — the
+    // token in the URL is the credential (see the controller).
+    Route::get('/public/queue-view/{token}', [PublicQueueViewController::class, 'show'])
+        ->where('token', '[A-Za-z0-9]{48}')
+        ->middleware('throttle:public-queue-view')
+        ->name('public.queue-view.show');
 
     Route::prefix('auth')->name('auth.')->group(function (): void {
         Route::post('/account-setup', AccountSetupController::class)
@@ -371,15 +382,24 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/enrollment-change-requests', [EnrollmentChangeRequestController::class, 'index'])->name('enrollment-change-requests.index');
         Route::patch('/enrollment-change-requests/{enrollmentChangeRequest}', [EnrollmentChangeRequestController::class, 'update'])->name('enrollment-change-requests.update');
 
-        // FR-FIN-003 / PRD §3.8, §10.3: Registrar Staff records, edits, and
-        // decides transferee credits (Student and Registrar Head read only
-        // — TransfereeCredit::scopeVisibleTo). No `role:` middleware —
-        // TransfereeCreditPolicy resolves all three per request, the same
-        // shape WithdrawalRequestController uses.
+        // FR-FIN-003 / PRD §3.8, §10.3, ADR 0026 (amended): a Student saves their
+        // subjects as a private draft list and submits it, the Program Chair maps
+        // and endorses, the Registrar Head decides (Registrar Staff read only).
+        // No `role:` middleware — TransfereeCreditPolicy resolves every ability
+        // per request, the same shape WithdrawalRequestController uses.
         Route::get('/transferee-credits', [TransfereeCreditController::class, 'index'])->name('transferee-credits.index');
         Route::post('/transferee-credits', [TransfereeCreditController::class, 'store'])->name('transferee-credits.store');
+        Route::post('/transferee-credits/submit', [TransfereeCreditController::class, 'submit'])->name('transferee-credits.submit');
         Route::patch('/transferee-credits/{transfereeCredit}', [TransfereeCreditController::class, 'update'])->name('transferee-credits.update');
+        Route::delete('/transferee-credits/{transfereeCredit}', [TransfereeCreditController::class, 'destroy'])->name('transferee-credits.destroy');
         Route::get('/transferee-credits/{transfereeCredit}/suggestions', [TransfereeCreditController::class, 'suggestions'])->name('transferee-credits.suggestions');
+
+        // The student-level steps of the same flow (ADR 0026, amended): the
+        // Program Chair's bulk suggestions and "send this student to the Registrar
+        // Head", and the Registrar Head's "approve all". Policy-gated, no `role:`.
+        Route::get('/student-profiles/{studentProfile}/transferee-credits/suggestions', [StudentCreditMappingController::class, 'suggestions'])->whereNumber('studentProfile')->name('student-profiles.transferee-credits.suggestions');
+        Route::post('/student-profiles/{studentProfile}/transferee-credits/submit-to-registrar-head', [StudentCreditMappingController::class, 'submitToRegistrarHead'])->whereNumber('studentProfile')->name('student-profiles.transferee-credits.submit-to-registrar-head');
+        Route::post('/student-profiles/{studentProfile}/transferee-credits/approve-all', [StudentCreditMappingController::class, 'approveAll'])->whereNumber('studentProfile')->name('student-profiles.transferee-credits.approve-all');
 
         // A transferee's / returnee's Transcript of Records, uploaded for credit
         // mapping (ADR 0026): the Student uploads, lists and removes their own;
@@ -513,10 +533,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // first production consumer of the admission_staff role.
         Route::middleware('role:admission_staff')->group(function (): void {
             Route::get('/student-profiles', [StudentProfileController::class, 'index'])->name('student-profiles.index');
+            // Before `{studentProfile}` so the literal path is never read as a profile id.
+            Route::get('/student-profiles/next-student-number', [StudentProfileController::class, 'nextStudentNumber'])->name('student-profiles.next-student-number.show');
             Route::post('/student-profiles', [StudentProfileController::class, 'store'])->name('student-profiles.store');
             Route::get('/student-profiles/{studentProfile}', [StudentProfileController::class, 'showForAdmission'])->name('student-profiles.show');
             Route::patch('/student-profiles/{studentProfile}', [StudentProfileController::class, 'update'])->name('student-profiles.update');
             Route::post('/student-profiles/{studentProfile}/account-setup-invitations', [StudentProfileController::class, 'resendSetupInvitation'])->name('student-profiles.account-setup-invitations.store');
+            Route::post('/student-profiles/{studentProfile}/queue-link-resends', [StudentProfileController::class, 'resendQueueLink'])->whereNumber('studentProfile')->name('student-profiles.queue-link-resends.store');
             // The Admission requirements checklist (ADR 0037).
             Route::get('/student-profiles/{studentProfile}/admission-requirements', [AdmissionRequirementController::class, 'show'])->whereNumber('studentProfile')->name('student-profiles.admission-requirements.show');
             Route::put('/student-profiles/{studentProfile}/admission-requirements/{requirementType}', [AdmissionRequirementController::class, 'update'])->whereNumber(['studentProfile', 'requirementType'])->name('student-profiles.admission-requirements.update');
@@ -695,6 +718,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/queue-cycle', [QueueCycleController::class, 'show'])->name('queue-cycle.show');
             Route::post('/queue-cycle/cut-off', [QueueCycleController::class, 'cutOff'])->name('queue-cycle.cut-off');
             Route::post('/queue-cycle/resume', [QueueCycleController::class, 'resume'])->name('queue-cycle.resume');
+            // ADR 0043: a freshman's first payment at the Cashier. The preview reads; the POST is idempotent.
+            Route::get('/student-profiles/{studentProfile}/freshman-payment-preview', [FreshmanPaymentController::class, 'preview'])->whereNumber('studentProfile')->name('student-profiles.freshman-payment-preview.show');
+            Route::post('/student-profiles/{studentProfile}/freshman-payment', [FreshmanPaymentController::class, 'store'])->whereNumber('studentProfile')->name('student-profiles.freshman-payment.store');
         });
+
+        // ADR 0043: the Registrar's read-only list of freshmen who pay first (no approval step for them).
+        Route::get('/freshman-enrollees', [FreshmanEnrolleeController::class, 'index'])
+            ->middleware('role:registrar_head,registrar_staff')
+            ->name('freshman-enrollees.index');
     });
 });

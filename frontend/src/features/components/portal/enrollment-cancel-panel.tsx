@@ -30,6 +30,7 @@ import { isApiClientError } from "@/features/services/api-client"
 const CANCELLABLE_STATUSES: readonly Enrollment["status"][] = [
   "pending_program_head_approval",
   "pending_student_review",
+  "awaiting_first_payment",
   "pending_registrar_approval",
 ]
 

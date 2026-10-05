@@ -130,8 +130,9 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "destructive",
     icon: Ban,
   },
-  // A student asked for a credit mapping (to the Program Chair), and the Chair
-  // endorsed one (to Registrar Staff): see ADR 0026.
+  // A student sent their list for credit mapping (to the Program Chair), the Chair
+  // endorsed a credit (to the Registrar Head), and the Head returned one (to the
+  // Program Chair): see ADR 0026, amended.
   transferee_credit_requested: {
     label: "Credit request",
     tone: "neutral",
@@ -141,6 +142,17 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     label: "Credit awaiting approval",
     tone: "warning",
     icon: FileCheck,
+  },
+  transferee_credit_returned: {
+    label: "Credit returned",
+    tone: "warning",
+    icon: FileCheck,
+  },
+  // A transferee's credit mapping closed: they hold a queue number and may choose their subjects (2026-10-05).
+  transferee_queue_number_issued: {
+    label: "Your queue number",
+    tone: "success",
+    icon: CircleDollarSign,
   },
   enrollment_category_reclassified: {
     label: "Enrollment standing updated",
@@ -222,6 +234,23 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "success",
     icon: BadgeCheck,
   },
+  // A freshman who paid while every section was full, and the moment a section opens (ADR 0043).
+  freshman_awaiting_section: {
+    label: "Payment received",
+    tone: "warning",
+    icon: CircleDollarSign,
+  },
+  freshman_section_available: {
+    label: "A section is open",
+    tone: "success",
+    icon: CalendarCheck,
+  },
+  // A freshman who paid and is submitted to a block: waiting for the Registrar's approval, not enrolled yet (2026-10-04).
+  freshman_awaiting_registrar_approval: {
+    label: "Waiting for approval",
+    tone: "warning",
+    icon: CircleDollarSign,
+  },
 }
 
 const DEFAULT_PRESENTATION: NotificationPresentation = {
@@ -296,6 +325,16 @@ export function notificationDestinationPath(
       return role === "registrar_head" ? "/portal/submitted-schedules" : null
     case "enrollment_payment_confirmed":
       return role === "student" ? "/portal/digital-com" : null
+    // A freshman waiting for a section reads, and acts on, the news in Enrollment.
+    case "freshman_awaiting_section":
+    case "freshman_section_available":
+      return role === "student" ? "/portal/enrollment" : null
+    // A freshman who paid is waiting for the Registrar: the student watches Enrollment, the Registrar approves.
+    case "freshman_awaiting_registrar_approval":
+      if (role === "student") return "/portal/enrollment"
+      return role === "registrar_staff" || role === "registrar_head"
+        ? "/portal/enrollment-approvals"
+        : null
     case "academic_grade_locked":
     case "student_year_level_promoted":
       return role === "student" ? "/portal/grades" : null
@@ -345,7 +384,12 @@ export function notificationDestinationPath(
     case "transferee_credit_requested":
       return role === "program_chair" ? "/portal/credit-mappings" : null
     case "transferee_credit_endorsed":
-      return role === "registrar_staff" ? "/portal/credit-mappings" : null
+      return role === "registrar_head" ? "/portal/credit-mappings" : null
+    case "transferee_credit_returned":
+      return role === "program_chair" ? "/portal/credit-mappings" : null
+    // The student reads their number and chooses their subjects in Enrollment.
+    case "transferee_queue_number_issued":
+      return role === "student" ? "/portal/enrollment" : null
     case "transferee_credit_approved":
     case "transferee_credit_rejected":
       // The student's own request (and its status) lives on the Grades page.

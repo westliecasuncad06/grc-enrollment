@@ -1,4 +1,4 @@
-import { act, screen, within } from "@testing-library/react"
+import { act, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -31,6 +31,8 @@ const servingTicket = {
   id: 1,
   enrollment_id: 9,
   student_number: "2026-0001",
+  student_id: 4,
+  is_freshman: false,
   ticket_number: "Q001",
   queue_date: "2026-07-30",
   status: "serving",
@@ -47,6 +49,7 @@ const waitingTicket = {
   id: 2,
   enrollment_id: 10,
   student_number: "2026-0002",
+  student_id: 5,
   ticket_number: "Q002",
   status: "waiting",
   status_label: "Waiting",
@@ -425,6 +428,494 @@ describe("AccountingPaymentWorkspace", () => {
   })
 
 
+
+  describe("freshman tickets", () => {
+    // A freshman took a number at Admission before any enrollment or account exists.
+    const freshmanServing = {
+      ...servingTicket,
+      id: 7,
+      enrollment_id: null,
+      student_id: 77,
+      student_number: "2026-10-00077",
+      ticket_number: "Q007",
+      is_freshman: true,
+    } as const
+    const freshmanWaiting = {
+      ...waitingTicket,
+      id: 8,
+      enrollment_id: null,
+      student_id: 78,
+      student_number: "2026-10-00078",
+      ticket_number: "Q008",
+      is_freshman: true,
+    } as const
+
+    it("tells the cashier that the student being served is a freshman", async () => {
+      fetchMock.mockImplementation(mockRoutes({ tickets: [freshmanServing] }))
+      renderWithSession(<AccountingPaymentWorkspace />, {
+        session: accountingSession,
+      })
+
+      expect(await screen.findByText("Q007")).toBeInTheDocument()
+      const nowServing = screen
+        .getByRole("heading", { name: "Now serving" })
+        .closest<HTMLElement>('[data-slot="card"]')!
+      expect(within(nowServing).getByText("Freshman")).toBeInTheDocument()
+      expect(within(nowServing).getByText(/2026-10-00077/)).toBeInTheDocument()
+    })
+
+    it("does not say that confirming the first payment enrolls the freshman, because only the Registrar's approval does", async () => {
+      // Found by the real-browser pass: the serving panel still promised enrollment while the dialog (correctly) said the Registrar approves first.
+      fetchMock.mockImplementation(mockRoutes({ tickets: [freshmanServing] }))
+      renderWithSession(<AccountingPaymentWorkspace />, {
+        session: accountingSession,
+      })
+
+      expect(await screen.findByText("Q007")).toBeInTheDocument()
+      const nowServing = screen
+        .getByRole("heading", { name: "Now serving" })
+        .closest<HTMLElement>('[data-slot="card"]')!
+      expect(
+        within(nowServing).getByText(
+          /submits.*to the first section with open seats.*Registrar.*approv/i,
+        ),
+      ).toBeInTheDocument()
+      expect(
+        within(nowServing).queryByText(/enrolls the freshman/i),
+      ).not.toBeInTheDocument()
+    })
+
+    it("marks a waiting freshman in the waiting line", async () => {
+      fetchMock.mockImplementation(
+        mockRoutes({ tickets: [servingTicket, freshmanWaiting] }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, {
+        session: accountingSession,
+      })
+
+      const waitingTable = await screen.findByRole("table", { name: "Waiting" })
+      const row = within(waitingTable).getByText("Q008").closest("tr") as HTMLElement
+      expect(within(row).getByText("Freshman")).toBeInTheDocument()
+    })
+
+    it("shows no Freshman badge for a student who claimed at the kiosk", async () => {
+      fetchMock.mockImplementation(mockRoutes())
+      renderWithSession(<AccountingPaymentWorkspace />, {
+        session: accountingSession,
+      })
+
+      await screen.findByText("Q001")
+      expect(screen.queryByText("Freshman")).not.toBeInTheDocument()
+    })
+
+    it("does not offer the ordinary enrollment payment for a freshman who has no enrollment yet", async () => {
+      fetchMock.mockImplementation(mockRoutes({ tickets: [freshmanServing] }))
+      renderWithSession(<AccountingPaymentWorkspace />, {
+        session: accountingSession,
+      })
+
+      await screen.findByText("Q007")
+      expect(
+        screen.queryByRole("button", { name: "Confirm payment" }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: "Confirm first payment" }),
+      ).toBeEnabled()
+    })
+
+    const previewData = {
+      type: "freshman_payment_preview",
+      student_id: 77,
+      student_number: "2026-10-00077",
+      student_name: "Juan Dela Cruz",
+      ticket_number: "Q007",
+      minimum_amount: "1000.00",
+      already_confirmed: false,
+      can_enroll: true,
+      block: {
+        block_code: "IT102",
+        total_units: 21,
+        seats_remaining: 12,
+        subjects: [{ code: "ITP1", title: "Programming 1", units: 3 }],
+      },
+      estimated_total: "9200.00",
+    } as const
+    const enrolledResult = {
+      type: "freshman_payment",
+      outcome: "enrolled",
+      block_code: "IT102",
+      student: { id: 77, student_number: "2026-10-00077", name: "Juan Dela Cruz" },
+      enrollment: { id: 90, status: "enrolled", total_units: 21 },
+      payment: {
+        external_reference: null,
+        amount: "1000.00",
+        promissory_note_on_file: false,
+        confirmed_at: "2026-10-04T01:00:00Z",
+      },
+      document: {
+        id: 5,
+        document_type: "cor",
+        document_number: "COR000090",
+        generated_at: "2026-10-04T01:00:00Z",
+      },
+      held_amount: null,
+    } as const
+
+    function mockFreshmanRoutes({
+      preview = previewData,
+      result = enrolledResult,
+      confirmStatus = 201,
+    }: {
+      preview?: Record<string, unknown>
+      result?: Record<string, unknown>
+      confirmStatus?: number
+    } = {}) {
+      return (input: RequestInfo | URL, init?: RequestInit) => {
+        const target = url(input)
+        if (target.includes("/freshman-payment-preview"))
+          return Promise.resolve(new Response(JSON.stringify({ data: preview })))
+        if (target.includes("/freshman-payment") && init?.method === "POST")
+          return Promise.resolve(
+            confirmStatus === 201
+              ? new Response(JSON.stringify({ data: result }), { status: 201 })
+              : new Response(
+                  JSON.stringify({
+                    error: {
+                      code: "VALIDATION_FAILED",
+                      message: "Validation failed.",
+                      errors: { amount: ["A freshman's first payment must be at least PHP 1,000.00."] },
+                      request_id: "r1",
+                    },
+                  }),
+                  { status: confirmStatus },
+                ),
+          )
+        return mockRoutes({ tickets: [freshmanServing] })(input, init)
+      }
+    }
+
+    async function openFreshmanDialog(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(
+        await screen.findByRole("button", { name: "Confirm first payment" }),
+      )
+      return screen.findByRole("alertdialog")
+    }
+
+    it("shows the section the freshman will get and the estimated assessment before anything is recorded", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(mockFreshmanRoutes())
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      const dialog = await openFreshmanDialog(user)
+
+      expect(await within(dialog).findByText("IT102")).toBeInTheDocument()
+      expect(within(dialog).getByText(/12 seats left/)).toBeInTheDocument()
+      expect(within(dialog).getByText(/ITP1 — Programming 1/)).toBeInTheDocument()
+      expect(within(dialog).getByText(/Estimated assessment/)).toBeInTheDocument()
+      expect(within(dialog).getByLabelText("Amount received")).toHaveValue("1000.00")
+      // No promissory note for a freshman.
+      expect(within(dialog).queryByLabelText(/promissory/i)).not.toBeInTheDocument()
+      // Opening the dialog only reads: nothing is recorded until the Cashier confirms.
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            url(input).includes("/freshman-payment") && init?.method === "POST",
+        ),
+      ).toBe(false)
+    })
+
+    it("confirms the first payment and tells the Cashier which section the freshman is enrolled in", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(mockFreshmanRoutes())
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+      await within(dialog).findByText("IT102")
+
+      await user.clear(within(dialog).getByLabelText("Amount received"))
+      await user.type(within(dialog).getByLabelText("Amount received"), "1500")
+      await user.type(
+        within(dialog).getByLabelText(/Receipt or reference number/),
+        "OR-5",
+      )
+      await user.click(
+        within(dialog).getByRole("button", { name: "Confirm first payment" }),
+      )
+
+      const notice = await screen.findByRole("status")
+      expect(within(notice).getByText(/is enrolled in/)).toBeInTheDocument()
+      expect(within(notice).getByText("IT102")).toBeInTheDocument()
+      expect(within(notice).getByText(/COR000090/)).toBeInTheDocument()
+      expect(within(notice).getByRole("button", { name: "View COR" })).toBeInTheDocument()
+      const post = fetchMock.mock.calls.find(
+        ([input, init]) => url(input).endsWith("/freshman-payment") && init?.method === "POST",
+      )
+      expect(JSON.parse(post?.[1]?.body as string)).toEqual({
+        amount: "1500.00",
+        external_reference: "OR-5",
+      })
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      )
+    })
+
+    it("explains that the payment will be held when every section is full", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(
+        mockFreshmanRoutes({
+          preview: { ...previewData, can_enroll: false, block: null, estimated_total: null },
+          result: {
+            ...enrolledResult,
+            outcome: "awaiting_section",
+            block_code: null,
+            enrollment: null,
+            payment: null,
+            document: null,
+            held_amount: "1000.00",
+          },
+        }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+
+      expect(
+        await within(dialog).findByText(/Every section .* is full/i),
+      ).toBeInTheDocument()
+      // The intro must not promise an automatic enrollment the notice just ruled out.
+      await waitFor(() =>
+        expect(dialog).not.toHaveTextContent(/enrolls them automatically/i),
+      )
+      expect(dialog).toHaveTextContent(/No promissory note is needed/i)
+      await user.click(
+        within(dialog).getByRole("button", { name: "Confirm first payment" }),
+      )
+
+      const notice = await screen.findByRole("status")
+      expect(within(notice).getByText(/is held/)).toBeInTheDocument()
+      expect(within(notice).queryByRole("button", { name: "View COR" })).not.toBeInTheDocument()
+    })
+
+    it("will not confirm an amount below the minimum", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(mockFreshmanRoutes())
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+      await within(dialog).findByText("IT102")
+
+      await user.clear(within(dialog).getByLabelText("Amount received"))
+      await user.type(within(dialog).getByLabelText("Amount received"), "500")
+
+      expect(
+        within(dialog).getByRole("button", { name: "Confirm first payment" }),
+      ).toBeDisabled()
+      expect(within(dialog).getByText(/Enter an amount of at least/)).toBeInTheDocument()
+    })
+
+    it("keeps the dialog open and shows the server's reason when the confirmation is refused", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(mockFreshmanRoutes({ confirmStatus: 422 }))
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+      await within(dialog).findByText("IT102")
+
+      await user.click(
+        within(dialog).getByRole("button", { name: "Confirm first payment" }),
+      )
+
+      expect(
+        await within(dialog).findByText(/must be at least PHP 1,000\.00/),
+      ).toBeInTheDocument()
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument()
+    })
+
+    it("tells a freshman whose payment is in and who waits for the Registrar that, not that every section is full", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(
+        mockFreshmanRoutes({
+          result: {
+            ...enrolledResult,
+            outcome: "awaiting_registrar_approval",
+            enrollment: { id: 90, status: "pending_registrar_approval", total_units: 21 },
+            payment: null,
+            document: null,
+            held_amount: "1000.00",
+          },
+        }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+      await within(dialog).findByText("IT102")
+      await user.click(
+        within(dialog).getByRole("button", { name: "Confirm first payment" }),
+      )
+
+      const notice = await screen.findByRole("status")
+      expect(notice).toHaveTextContent(/waiting for Registrar approval/i)
+      expect(notice).not.toHaveTextContent(/every section is full/i)
+      expect(notice).toHaveTextContent(/account setup email was sent/i)
+    })
+  })
+
+  // A transferee pays first too (ADR 0043, amended 2026-10-05): their number comes from the end of
+  // their credit mapping, they already have an account, and they chose their own subjects.
+  describe("transferee tickets", () => {
+    const transfereeServing = {
+      ...servingTicket,
+      id: 9,
+      enrollment_id: null,
+      student_id: 88,
+      student_number: "2026-0900",
+      ticket_number: "Q009",
+      is_freshman: false,
+      is_transferee: true,
+    } as const
+    const transfereeWaiting = {
+      ...waitingTicket,
+      id: 10,
+      enrollment_id: null,
+      student_id: 89,
+      student_number: "2026-0901",
+      ticket_number: "Q010",
+      is_freshman: false,
+      is_transferee: true,
+    } as const
+    const transfereePreview = {
+      type: "freshman_payment_preview",
+      student_id: 88,
+      student_number: "2026-0900",
+      student_name: "Maria Santos",
+      student_type: "transferee",
+      ticket_number: "Q009",
+      minimum_amount: "1000.00",
+      already_confirmed: false,
+      can_enroll: true,
+      block: null,
+      enrollment: {
+        id: 31,
+        status: "awaiting_first_payment",
+        status_label: "Awaiting First Payment",
+        total_units: 21,
+        subjects: [{ code: "ITP1", title: "Programming 1", units: 3 }],
+      },
+      estimated_total: "9200.00",
+    } as const
+    const awaitingRegistrarResult = {
+      type: "freshman_payment",
+      outcome: "awaiting_registrar_approval",
+      block_code: "IT101",
+      student: { id: 88, student_number: "2026-0900", name: "Maria Santos" },
+      enrollment: { id: 31, status: "pending_registrar_approval", total_units: 21 },
+      payment: null,
+      document: null,
+      held_amount: "1000.00",
+    } as const
+
+    function mockTransfereeRoutes({
+      preview = transfereePreview,
+      result = awaitingRegistrarResult,
+      tickets = [transfereeServing],
+    }: {
+      preview?: Record<string, unknown>
+      result?: Record<string, unknown>
+      tickets?: readonly unknown[]
+    } = {}) {
+      return (input: RequestInfo | URL, init?: RequestInit) => {
+        const target = url(input)
+        if (target.includes("/freshman-payment-preview"))
+          return Promise.resolve(new Response(JSON.stringify({ data: preview })))
+        if (target.includes("/freshman-payment") && init?.method === "POST")
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: result }), { status: 201 }),
+          )
+        return mockRoutes({ tickets: [...tickets] as never })(input, init)
+      }
+    }
+
+    async function openDialog(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(
+        await screen.findByRole("button", { name: "Confirm first payment" }),
+      )
+      return screen.findByRole("alertdialog")
+    }
+
+    it("tells the cashier that the student being served is a transferee, and what confirming does", async () => {
+      fetchMock.mockImplementation(mockTransfereeRoutes())
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      expect(await screen.findByText("Q009")).toBeInTheDocument()
+      const nowServing = screen
+        .getByRole("heading", { name: "Now serving" })
+        .closest<HTMLElement>('[data-slot="card"]')!
+      expect(within(nowServing).getByText("Transferee")).toBeInTheDocument()
+      expect(within(nowServing).queryByText("Freshman")).not.toBeInTheDocument()
+      // The payment does not enroll them and there is no account setup to send.
+      expect(nowServing).toHaveTextContent(/Registrar/)
+      expect(nowServing).not.toHaveTextContent(/account setup email/i)
+      expect(
+        within(nowServing).getByRole("button", { name: "Confirm first payment" }),
+      ).toBeEnabled()
+    })
+
+    it("marks a waiting transferee in the waiting line", async () => {
+      fetchMock.mockImplementation(
+        mockTransfereeRoutes({ tickets: [servingTicket, transfereeWaiting] }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      const waitingTable = await screen.findByRole("table", { name: "Waiting" })
+      const row = within(waitingTable).getByText("Q010").closest("tr") as HTMLElement
+      expect(within(row).getByText("Transferee")).toBeInTheDocument()
+    })
+
+    it("shows the subjects the transferee chose and the estimated assessment before anything is recorded", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(mockTransfereeRoutes())
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      const dialog = await openDialog(user)
+
+      expect(await within(dialog).findByText(/ITP1 — Programming 1/)).toBeInTheDocument()
+      expect(within(dialog).getByText(/Their chosen subjects/i)).toBeInTheDocument()
+      expect(within(dialog).getByText(/Estimated assessment/)).toBeInTheDocument()
+      expect(dialog).toHaveTextContent(/transferee paying for the first time/i)
+      expect(dialog).not.toHaveTextContent(/account setup email/i)
+      expect(within(dialog).getByLabelText("Amount received")).toHaveValue("1000.00")
+    })
+
+    it("explains that the payment will be held when the transferee has not chosen subjects yet", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(
+        mockTransfereeRoutes({
+          preview: { ...transfereePreview, can_enroll: false, enrollment: null, estimated_total: null },
+        }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      const dialog = await openDialog(user)
+
+      expect(
+        await within(dialog).findByText(/has not chosen and submitted their subjects/i),
+      ).toBeInTheDocument()
+      expect(dialog).not.toHaveTextContent(/every section/i)
+    })
+
+    it("confirms the first payment and says the enrollment now waits for the Registrar, with no account setup email", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(mockTransfereeRoutes())
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openDialog(user)
+      await within(dialog).findByText(/ITP1 — Programming 1/)
+
+      await user.click(
+        within(dialog).getByRole("button", { name: "Confirm first payment" }),
+      )
+
+      const notice = await screen.findByRole("status")
+      expect(notice).toHaveTextContent(/Maria Santos/)
+      expect(notice).toHaveTextContent(/waiting for Registrar approval/i)
+      expect(notice).not.toHaveTextContent(/account setup email/i)
+      expect(notice).not.toHaveTextContent(/every section is full/i)
+    })
+  })
 
   it("shows a cut-off banner and lets the cashier resume the queue", async () => {
     // A static `mockRoutes({ cycle })` override applies to every

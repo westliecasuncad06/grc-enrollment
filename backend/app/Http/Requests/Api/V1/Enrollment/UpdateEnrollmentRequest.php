@@ -35,12 +35,14 @@ final class UpdateEnrollmentRequest extends FormRequest
         'void' => [
             EnrollmentStatus::PendingProgramHeadApproval,
             EnrollmentStatus::PendingStudentReview,
+            EnrollmentStatus::AwaitingFirstPayment,
             EnrollmentStatus::PendingRegistrarApproval,
             EnrollmentStatus::PendingPayment,
         ],
         'student_cancel' => [
             EnrollmentStatus::PendingProgramHeadApproval,
             EnrollmentStatus::PendingStudentReview,
+            EnrollmentStatus::AwaitingFirstPayment,
             EnrollmentStatus::PendingRegistrarApproval,
         ],
         // The student's answer to the Program Chair's changes (ADR 0040).

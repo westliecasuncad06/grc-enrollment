@@ -64,6 +64,16 @@ final class StudentQueueViewEndpointTest extends TestCase
             ->assertJsonPath('data.can_claim', false);
     }
 
+    public function test_a_student_waiting_at_the_payment_hold_sees_that_stage_and_cannot_claim(): void
+    {
+        [$token] = $this->makeStudentWithEnrollment('2026-08-90010', EnrollmentStatus::AwaitingFirstPayment);
+
+        $this->withToken($token)->getJson('/api/v1/queue-status')
+            ->assertOk()
+            ->assertJsonPath('data.stage', 'awaiting_first_payment')
+            ->assertJsonPath('data.can_claim', false);
+    }
+
     public function test_an_approved_student_with_no_ticket_yet_can_claim(): void
     {
         [$token] = $this->makeStudentWithEnrollment('2026-08-90003', EnrollmentStatus::PendingPayment);

@@ -3,27 +3,23 @@
 namespace App\Actions\Enrollment;
 
 use App\Domain\Enrollment\EnrollmentStatus;
-use App\Domain\Enrollment\QueueCycleStatus;
-use App\Domain\Enrollment\QueueTicketPriority;
-use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Enrollment\StudentQueueView;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicTerm;
 use App\Models\Enrollment;
-use App\Models\QueueCycle;
-use App\Models\QueueTicket;
 use App\Models\StudentProfile;
 use App\Models\User;
 
 /**
  * Read-only aggregate for the student's own "where am I in the queue" view
- * (PRD §5.3 FR-FIN-006). `upcomingTicketNumbers` never exposes another
- * student's identity — only ticket numbers, the same privacy convention
- * `QueueTicket::position()` already follows for "how many ahead of me".
+ * (PRD §5.3 FR-FIN-006). The board (now serving / upcoming numbers) comes from
+ * `BuildQueueBoard`, which never exposes another student's identity — only
+ * ticket numbers, the same privacy convention `QueueTicket::position()` already
+ * follows for "how many ahead of me".
  */
 final readonly class BuildStudentQueueView
 {
-    private const UPCOMING_LIMIT = 10;
+    public function __construct(private BuildQueueBoard $queueBoard) {}
 
     public function execute(User $actor): StudentQueueView
     {
@@ -39,19 +35,16 @@ final readonly class BuildStudentQueueView
 
         $stage = $this->stageFor($enrollment);
         $ticket = $enrollment?->queueTicket;
+        // A pay-first student's number belongs to their profile, not to an enrollment (they get it before they
+        // choose subjects). It stays visible until the Cashier has taken their first payment; after that it is spent.
+        if ($ticket === null && $student?->isAwaitingFirstPayment()) {
+            $ticket = $student->queueTicket;
+        }
         $canClaim = $stage === 'pending_payment' && $ticket === null;
 
-        $openCycle = QueueCycle::query()->whereNull('closed_at')->first();
+        $board = $this->queueBoard->execute();
 
-        $nowServingTicketNumber = $openCycle === null ? null : QueueTicket::query()
-            ->where('queue_cycle_id', $openCycle->id)
-            ->where('status', QueueTicketStatus::Serving)
-            ->value('ticket_number');
-
-        $upcomingTicketNumbers = $openCycle === null ? [] : $this->upcomingTicketNumbers($openCycle->id);
-        $cutOffToday = $openCycle !== null && $openCycle->status() === QueueCycleStatus::CutOff;
-
-        return new StudentQueueView($stage, $canClaim, $ticket, $nowServingTicketNumber, $upcomingTicketNumbers, $cutOffToday);
+        return new StudentQueueView($stage, $canClaim, $ticket, $board->nowServingTicketNumber, $board->upcomingTicketNumbers, $board->cutOffToday);
     }
 
     private function stageFor(?Enrollment $enrollment): string
@@ -63,45 +56,11 @@ final readonly class BuildStudentQueueView
         return match ($enrollment->status) {
             EnrollmentStatus::PendingProgramHeadApproval => 'pending_program_head_approval',
             EnrollmentStatus::PendingStudentReview => 'pending_student_review',
+            EnrollmentStatus::AwaitingFirstPayment => 'awaiting_first_payment',
             EnrollmentStatus::Draft, EnrollmentStatus::PendingRegistrarApproval => 'pending_registrar_approval',
             EnrollmentStatus::PendingPayment => 'pending_payment',
             EnrollmentStatus::Enrolled => 'enrolled',
             EnrollmentStatus::Rejected, EnrollmentStatus::Cancelled, EnrollmentStatus::Withdrawn => 'no_active_enrollment',
         };
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function upcomingTicketNumbers(int $openCycleId): array
-    {
-        $orderedWaiting = fn (QueueTicketPriority $priority) => QueueTicket::query()
-            ->where('queue_cycle_id', $openCycleId)
-            ->where('status', QueueTicketStatus::Waiting)
-            ->where('priority', $priority)
-            ->orderBy('queue_date')
-            ->orderByRaw('COALESCE(requeued_at, created_at)')
-            ->orderByRaw('requeued_at IS NOT NULL')
-            ->orderBy('id');
-
-        $priorityNumbers = $orderedWaiting(QueueTicketPriority::Priority)
-            ->limit(self::UPCOMING_LIMIT)
-            ->pluck('ticket_number')
-            ->all();
-
-        $remaining = self::UPCOMING_LIMIT - count($priorityNumbers);
-
-        $regularNumbers = $remaining > 0
-            ? $orderedWaiting(QueueTicketPriority::Regular)->limit($remaining)->pluck('ticket_number')->all()
-            : [];
-
-        // array_values(array_map(...)) is not decorative: pluck('ticket_number')
-        // ->all() is typed array<mixed>, which static analysis cannot narrow to
-        // a list<string> on its own — the same convention BuildEligibleSubjectPool
-        // ::siblingSubjectIds() uses for the identical shape.
-        return array_values(array_map(
-            static fn (mixed $ticketNumber): string => (string) $ticketNumber,
-            [...$priorityNumbers, ...$regularNumbers],
-        ));
     }
 }

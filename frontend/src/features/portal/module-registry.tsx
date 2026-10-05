@@ -96,6 +96,11 @@ const ProgramChairCreditMappingsWorkspace = lazyWorkspace(
     import("@/features/components/portal/program-chair-credit-mappings-workspace"),
   "ProgramChairCreditMappingsWorkspace",
 )
+const RegistrarHeadCreditReviewWorkspace = lazyWorkspace(
+  () =>
+    import("@/features/components/portal/registrar-head-credit-review-workspace"),
+  "RegistrarHeadCreditReviewWorkspace",
+)
 const AcademicTermWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/academic-term-workspace"),
   "AcademicTermWorkspace",
@@ -133,7 +138,8 @@ const SubmittedSchedulesWorkspace = lazyWorkspace(
   "SubmittedSchedulesWorkspace",
 )
 const SectionChangeRequestsWorkspace = lazyWorkspace(
-  () => import("@/features/components/portal/section-change-requests-workspace"),
+  () =>
+    import("@/features/components/portal/section-change-requests-workspace"),
   "SectionChangeRequestsWorkspace",
 )
 const DeanFacultyLoadWorkspace = lazyWorkspace(
@@ -254,6 +260,11 @@ const CashierCorRecordsWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/cashier-cor-records-workspace"),
   "CashierCorRecordsWorkspace",
 )
+const RegistrarFreshmanEnrolleesWorkspace = lazyWorkspace(
+  () =>
+    import("@/features/components/portal/registrar-freshman-enrollees-workspace"),
+  "RegistrarFreshmanEnrolleesWorkspace",
+)
 const ProfessorInformationWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/professor-information-workspace"),
   "ProfessorInformationWorkspace",
@@ -333,6 +344,7 @@ export type ConnectedModuleId =
   | "advance-payment"
   | "statement-of-account"
   | "admission-requirements"
+  | "freshman-enrollees"
 
 export type PortalModuleComponent = ComponentType
 
@@ -393,6 +405,7 @@ export const connectedModuleIds = [
   "honors",
   "graduates",
   "professor-information",
+  "freshman-enrollees",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const availabilityPreferencesWorkspace: PortalModuleComponent = () => (
@@ -446,16 +459,19 @@ const enrollmentApprovalsWorkspace: PortalModuleComponent = () => (
   <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />
 )
 
-// Credit mapping is the Program Chair's work; Registrar Staff only approve what
-// the Chair has endorsed (ADR 0026). One module id, two workspaces.
+// Credit mapping is the Program Chair's work and the Registrar Head approves
+// what the Chair has endorsed; Registrar Staff only follow it (ADR 0026,
+// amended). One module id, three workspaces.
 function CreditMappingsModuleRouter() {
   const { session } = useAuth()
 
-  return session?.role === "program_chair" ? (
-    <ProgramChairCreditMappingsWorkspace />
-  ) : (
-    <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />
-  )
+  if (session?.role === "program_chair") {
+    return <ProgramChairCreditMappingsWorkspace />
+  }
+  if (session?.role === "registrar_head") {
+    return <RegistrarHeadCreditReviewWorkspace />
+  }
+  return <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />
 }
 const creditMappingsWorkspace: PortalModuleComponent = () => (
   <CreditMappingsModuleRouter />
@@ -529,6 +545,7 @@ export const connectedModuleRegistry: Readonly<
   graduates: GraduatesWorkspace,
   "professor-information": ProfessorInformationWorkspace,
   "irregular-enrollments": ProgramChairIrregularEnrollmentsWorkspace,
+  "freshman-enrollees": RegistrarFreshmanEnrolleesWorkspace,
 }
 
 export function isConnectedModuleId(

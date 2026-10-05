@@ -13,8 +13,17 @@ export const queueTicketResourceSchema = z
   .object({
     type: z.literal("queue_ticket"),
     id: z.number().int().positive(),
-    enrollment_id: z.number().int().positive(),
+    // null for a freshman who took a number at Admission, or a transferee whose credit
+    // mapping closed, and has no enrollment yet.
+    enrollment_id: z.number().int().positive().nullable(),
+    // The student profile, always present.
+    student_id: z.number().int().positive(),
     student_number: z.string().min(1),
+    // Lets the Cashier see that the person being served is a freshman.
+    is_freshman: z.boolean(),
+    // ...or a transferee, who also pays first. Defaults to false so a response from a
+    // server that predates the flag still parses.
+    is_transferee: z.boolean().default(false),
     ticket_number: z.string().min(1),
     queue_date: z.iso.date(),
     status: z.enum(queueTicketStatusValues),

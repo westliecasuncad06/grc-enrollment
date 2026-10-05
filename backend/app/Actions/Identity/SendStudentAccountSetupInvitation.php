@@ -39,6 +39,16 @@ final class SendStudentAccountSetupInvitation
             ]);
         }
 
+        // A freshman gets their account only after the Cashier confirms the first
+        // payment; until then Admission sends a queue number instead. Every route
+        // to this email (Admission, Super Admin, the public resend) ends here, so
+        // the gate lives here.
+        if ($profile->isFreshmanAwaitingPayment()) {
+            throw ValidationException::withMessages([
+                'student' => 'This freshman has not paid yet. The account setup email is sent after the Cashier confirms the first payment.',
+            ]);
+        }
+
         $setupCode = $this->setupCodes->issue($student);
 
         $origin = request()?->header('Origin');

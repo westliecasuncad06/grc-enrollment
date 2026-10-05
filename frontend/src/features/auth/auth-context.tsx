@@ -21,6 +21,7 @@ import type {
 } from "@/features/auth/auth-types"
 import type { AuthenticatedUser } from "@/features/schemas/auth-schema"
 import { setUnauthorizedHandler } from "@/features/services/api-client"
+import { browserFormDraftStore } from "@/features/services/form-draft-store"
 
 interface AuthProviderProps {
   children: ReactNode
@@ -149,6 +150,10 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
 
   const signOut = useCallback(() => {
     browserActingContextStore.clear()
+    // Half-typed forms hold other people's personal details: the next person at this machine
+    // starts clean. Only an explicit sign-out does this — a session that merely expired keeps
+    // them, so signing in again brings back what was being typed.
+    browserFormDraftStore.clearAll()
     // Revoke server-side, but clear locally without waiting: a failed or slow
     // revoke must never leave the user stuck in a signed-in UI. The rejection
     // is swallowed deliberately — without it a failed revoke surfaces as an

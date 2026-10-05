@@ -99,4 +99,12 @@ if (typeof window !== "undefined") {
 afterEach(() => {
   cleanup()
   resetNavigation()
+  // Form drafts live in sessionStorage and are saved when a form unmounts, so a
+  // test that typed into a form would otherwise hand its draft to the next one.
+  // After `cleanup()`, which is what triggers that last save.
+  try {
+    window.sessionStorage.clear()
+  } catch {
+    // No storage in this environment: nothing to carry over either.
+  }
 })

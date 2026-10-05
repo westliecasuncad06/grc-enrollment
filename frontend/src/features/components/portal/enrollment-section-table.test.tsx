@@ -79,11 +79,13 @@ const blocks: EnrollmentBlock[] = [
 ]
 
 function renderTable({
+  list = blocks,
   selectedBlockCode = null,
   onChoose = vi.fn(),
   onChangeSection = vi.fn(),
   disabled = false,
 }: {
+  list?: EnrollmentBlock[]
   selectedBlockCode?: string | null
   onChoose?: (blockCode: string) => void
   onChangeSection?: () => void
@@ -91,7 +93,7 @@ function renderTable({
 } = {}) {
   return render(
     <EnrollmentSectionTable
-      blocks={blocks}
+      blocks={list}
       selectedBlockCode={selectedBlockCode}
       onChoose={onChoose}
       onChangeSection={onChangeSection}
@@ -102,17 +104,19 @@ function renderTable({
 }
 
 describe("EnrollmentSectionTable", () => {
-  it("lists sections as thumbnail cards, then reveals schedule upon selection with table and calendar views", async () => {
+  it("shows one section as a thumbnail card, then reveals schedule upon selection with table and calendar views", async () => {
     const user = userEvent.setup()
     const { rerender } = renderTable()
 
     const section = screen.getByRole("article", { name: "IT301 section" })
+    // Only the first section with seats is offered; the others stay hidden
+    // until it fills up.
     expect(
-      screen.getByRole("article", { name: "IT302 section" }),
-    ).toBeInTheDocument()
+      screen.queryByRole("article", { name: "IT302 section" }),
+    ).not.toBeInTheDocument()
     expect(
-      screen.getByRole("article", { name: "IT303 section" }),
-    ).toBeInTheDocument()
+      screen.queryByRole("article", { name: "IT303 section" }),
+    ).not.toBeInTheDocument()
     // Seats still open (7 of the 40), not the section's capacity.
     expect(within(section).getByText("7 of 40 seats left")).toBeInTheDocument()
     expect(within(section).getByText("6 units")).toBeInTheDocument()
@@ -170,15 +174,70 @@ describe("EnrollmentSectionTable", () => {
     const onChoose = vi.fn()
     renderTable({ onChoose })
 
-    await user.click(screen.getByRole("button", { name: "Choose IT303" }))
+    await user.click(screen.getByRole("button", { name: "Choose IT301" }))
 
-    expect(onChoose).toHaveBeenCalledWith("IT303")
+    expect(onChoose).toHaveBeenCalledWith("IT301")
   })
 
-  it("keeps a low-scoring section selectable", () => {
-    renderTable()
+  it("keeps a section with no schedule-preference score selectable", () => {
+    renderTable({ list: [blocks[1]] })
 
     expect(screen.getByRole("button", { name: "Choose IT302" })).toBeEnabled()
+  })
+
+  it("offers the next section once the first one is full", () => {
+    const fullBlock = block({
+      block_code: "IT301",
+      seats_remaining: 0,
+      is_selectable: false,
+      reasons: [{ code: "block_full", message: "No open seats." }],
+    })
+    renderTable({ list: [fullBlock, blocks[1], blocks[2]] })
+
+    expect(
+      screen.queryByRole("article", { name: "IT301 section" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("article", { name: "IT302 section" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("article", { name: "IT303 section" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("says so when every section is full", () => {
+    const fullBlock = (code: string) =>
+      block({
+        block_code: code,
+        seats_remaining: 0,
+        is_selectable: false,
+        reasons: [{ code: "block_full", message: "No open seats." }],
+      })
+    renderTable({ list: [fullBlock("IT301"), fullBlock("IT302")] })
+
+    expect(
+      screen.getByText(/every section for your year level is full/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("article")).not.toBeInTheDocument()
+  })
+
+  it("keeps the section the student already opened on screen even after it fills up", () => {
+    const fullBlock = block({
+      block_code: "IT301",
+      seats_remaining: 0,
+      is_selectable: false,
+      reasons: [{ code: "block_full", message: "No open seats." }],
+    })
+    renderTable({
+      list: [fullBlock, blocks[1]],
+      selectedBlockCode: "IT301",
+    })
+
+    // The open schedule dialog is not pulled out from under the student; the
+    // submit step reports that the section filled up.
+    expect(
+      screen.getByRole("table", { name: "IT301 schedule" }),
+    ).toBeInTheDocument()
   })
 
   it("shows only the selected section and changes back to the full list", async () => {

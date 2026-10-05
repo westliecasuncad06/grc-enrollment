@@ -1,13 +1,16 @@
 import {
   createTransfereeCreditInputSchema,
+  creditMappingWorkspaceEnvelopeSchema,
   creditSubjectSuggestionsEnvelopeSchema,
   decideTransfereeCreditInputSchema,
   paginatedTransfereeCreditsSchema,
+  submittedTransfereeCreditsEnvelopeSchema,
   transfereeCreditActionInputSchema,
   transfereeCreditEnvelopeSchema,
   transfereeCreditFiltersSchema,
   updateTransfereeCreditInputSchema,
   type CreateTransfereeCreditInput,
+  type CreditMappingWorkspace,
   type CreditSubjectSuggestion,
   type DecideTransfereeCreditInput,
   type Paginated,
@@ -18,12 +21,14 @@ import {
 } from "@/features/schemas/transferee-credit-schema"
 import {
   ApiClientError,
+  deleteAuthenticatedJson,
   getAuthenticatedJson,
   patchAuthenticatedJson,
   postAuthenticatedJson,
 } from "@/features/services/api-client"
 
 export const TRANSFEREE_CREDITS_PATH = "/api/v1/transferee-credits"
+const STUDENT_PROFILES_PATH = "/api/v1/student-profiles"
 
 function parse<T>(
   schema: {
@@ -96,7 +101,7 @@ export async function updateTransfereeCredit(
   ).data
 }
 
-/** Endorse / decline (Program Chair) or approve / reject (Registrar Staff). */
+/** Endorse / decline (Program Chair) or approve / reject / return (Registrar Head). */
 export async function actOnTransfereeCredit(
   id: number,
   input: TransfereeCreditActionInput,
@@ -112,7 +117,7 @@ export async function actOnTransfereeCredit(
   ).data
 }
 
-/** The Registrar's decision on an endorsed credit. */
+/** The Registrar Head's decision on an endorsed credit. */
 export async function decideTransfereeCredit(
   id: number,
   input: DecideTransfereeCreditInput,
@@ -142,5 +147,76 @@ export async function getTransfereeCreditSuggestions(
       signal,
     ),
     "credit subject suggestions",
+  ).data
+}
+
+/**
+ * Sends the student's whole saved list to the Program Chair. Idempotent: a
+ * repeat sends nothing and answers an empty list.
+ */
+export async function submitTransfereeCredits(): Promise<TransfereeCredit[]> {
+  return parse(
+    submittedTransfereeCreditsEnvelopeSchema,
+    await postAuthenticatedJson(`${TRANSFEREE_CREDITS_PATH}/submit`, {}),
+    "submitted transferee credits",
+  ).data
+}
+
+/** Removes one subject from the student's own saved list (only a draft can go). */
+export async function deleteTransfereeCredit(id: number): Promise<void> {
+  await deleteAuthenticatedJson(`${TRANSFEREE_CREDITS_PATH}/${id}`)
+}
+
+/**
+ * What the Program Chair's side-by-side screen needs for one student: the
+ * suggestions for every pending credit and the subjects of the student's own
+ * curriculum. Advice only, computed on demand.
+ */
+export async function getCreditMappingWorkspace(
+  studentId: number,
+  signal?: AbortSignal,
+): Promise<CreditMappingWorkspace> {
+  return parse(
+    creditMappingWorkspaceEnvelopeSchema,
+    await getAuthenticatedJson(
+      `${STUDENT_PROFILES_PATH}/${studentId}/transferee-credits/suggestions`,
+      signal,
+    ),
+    "credit mapping workspace",
+  ).data
+}
+
+/**
+ * The Program Chair sends a whole student to the Registrar Head. All or
+ * nothing: a pending credit without a mapped subject is refused by the API.
+ * Idempotent: a repeat sends nothing and answers an empty list.
+ */
+export async function submitCreditsToRegistrarHead(
+  studentId: number,
+): Promise<TransfereeCredit[]> {
+  return parse(
+    submittedTransfereeCreditsEnvelopeSchema,
+    await postAuthenticatedJson(
+      `${STUDENT_PROFILES_PATH}/${studentId}/transferee-credits/submit-to-registrar-head`,
+      {},
+    ),
+    "credits sent to the Registrar Head",
+  ).data
+}
+
+/**
+ * The Registrar Head approves every endorsed credit of one student at once.
+ * Idempotent: a repeat approves nothing and answers an empty list.
+ */
+export async function approveAllStudentCredits(
+  studentId: number,
+): Promise<TransfereeCredit[]> {
+  return parse(
+    submittedTransfereeCreditsEnvelopeSchema,
+    await postAuthenticatedJson(
+      `${STUDENT_PROFILES_PATH}/${studentId}/transferee-credits/approve-all`,
+      {},
+    ),
+    "approved transferee credits",
   ).data
 }

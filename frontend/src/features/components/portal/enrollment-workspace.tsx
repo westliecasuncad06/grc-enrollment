@@ -16,6 +16,7 @@ import { EnrollmentCategoryExplanation } from "@/features/components/portal/enro
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
 import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-section-table"
 import { StudentAccountBalancePanel } from "@/features/components/portal/student-account-balance-panel"
+import { TransfereeQueueNumberCard } from "@/features/components/portal/transferee-queue-number-card"
 import {
   StatusStepper,
   type StatusStepperStage,
@@ -36,6 +37,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/features/components/ui/alert"
 import { StudentCreditMappingDialog } from "@/features/components/portal/student-credit-mapping-dialog"
 import { useTransfereeCreditsQuery } from "@/features/hooks/use-transferee-credits"
+import { isCreditMappingIncomplete } from "@/features/lib/credit-mapping"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -217,12 +219,62 @@ function overallStages(
   selectionLabel: string,
   enrollment: Enrollment | undefined,
   isRegular: boolean,
+  paysFirst = false,
 ): readonly StatusStepperStage[] {
   const submitted = enrollment !== undefined
   const programHeadApproved = enrollment?.program_head_decided_at != null
   const approved = enrollment?.registrar_decided_at != null
   const paid = enrollment?.payment_confirmed_at != null
   const enrolled = enrollment?.enrolled_at != null
+
+  // A freshman pays at the Cashier before the Registrar approves (2026-10-04), so the payment
+  // is the step already done and the Registrar's approval is what is still waiting.
+  if (paid && !approved) {
+    return [
+      { label: selectionLabel, done: submitted, current: !submitted },
+      { label: "Payment confirmed", done: true, current: false },
+      { label: "Registrar approved", done: false, current: true },
+      { label: "Enrolled", done: false, current: false },
+    ]
+  }
+
+  // A transferee who has not paid pays at the Cashier BEFORE the Registrar approves (ADR 0043,
+  // amended 2026-10-05): after the Program Chair, when there is one, comes the payment hold.
+  if (paysFirst) {
+    const hasRevisions = (enrollment?.revisions.length ?? 0) > 0
+    const inStudentReview = enrollment?.status === "pending_student_review"
+    const atHold = enrollment?.status === "awaiting_first_payment"
+
+    return [
+      { label: selectionLabel, done: submitted, current: !submitted },
+      {
+        label: "Submitted",
+        done: submitted,
+        current: submitted && !atHold && !programHeadApproved && !inStudentReview,
+      },
+      ...(hasRevisions
+        ? [
+            {
+              label: "Your review of the changes",
+              done: programHeadApproved,
+              current: inStudentReview,
+            },
+          ]
+        : []),
+      ...(!isRegular || programHeadApproved
+        ? [
+            {
+              label: "Program Head approved",
+              done: programHeadApproved,
+              current: false,
+            },
+          ]
+        : []),
+      { label: "Payment at the Cashier", done: false, current: atHold },
+      { label: "Registrar approved", done: false, current: false },
+      { label: "Enrolled", done: false, current: false },
+    ]
+  }
 
   if (isRegular) {
     return [
@@ -353,9 +405,16 @@ export function EnrollmentWorkspace() {
   const userId = session?.userId ?? null
 
   const studentType = studentProfileQuery.data?.student_type ?? null
+  // A freshman who paid while every section was full: the Registrar's approval completes the
+  // enrollment from that held payment, so the usual "go and claim a queue number" guidance is wrong.
+  const advancePaymentHeld = studentProfileQuery.data?.advance_payment_held === true
   const isTransferee = studentType === "transferee"
   const isReturnee = studentType === "returnee"
   const requiresCreditMapping = isTransferee || isReturnee
+  // A transferee pays at the Cashier before the Registrar approves, until their first payment
+  // is confirmed (ADR 0043, amended 2026-10-05); after that they follow the ordinary order.
+  const transfereeMustPayFirst =
+    isTransferee && studentProfileQuery.data?.freshman_payment_confirmed_at == null
 
   const transfereeCreditsQuery = useTransfereeCreditsQuery(
     { page: 1, per_page: 50 },
@@ -374,11 +433,8 @@ export function EnrollmentWorkspace() {
   const creditMappingIncomplete = useMemo(() => {
     if (!isTransferee) return false
     if (!transfereeCreditsQuery.isSuccess) return false
-    const credits = transfereeCreditsQuery.data?.data ?? []
-    if (credits.length === 0) return true
-    return credits.some(
-      (c) => c.status === "pending" || c.status === "endorsed",
-    )
+    // Saved drafts count for nothing until the student sends them (`isCreditMappingIncomplete`).
+    return isCreditMappingIncomplete(transfereeCreditsQuery.data?.data ?? [])
   }, [isTransferee, transfereeCreditsQuery.isSuccess, transfereeCreditsQuery.data])
 
   const creditMappingBlocked = useMemo(() => {
@@ -654,7 +710,7 @@ export function EnrollmentWorkspace() {
 
     if (creditMappingBlocked) {
       setFieldErrors([
-        "Credit mapping must be completed and approved by the Program Chair and Registrar before you can submit your enrollment.",
+        "Credit mapping must be completed and approved by the Program Chair and Registrar Head before you can submit your enrollment.",
       ])
       return
     }
@@ -768,9 +824,15 @@ export function EnrollmentWorkspace() {
     ) : receipt ? (
       <Alert>
         <AlertDescription>
-          {isRegularAudience
-            ? "Enrollment submitted and pending Registrar approval. Its status is shown below — once approved, please proceed in person to the school Cashier kiosk on campus to claim your queuing ticket for payment."
-            : "Enrollment submitted and pending Program Head approval, then Registrar approval. Its status is shown below — once approved, please proceed in person to the school Cashier kiosk on campus to claim your queuing ticket for payment."}
+          {advancePaymentHeld
+            ? "Enrollment submitted and pending approval. Its status is shown below — your payment is already on file, so once it is approved you are enrolled, with no queue number to claim and nothing more to pay."
+            : transfereeMustPayFirst
+              ? isRegularAudience
+                ? "Enrollment submitted. Its status is shown below — take your queue number to the school Cashier and make your first payment; once you have paid, it goes to the Registrar for approval."
+                : "Enrollment submitted and pending Program Head approval. Its status is shown below — after that, take your queue number to the school Cashier and make your first payment; the Registrar approves once you have paid."
+              : isRegularAudience
+              ? "Enrollment submitted and pending Registrar approval. Its status is shown below — once approved, please proceed in person to the school Cashier kiosk on campus to claim your queuing ticket for payment."
+              : "Enrollment submitted and pending Program Head approval, then Registrar approval. Its status is shown below — once approved, please proceed in person to the school Cashier kiosk on campus to claim your queuing ticket for payment."}
         </AlertDescription>
       </Alert>
     ) : null
@@ -860,12 +922,52 @@ export function EnrollmentWorkspace() {
               : activeEnrollment?.student_enrollment_category != null
                 ? activeEnrollment.student_enrollment_category === "regular"
                 : isRegularAudience,
+            transfereeMustPayFirst,
           )}
         />
       )}
 
       <EnrollmentAvailabilityBanner viewer={viewer} />
       <EnrollmentCategoryExplanation viewer={viewer} />
+
+      {studentProfileQuery.data?.freshman_status === "awaiting_section" &&
+        !hasActiveEnrollmentThisTerm &&
+        (studentProfileQuery.data.enrollment_category === "irregular" ? (
+          // An irregular freshman is never put in a block: nothing is full, they choose subjects.
+          <Alert>
+            <AlertCircle className="h-5 w-5" />
+            <AlertTitle>Payment received — choose your subjects</AlertTitle>
+            <AlertDescription>
+              Your payment is on file. Choose your subjects here and submit your
+              enrollment; once Registrar Staff approve it you are enrolled — you
+              do not pay again.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert>
+            <AlertCircle className="h-5 w-5" />
+            <AlertTitle>Payment received — waiting for a section</AlertTitle>
+            <AlertDescription>
+              Your payment is on file, but every section for your year level was
+              full when you paid. You will be notified as soon as a section
+              opens. Choose it here and submit your enrollment; once Registrar
+              Staff approve it you are enrolled — you do not pay again.
+            </AlertDescription>
+          </Alert>
+        ))}
+
+      {/* A transferee who paid at the Cashier before choosing their subjects: the payment is held as credit. */}
+      {isTransferee && advancePaymentHeld && !hasActiveEnrollmentThisTerm && (
+        <Alert>
+          <AlertCircle className="h-5 w-5" />
+          <AlertTitle>Payment received — choose your subjects</AlertTitle>
+          <AlertDescription>
+            Your payment is on file. Choose your subjects here and submit your
+            enrollment; once Registrar Staff approve it you are enrolled — you
+            do not pay again.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {creditMappingBlocked && (
         <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-200">
@@ -880,13 +982,13 @@ export function EnrollmentWorkspace() {
                 {studentProfileQuery.data?.student_type_label ??
                   (isReturnee ? "Returnee" : "Transferee")}
               </span>{" "}
-              student, your credit mapping must be completed and approved by the Program Chair and Registrar before you can select subjects and enroll. This ensures that completed subjects and prerequisites from your previous school are officially credited.
+              student, your credit mapping must be completed and approved by the Program Chair and Registrar Head before you can select subjects and enroll. This ensures that completed subjects and prerequisites from your previous school are officially credited.
             </p>
             <p>
-              Upload your Transcript of Records (TOR) and list the subjects you
-              took in your previous school. Your Program Chair reads the TOR,
-              maps each subject to your curriculum, and the Registrar approves it.
-              Once that is done you can enroll.
+              Upload your Transcript of Records (TOR) and add the subjects you
+              took in your previous school to your list, then submit it. Your
+              Program Chair reads the TOR, maps each subject to your curriculum,
+              and the Registrar Head approves it. Once that is done you can enroll.
             </p>
             {(isTransferee || isReturnee) && (
               <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -900,6 +1002,11 @@ export function EnrollmentWorkspace() {
             )}
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* A transferee holds a queue number from the moment their credit mapping closes, before any enrollment exists. */}
+      {isTransferee && !hasActiveEnrollmentThisTerm && (
+        <TransfereeQueueNumberCard />
       )}
 
       {/* While the confirm dialog is open its errors render inside it. */}
@@ -1040,13 +1147,27 @@ export function EnrollmentWorkspace() {
                 : "the selected term"}
               {nothingToSubmit ? null : (
                 <>
-                  . This action is recorded in the operational audit log and
-                  sent
-                  {isRegularAudience
-                    ? " for Registrar approval — once approved, please proceed in person to"
-                    : " for Program Head and then Registrar approval — once approved, please proceed in person to"}{" "}
-                  the school Cashier kiosk on campus to claim your queuing
-                  ticket for payment.
+                  . This action is recorded in the operational audit log
+                  {transfereeMustPayFirst ? (
+                    <>
+                      {isRegularAudience
+                        ? " and saved. "
+                        : " and sent to your Program Head for review. "}
+                      Then take your queue number to the school Cashier and make
+                      your first payment; the Registrar approves your enrollment
+                      once you have paid.
+                    </>
+                  ) : (
+                    <>
+                      {" "}
+                      and sent
+                      {isRegularAudience
+                        ? " for Registrar approval — once approved, please proceed in person to"
+                        : " for Program Head and then Registrar approval — once approved, please proceed in person to"}{" "}
+                      the school Cashier kiosk on campus to claim your queuing
+                      ticket for payment.
+                    </>
+                  )}
                 </>
               )}
             </AlertDialogDescription>
@@ -1159,6 +1280,7 @@ export function EnrollmentWorkspace() {
         <EnrollmentQueuePaymentPanel
           enrollment={activeEnrollment}
           defaultOpen={activeEnrollment.status !== "enrolled"}
+          advancePaymentHeld={advancePaymentHeld}
         />
       )}
 

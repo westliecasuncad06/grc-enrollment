@@ -29,15 +29,22 @@ function formatLineAmount(amount: string | null): string {
 export function EnrollmentQueuePaymentPanel({
   enrollment,
   defaultOpen = true,
+  advancePaymentHeld = false,
 }: {
   enrollment: Enrollment
   defaultOpen?: boolean
+  /**
+   * A freshman's first payment is held as credit (ADR 0043), so the Registrar's approval completes
+   * this enrollment: there is no queue ticket to claim and nothing more to pay.
+   */
+  advancePaymentHeld?: boolean
 }) {
   const isEnrolled = enrollment.status === "enrolled"
+  const paidInAdvance = advancePaymentHeld && !isEnrolled
   const { session } = useAuth()
   const queueQuery = useStudentQueueQuery({
     viewerId: session?.userId ?? null,
-    enabled: session?.role === "student" && !isEnrolled,
+    enabled: session?.role === "student" && !isEnrolled && !paidInAdvance,
   })
   // Owned here, above the collapsible card: the card unmounts its content
   // when collapsed, which used to drop the audio context and silence the call.
@@ -52,7 +59,17 @@ export function EnrollmentQueuePaymentPanel({
       badges={<Badge variant="secondary">{enrollment.status_label}</Badge>}
       defaultOpen={defaultOpen}
     >
-      {!isEnrolled && (
+      {paidInAdvance && (
+        <Alert>
+          <AlertTitle>Your payment is already on file</AlertTitle>
+          <AlertDescription>
+            You paid the Cashier before enrolling. Once Registrar Staff approve
+            this enrollment you are enrolled — there is no queue number to
+            claim and nothing more to pay for it.
+          </AlertDescription>
+        </Alert>
+      )}
+      {!isEnrolled && !paidInAdvance && (
         <>
           {queueQuery.isPending && (
             <Alert>
@@ -91,6 +108,10 @@ export function EnrollmentQueuePaymentPanel({
           <dd className="text-sm font-medium">
             {enrollment.payment_confirmed_at ? (
               new Date(enrollment.payment_confirmed_at).toLocaleString()
+            ) : paidInAdvance ? (
+              <span className="font-normal text-muted-foreground">
+                On file — applied when approved
+              </span>
             ) : (
               <span className="font-normal text-muted-foreground">Not yet</span>
             )}

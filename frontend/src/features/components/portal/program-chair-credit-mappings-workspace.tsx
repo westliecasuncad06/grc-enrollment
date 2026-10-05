@@ -4,9 +4,11 @@ import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
-import { CreditReviewDialog } from "@/features/components/portal/credit-review-dialog"
 import { DataTable } from "@/features/components/portal/data-table"
-import { Paginator } from "@/features/components/portal/paginator"
+import {
+  StudentCreditMappingPanel,
+  type CreditMappingStudent,
+} from "@/features/components/portal/student-credit-mapping-panel"
 import {
   StudentTorFiles,
   TorUploadsCard,
@@ -28,9 +30,11 @@ import { Input } from "@/features/components/ui/input"
 import { useAcademicRecordStudentSearchQuery } from "@/features/hooks/use-academic-record"
 import { useDebouncedValue } from "@/features/hooks/use-debounced-value"
 import {
+  useAllTransfereeCreditsQuery,
   useCreateTransfereeCreditMutation,
   useTransfereeCreditsQuery,
 } from "@/features/hooks/use-transferee-credits"
+import { groupCreditsByStudent } from "@/features/lib/credit-mapping"
 import type { AcademicRecordStudentLookup } from "@/features/schemas/academic-record-schema"
 import type { TransfereeCredit } from "@/features/schemas/transferee-credit-schema"
 import { isApiClientError } from "@/features/services/api-client"
@@ -49,24 +53,15 @@ function previousSubject(credit: TransfereeCredit): string {
     : credit.source_subject_title
 }
 
-function takenAt(credit: TransfereeCredit): string {
-  const when = [credit.source_school_year, credit.source_semester]
-    .filter(Boolean)
-    .join(" ")
-
-  return when
-    ? `${credit.source_institution} · ${when}`
-    : credit.source_institution
-}
-
 /**
- * Credit mapping is the Program Chair's work (ADR 0026, superseding PRD §3.8's
- * "Registrar Staff process transferee credit mappings"): a student asks, the
- * Chair maps the previous subject to a subject of the student's curriculum
- * (the system suggests, the Chair decides) and endorses it, and only then does
- * Registrar Staff approve it. A student who walks in without having asked can
- * be recorded here too. A returnee from an old curriculum is not handled here:
- * the Curriculum Editor's migration already does that.
+ * Credit mapping is the Program Chair's work (ADR 0026, amended): a student
+ * saves their subjects and sends the list, and the Chair maps each previous
+ * subject to a subject of the student's curriculum on a side-by-side screen for
+ * that one student (the system suggests, the Chair decides), then sends the
+ * whole student to the Registrar Head, who approves. A student who walks in
+ * without having asked can be recorded here too. A returnee from an old
+ * curriculum is not handled here: the Curriculum Editor's migration already
+ * does that.
  */
 /** The part of a student the "record a credit" form needs. */
 type CreditStudent = Pick<
@@ -78,90 +73,91 @@ export function ProgramChairCreditMappingsWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "program_chair"
 
-  const [pendingPage, setPendingPage] = useState(1)
-  const [reviewing, setReviewing] = useState<TransfereeCredit | null>(null)
+  // The student whose side-by-side screen is open.
+  const [reviewing, setReviewing] = useState<CreditMappingStudent | null>(null)
+  const [sentNote, setSentNote] = useState("")
   // The student whose credits the chair is about to record, picked from a TOR upload.
   const [recordFor, setRecordFor] = useState<TorStudent | null>(null)
 
-  const pendingQuery = useTransfereeCreditsQuery(
-    { status: "pending", page: pendingPage, per_page: 20 },
+  // Every page: the queue is grouped by student, and a transferee with a full
+  // transcript has dozens of rows, so one page of rows would hide students.
+  const pendingQuery = useAllTransfereeCreditsQuery(
+    { status: "pending" },
     { enabled: authorized },
   )
   const endorsedQuery = useTransfereeCreditsQuery(
     { status: "endorsed", page: 1, per_page: 20 },
     { enabled: authorized },
   )
+  const waitingStudents = groupCreditsByStudent(pendingQuery.data ?? [])
 
   return (
     <WorkspacePage
       title="Credit mappings"
-      description="Review students' requests to credit subjects from another school, map each one to a subject in their curriculum, and endorse it to the Registrar."
+      description="Review each student's list of subjects from another school, map every one side by side to a subject in their curriculum, and send the student to the Registrar Head."
       unauthorized={!authorized}
       lastUpdated={Math.max(
         pendingQuery.dataUpdatedAt,
         endorsedQuery.dataUpdatedAt,
       )}
     >
+      {sentNote && (
+        <Alert>
+          <AlertDescription>{sentNote}</AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle level={2}>Requests to review</CardTitle>
+          <CardTitle level={2}>Students waiting for review</CardTitle>
           <CardDescription>
-            Requests from students in your college that still need a mapping.
+            Students in your college whose subjects still need a mapping. Open
+            one to map all of their subjects side by side.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <AsyncBoundary
-            query={{ ...pendingQuery, data: pendingQuery.data?.data }}
+            query={{ ...pendingQuery, data: waitingStudents }}
             isEmpty={(rows) => rows.length === 0}
-            emptyMessage="No credit requests are waiting for review."
+            emptyMessage="No student is waiting for a credit review."
             loadingLabel="Loading credit requests…"
           >
-            {(credits) => (
+            {(students) => (
               <DataTable
-                caption="Credit requests to review"
-                rowKey={(credit) => credit.id}
-                rows={credits}
+                caption="Students waiting for review"
+                rowKey={(student) => student.student_id}
+                rows={students}
                 columns={[
                   {
                     key: "student",
                     header: "Student",
-                    render: (credit) => studentLabel(credit),
+                    render: (student) =>
+                      student.student_name
+                        ? `${student.student_name} (${student.student_number})`
+                        : student.student_number,
                   },
                   {
-                    key: "previous",
-                    header: "Previous subject",
-                    render: (credit) => (
-                      <span className="grid gap-0.5">
-                        <span>{previousSubject(credit)}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {takenAt(credit)}
-                        </span>
-                      </span>
-                    ),
-                  },
-                  {
-                    key: "units",
-                    header: "Units",
-                    render: (credit) => credit.credited_units,
-                  },
-                  {
-                    key: "mapped",
-                    header: "Mapped to",
-                    render: (credit) =>
-                      credit.subject_code ? (
-                        `${credit.subject_code} — ${credit.subject_title ?? ""}`
-                      ) : (
-                        <Badge variant="outline">Not mapped</Badge>
-                      ),
+                    key: "subjects",
+                    header: "Subjects",
+                    render: (student) =>
+                      `${student.credits.length} ${student.credits.length === 1 ? "subject" : "subjects"}`,
                   },
                   {
                     key: "actions",
                     header: "Actions",
-                    render: (credit) => (
+                    render: (student) => (
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() => setReviewing(credit)}
+                        aria-label={`Review ${student.student_name || student.student_number}`}
+                        onClick={() => {
+                          setSentNote("")
+                          setReviewing({
+                            student_id: student.student_id,
+                            student_name: student.student_name,
+                            student_number: student.student_number,
+                          })
+                        }}
                       >
                         Review
                       </Button>
@@ -171,28 +167,36 @@ export function ProgramChairCreditMappingsWorkspace() {
               />
             )}
           </AsyncBoundary>
-          <div className="mt-4">
-            <Paginator
-              currentPage={pendingQuery.data?.meta.current_page ?? 1}
-              lastPage={pendingQuery.data?.meta.last_page ?? 1}
-              onPageChange={setPendingPage}
-            />
-          </div>
         </CardContent>
       </Card>
 
+      {reviewing && (
+        <StudentCreditMappingPanel
+          key={reviewing.student_id}
+          student={reviewing}
+          onClose={() => setReviewing(null)}
+          onSent={(count) => {
+            setSentNote(
+              `Sent ${count} ${count === 1 ? "credit" : "credits"} of ${reviewing.student_name || reviewing.student_number} to the Registrar Head.`,
+            )
+            setReviewing(null)
+          }}
+        />
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle level={2}>Waiting for the Registrar</CardTitle>
+          <CardTitle level={2}>Waiting for the Registrar Head</CardTitle>
           <CardDescription>
-            Credits you have endorsed. Registrar Staff approve or reject them.
+            Credits you have sent. The Registrar Head approves, returns or
+            rejects them.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <AsyncBoundary
             query={{ ...endorsedQuery, data: endorsedQuery.data?.data }}
             isEmpty={(rows) => rows.length === 0}
-            emptyMessage="Nothing is waiting for the Registrar."
+            emptyMessage="Nothing is waiting for the Registrar Head."
             loadingLabel="Loading endorsed credits…"
           >
             {(credits) => (
@@ -237,14 +241,6 @@ export function ProgramChairCreditMappingsWorkspace() {
         key={recordFor?.student_id ?? "search"}
         presetStudent={recordFor}
       />
-
-      {reviewing && (
-        <CreditReviewDialog
-          key={reviewing.id}
-          credit={reviewing}
-          onClose={() => setReviewing(null)}
-        />
-      )}
     </WorkspacePage>
   )
 }
@@ -419,7 +415,9 @@ function RecordCreditCard({
               </Button>
             </div>
           )}
-          {student !== null && <StudentTorFiles studentId={student.student_id} />}
+          {student !== null && (
+            <StudentTorFiles studentId={student.student_id} />
+          )}
           <Field>
             <FieldLabel htmlFor="credit-source-institution">
               Previous school

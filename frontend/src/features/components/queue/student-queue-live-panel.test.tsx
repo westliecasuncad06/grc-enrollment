@@ -300,6 +300,126 @@ describe("StudentQueueLivePanel", () => {
     expect(studentContainer).toBeEmptyDOMElement()
   })
 
+  it("tells a freshman who has not paid yet to wait for their number at the Cashier, not to claim at the kiosk", () => {
+    render(
+      <StudentQueueLivePanel
+        queue={{ ...queueView, stage: "freshman_awaiting_payment" }}
+      />,
+    )
+
+    expect(screen.getAllByText("Q007").length).toBeGreaterThan(0)
+    expect(screen.getByText("Q005")).toBeInTheDocument()
+    expect(
+      screen.getByText(/go to the Cashier and wait for your number/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /account is set up after the Cashier confirms your payment/i,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/claim your queuing ticket/i),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("Not issued")).not.toBeInTheDocument()
+  })
+
+  it("tells a freshman whose payment is confirmed to look for the account setup email", () => {
+    render(
+      <StudentQueueLivePanel
+        queue={{
+          ...queueView,
+          stage: "freshman_paid",
+          ticket: {
+            ...queueView.ticket,
+            status: "served",
+            status_label: "Served",
+            position: null,
+          },
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByText(/payment has been confirmed.*account setup email/i),
+    ).toBeInTheDocument()
+  })
+
+  it("tells a transferee who has not paid to choose their subjects and wait for their number at the Cashier", () => {
+    render(
+      <StudentQueueLivePanel
+        queue={{ ...queueView, stage: "transferee_awaiting_payment" }}
+      />,
+    )
+
+    expect(screen.getAllByText("Q007").length).toBeGreaterThan(0)
+    expect(
+      screen.getByText(/choose your subjects.*wait for your number/i),
+    ).toBeInTheDocument()
+    // A transferee already has an account: no freshman wording about setting one up.
+    expect(
+      screen.queryByText(/account is set up after/i),
+    ).not.toBeInTheDocument()
+  })
+
+  it("tells a signed-in transferee whose subjects are saved to pay at the Cashier, after which the Registrar approves", () => {
+    render(
+      <StudentQueueLivePanel
+        queue={{ ...queueView, stage: "awaiting_first_payment" }}
+      />,
+    )
+
+    expect(
+      screen.getByText(/subjects are saved.*Cashier.*Registrar/i),
+    ).toBeInTheDocument()
+  })
+
+  it("tells a transferee whose payment is confirmed that the Registrar approves next, not to look for a setup email", () => {
+    render(
+      <StudentQueueLivePanel
+        queue={{
+          ...queueView,
+          stage: "transferee_paid",
+          ticket: {
+            ...queueView.ticket,
+            status: "served",
+            status_label: "Served",
+            position: null,
+          },
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByText(/payment has been confirmed.*Registrar approval/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/account setup email/i)).not.toBeInTheDocument()
+  })
+
+  it("tells a transferee the Registrar has approved them once they are enrolled, instead of still waiting for approval", () => {
+    render(
+      <StudentQueueLivePanel
+        queue={{
+          ...queueView,
+          stage: "transferee_enrolled",
+          ticket: {
+            ...queueView.ticket,
+            status: "served",
+            status_label: "Served",
+            position: null,
+          },
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByText(/you are enrolled.*no longer need this queue number/i),
+    ).toBeInTheDocument()
+    // The link outlives the payment: it must not keep telling an enrolled student to wait for approval.
+    expect(
+      screen.queryByText(/waits for Registrar approval/i),
+    ).not.toBeInTheDocument()
+  })
+
   it("offers a sound toggle, an iOS vibration limitation, and a cut-off notice", async () => {
     const user = userEvent.setup()
     render(

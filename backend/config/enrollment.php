@@ -80,6 +80,13 @@ return [
         'stuck_threshold_days' => env('DASHBOARD_STUCK_THRESHOLD_DAYS'),
     ],
 
+    // ADR 0043: a freshman pays the Cashier first. The minimum is the same PHP 1,000
+    // that every first enrollment payment already has (`ConfirmPaymentRequest`); a
+    // freshman needs no promissory note. Environment-overridable, like every value here.
+    'freshman_payment' => [
+        'minimum_amount' => env('ENROLLMENT_FRESHMAN_MINIMUM_PAYMENT', '1000.00'),
+    ],
+
     // Phase: queue kiosk claim/carry-over/cut-off. The physical
     // front-desk's "today" for queue_tickets.queue_date and the cycle
     // drain/reset rule only — deliberately NOT config('app.timezone')

@@ -74,12 +74,21 @@ final readonly class ConfirmPayment
     ) {}
 
     /**
+     * `$freshmanFirstPayment` (ADR 0043) lifts the promissory-note requirement for a partial
+     * payment: a freshman's first payment is at least the minimum and needs no note. Only the
+     * freshman flows pass it; the Cashier's ordinary confirmation never does.
+     *
      * @param  array<string, mixed>  $validated
      * @return array{enrollment: Enrollment, created: bool}
      */
-    public function execute(Enrollment $enrollment, array $validated, User $actor, AuditRequestContext $context): array
-    {
-        return DB::transaction(function () use ($enrollment, $validated, $actor, $context): array {
+    public function execute(
+        Enrollment $enrollment,
+        array $validated,
+        User $actor,
+        AuditRequestContext $context,
+        bool $freshmanFirstPayment = false,
+    ): array {
+        return DB::transaction(function () use ($enrollment, $validated, $actor, $context, $freshmanFirstPayment): array {
             $lockedEnrollment = Enrollment::query()
                 ->whereKey($enrollment->id)
                 ->lockForUpdate()
@@ -113,7 +122,7 @@ final readonly class ConfirmPayment
             $amount = $validated['amount'] ?? $assessment?->total_amount;
             $promissoryNoteOnFile = (bool) ($validated['promissory_note_on_file'] ?? false);
 
-            if ($amount !== null && $assessment?->total_amount !== null && bccomp((string) $amount, (string) $assessment->total_amount, 2) === -1 && ! $promissoryNoteOnFile) {
+            if (! $freshmanFirstPayment && $amount !== null && $assessment?->total_amount !== null && bccomp((string) $amount, (string) $assessment->total_amount, 2) === -1 && ! $promissoryNoteOnFile) {
                 throw ValidationException::withMessages([
                     'promissory_note_on_file' => 'A promissory note on file is required for partial payments.',
                 ]);
@@ -128,9 +137,11 @@ final readonly class ConfirmPayment
                 'confirmed_at' => $confirmedAt,
             ]);
 
+            // A freshman's Cashier payment stamps this before the Registrar approves (ADR 0043,
+            // 2026-10-04), so keep that moment rather than the later completion.
             $lockedEnrollment->update([
                 'status' => EnrollmentStatus::Enrolled,
-                'payment_confirmed_at' => $confirmedAt,
+                'payment_confirmed_at' => $lockedEnrollment->payment_confirmed_at ?? $confirmedAt,
                 'enrolled_at' => $confirmedAt,
             ]);
             $lockedEnrollment->refresh();

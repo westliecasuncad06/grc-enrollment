@@ -36,6 +36,7 @@ final readonly class ListStuckEnrollments
         EnrollmentStatus::Draft,
         EnrollmentStatus::PendingProgramHeadApproval,
         EnrollmentStatus::PendingStudentReview,
+        EnrollmentStatus::AwaitingFirstPayment,
         EnrollmentStatus::PendingRegistrarApproval,
         EnrollmentStatus::PendingPayment,
     ];
@@ -57,7 +58,9 @@ final readonly class ListStuckEnrollments
             ->map(function (Enrollment $enrollment) use ($now, $thresholdDays): StuckEnrollmentRow {
                 $statedSince = match ($enrollment->status) {
                     EnrollmentStatus::PendingPayment => $enrollment->registrar_decided_at,
-                    EnrollmentStatus::PendingRegistrarApproval => $enrollment->program_head_decided_at ?? $enrollment->submitted_at,
+                    EnrollmentStatus::PendingRegistrarApproval,
+                    // Waiting on the student's first payment since the review finished (or since they submitted).
+                    EnrollmentStatus::AwaitingFirstPayment => $enrollment->program_head_decided_at ?? $enrollment->submitted_at,
                     // Waiting on the student since the Program Chair last sent changes (the row was last touched then).
                     EnrollmentStatus::PendingStudentReview => $enrollment->updated_at,
                     EnrollmentStatus::PendingProgramHeadApproval, EnrollmentStatus::Draft => $enrollment->submitted_at,

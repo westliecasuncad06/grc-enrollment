@@ -6,6 +6,7 @@ use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Enrollment\QueueLinkOutbox;
 use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Models\Notification;
@@ -13,6 +14,7 @@ use App\Models\TransfereeCredit;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use App\Support\Notifications\NotificationRecorder;
+use App\Support\Notifications\ProgramChairRecipients;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -24,12 +26,15 @@ use Illuminate\Validation\ValidationException;
  *   - No `action`: the Program Chair corrects or maps a credit (`subject_id`,
  *     units, the source details). Only while it is `pending`.
  *   - `endorse` (Program Chair, `pending` → `endorsed`): needs a mapped
- *     subject, which the same request may set. Tells Registrar Staff.
+ *     subject, which the same request may set. Tells the Registrar Head.
  *   - `decline` (Program Chair, `pending` → `rejected`): needs a reason.
  *     Tells the Student.
- *   - `approve` / `reject` (Registrar Staff, `endorsed` → `approved` /
- *     `rejected`): `reject` needs a reason. Tells the Student. Registrar Staff
- *     never see a credit before it is endorsed and never edit one.
+ *   - `approve` / `reject` (Registrar Head, `endorsed` → `approved` /
+ *     `rejected`): `reject` needs a reason. Tells the Student. The Registrar
+ *     Head never sees a credit before it is endorsed and never edits one.
+ *   - `return` (Registrar Head, `endorsed` → `pending`): needs a reason. Sends
+ *     the credit back to the Program Chair, who may change the mapping and
+ *     endorse it again. Tells the Program Chairs of the student's college.
  *
  * Who may do which is `TransfereeCreditPolicy`; the request class checks the
  * status and the reason; this class is the defence in depth under the lock. An
@@ -44,6 +49,7 @@ final readonly class UpdateTransfereeCredit
         'decline' => AuditAction::TRANSFEREE_CREDIT_REJECTED,
         'approve' => AuditAction::TRANSFEREE_CREDIT_APPROVED,
         'reject' => AuditAction::TRANSFEREE_CREDIT_REJECTED,
+        'return' => AuditAction::TRANSFEREE_CREDIT_RETURNED,
     ];
 
     /** @var array<string, TransfereeCreditStatus> */
@@ -52,6 +58,7 @@ final readonly class UpdateTransfereeCredit
         'decline' => TransfereeCreditStatus::Rejected,
         'approve' => TransfereeCreditStatus::Approved,
         'reject' => TransfereeCreditStatus::Rejected,
+        'return' => TransfereeCreditStatus::Pending,
     ];
 
     /** @var array<string, TransfereeCreditStatus> */
@@ -60,22 +67,28 @@ final readonly class UpdateTransfereeCredit
         'decline' => TransfereeCreditStatus::Pending,
         'approve' => TransfereeCreditStatus::Endorsed,
         'reject' => TransfereeCreditStatus::Endorsed,
+        'return' => TransfereeCreditStatus::Endorsed,
     ];
 
     public function __construct(
         private AuditRecorder $auditRecorder,
         private NotificationRecorder $notificationRecorder,
+        private IssueTransfereeQueueTicket $issueQueueTicket,
+        private ReclassifyAfterCreditApproval $reclassifyAfterApproval,
     ) {}
 
     /**
+     * `$outbox` collects the queue-number link a closing step issued, for the caller to email
+     * after commit (`SendQueueLinks`); a caller that does not send emails may leave it out.
+     *
      * @param  array<string, mixed>  $validated
      */
-    public function execute(TransfereeCredit $credit, array $validated, User $actor, AuditRequestContext $context): TransfereeCredit
+    public function execute(TransfereeCredit $credit, array $validated, User $actor, AuditRequestContext $context, ?QueueLinkOutbox $outbox = null): TransfereeCredit
     {
         $action = $validated['action'] ?? null;
 
         if (is_string($action) && isset(self::TARGET_STATUS[$action])) {
-            return $this->transition($credit, $action, $validated, $actor, $context);
+            return $this->transition($credit, $action, $validated, $actor, $context, $outbox);
         }
 
         return $this->updateContent($credit, $validated, $actor, $context);
@@ -84,11 +97,11 @@ final readonly class UpdateTransfereeCredit
     /**
      * @param  array<string, mixed>  $validated
      */
-    private function transition(TransfereeCredit $credit, string $action, array $validated, User $actor, AuditRequestContext $context): TransfereeCredit
+    private function transition(TransfereeCredit $credit, string $action, array $validated, User $actor, AuditRequestContext $context, ?QueueLinkOutbox $outbox): TransfereeCredit
     {
-        return DB::transaction(function () use ($credit, $action, $validated, $actor, $context): TransfereeCredit {
+        return DB::transaction(function () use ($credit, $action, $validated, $actor, $context, $outbox): TransfereeCredit {
             $lockedCredit = TransfereeCredit::query()->whereKey($credit->id)->lockForUpdate()->firstOrFail();
-            $lockedCredit->load('student');
+            $lockedCredit->load('student.program');
             $required = self::REQUIRED_CURRENT_STATUS[$action];
 
             if ($lockedCredit->status !== $required) {
@@ -112,7 +125,22 @@ final readonly class UpdateTransfereeCredit
                     ]);
                 }
 
-                $lockedCredit->fill(['endorsed_by' => $actor->id, 'endorsed_at' => now()]);
+                // A fresh endorsement answers any earlier return.
+                $lockedCredit->fill([
+                    'endorsed_by' => $actor->id,
+                    'endorsed_at' => now(),
+                    'returned_by' => null,
+                    'returned_at' => null,
+                    'return_reason' => null,
+                ]);
+            } elseif ($action === 'return') {
+                $lockedCredit->fill([
+                    'endorsed_by' => null,
+                    'endorsed_at' => null,
+                    'returned_by' => $actor->id,
+                    'returned_at' => now(),
+                    'return_reason' => $reason,
+                ]);
             } else {
                 $lockedCredit->fill(['processed_by' => $actor->id, 'processed_at' => now()]);
             }
@@ -128,11 +156,21 @@ final readonly class UpdateTransfereeCredit
                 $lockedCredit->id,
                 $beforeValues,
                 self::snapshot($lockedCredit),
-                in_array($action, ['decline', 'reject'], true) ? $reason : null,
+                in_array($action, ['decline', 'reject', 'return'], true) ? $reason : null,
                 $context,
             );
 
             $this->notify($lockedCredit, $action, $reason);
+
+            // An approved credit counts as completed, so the student's Regular/Irregular category may change.
+            if ($action === 'approve') {
+                $this->reclassifyAfterApproval->execute($lockedCredit->student, $actor, $context);
+            }
+
+            // A decision that closes the student's last open row gives them their queue number.
+            if (in_array($action, ['approve', 'reject', 'decline'], true)) {
+                $this->issueQueueTicket->whenMappingCloses($lockedCredit->student, $actor, $context, $outbox);
+            }
 
             return $lockedCredit->refresh()->load(['student.user', 'subject']);
         });
@@ -146,7 +184,12 @@ final readonly class UpdateTransfereeCredit
         return DB::transaction(function () use ($credit, $validated, $actor, $context): TransfereeCredit {
             $lockedCredit = TransfereeCredit::query()->whereKey($credit->id)->lockForUpdate()->firstOrFail();
 
-            if ($lockedCredit->status !== TransfereeCreditStatus::Pending) {
+            // A Student corrects only their own draft; the Program Chair corrects a pending credit.
+            $editable = $actor->role === UserRole::Student
+                ? TransfereeCreditStatus::Draft
+                : TransfereeCreditStatus::Pending;
+
+            if ($lockedCredit->status !== $editable) {
                 throw ValidationException::withMessages([
                     'source_institution' => "This transferee credit is '{$lockedCredit->status->value}' and can no longer be edited directly.",
                 ]);
@@ -205,17 +248,29 @@ final readonly class UpdateTransfereeCredit
     }
 
     /**
-     * The Student hears about a decision on their own request; Registrar
-     * Staff hear that a credit is waiting for them.
+     * The Student hears about a decision on their own request; the Registrar
+     * Head hears that a credit is waiting for them; the Program Chairs hear that
+     * the Head sent a credit back.
      */
     private function notify(TransfereeCredit $credit, string $action, ?string $reason): void
     {
         if ($action === 'endorse') {
             $this->notificationRecorder->recordManyForRole(
-                UserRole::RegistrarStaff,
+                UserRole::RegistrarHead,
                 NotificationType::TransfereeCreditEndorsed,
                 "A transferee credit for student {$credit->student->student_number} ".
                 "({$credit->source_subject_title}) was endorsed by the Program Head and awaits your approval.",
+            );
+
+            return;
+        }
+
+        if ($action === 'return') {
+            $this->notificationRecorder->recordMany(
+                ProgramChairRecipients::forStudent($credit->student),
+                NotificationType::TransfereeCreditReturned,
+                "The Registrar Head returned a credit for student {$credit->student->student_number} ".
+                "({$credit->source_subject_title}). Reason: {$reason}",
             );
 
             return;

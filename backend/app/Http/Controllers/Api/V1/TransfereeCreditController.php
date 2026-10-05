@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Academic\CreateTransfereeCredit;
+use App\Actions\Academic\DeleteTransfereeCreditDraft;
 use App\Actions\Academic\ListTransfereeCredits;
+use App\Actions\Academic\SubmitTransfereeCredits;
 use App\Actions\Academic\SuggestCreditSubjects;
 use App\Actions\Academic\UpdateTransfereeCredit;
+use App\Actions\Enrollment\SendQueueLinks;
+use App\Domain\Enrollment\QueueLinkOutbox;
+use App\Domain\Identity\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\TransfereeCredit\IndexTransfereeCreditRequest;
 use App\Http\Requests\Api\V1\TransfereeCredit\StoreTransfereeCreditRequest;
@@ -23,15 +28,17 @@ final class TransfereeCreditController extends Controller
 {
     /**
      * Which Policy ability governs a PATCH, resolved from the request's
-     * `action` field. Registrar Staff decide (`approve`, `reject`); anything
-     * else — a content edit, `endorse`, `decline` — is the Program Chair's
-     * `update`. Same shape as `AcademicGradeController::ABILITY_FOR_ACTION`.
+     * `action` field. The Registrar Head decides (`approve`, `reject`,
+     * `return`); anything else — a content edit, `endorse`, `decline` — is the
+     * Program Chair's `update` (or, for a Student, `editDraft`). Same shape as
+     * `AcademicGradeController::ABILITY_FOR_ACTION`.
      *
      * @var array<string, string>
      */
     private const ABILITY_FOR_ACTION = [
         'approve' => 'decide',
         'reject' => 'decide',
+        'return' => 'decide',
     ];
 
     /**
@@ -72,12 +79,32 @@ final class TransfereeCreditController extends Controller
     }
 
     /**
+     * A Student sends every credit they have saved to the Program Chair. A
+     * repeat finds nothing to send and answers 200 with an empty list.
+     *
+     * @throws AuthenticationException
+     */
+    public function submit(
+        Request $request,
+        SubmitTransfereeCredits $submitter,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('submit', TransfereeCredit::class);
+
+        $credits = $submitter->execute($actor, $contextFactory->fromRequest($request));
+
+        return $this->cachePrivateResponse(TransfereeCreditResource::collection($credits)->response($request));
+    }
+
+    /**
      * @throws AuthenticationException
      */
     public function update(
         UpdateTransfereeCreditRequest $request,
         TransfereeCredit $transfereeCredit,
         UpdateTransfereeCredit $updater,
+        SendQueueLinks $sendQueueLinks,
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $actor = $this->authenticatedUser($request);
@@ -85,14 +112,39 @@ final class TransfereeCreditController extends Controller
         $action = $request->validated('action');
         $ability = is_string($action) && isset(self::ABILITY_FOR_ACTION[$action])
             ? self::ABILITY_FOR_ACTION[$action]
-            : 'update';
+            : ($actor->role === UserRole::Student ? 'editDraft' : 'update');
 
         $transfereeCredit->loadMissing('student.program');
-        $this->authorize($ability, $ability === 'update' ? $transfereeCredit : TransfereeCredit::class);
+        $this->authorize($ability, $ability === 'decide' ? TransfereeCredit::class : $transfereeCredit);
 
-        $credit = $updater->execute($transfereeCredit, $request->validated(), $actor, $contextFactory->fromRequest($request));
+        $context = $contextFactory->fromRequest($request);
+        $outbox = new QueueLinkOutbox;
+        $credit = $updater->execute($transfereeCredit, $request->validated(), $actor, $context, $outbox);
+
+        // After commit: a decision that closed the student's last open row issued their queue number.
+        $sendQueueLinks->handle($outbox, $actor, $context);
 
         return $this->cachePrivateResponse(TransfereeCreditResource::make($credit)->response($request));
+    }
+
+    /**
+     * A Student removes a subject from their own saved list. Only a draft can
+     * be removed.
+     *
+     * @throws AuthenticationException
+     */
+    public function destroy(
+        Request $request,
+        TransfereeCredit $transfereeCredit,
+        DeleteTransfereeCreditDraft $deleter,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('deleteDraft', $transfereeCredit);
+
+        $deleter->execute($transfereeCredit, $actor, $contextFactory->fromRequest($request));
+
+        return $this->cachePrivateResponse(new JsonResponse(null, 204));
     }
 
     /**

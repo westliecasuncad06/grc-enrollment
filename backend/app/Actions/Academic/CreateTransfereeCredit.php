@@ -7,40 +7,37 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\UserRole;
-use App\Domain\Identity\UserStatus;
-use App\Domain\Notifications\NotificationType;
 use App\Models\StudentProfile;
 use App\Models\TransfereeCredit;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
-use App\Support\Notifications\NotificationRecorder;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Records one credit request: asked for by the Student for themselves, or
- * recorded by a Program Chair for a student in their college (ADR 0026). It
- * always starts `pending` — recording grants nothing; the Program Chair maps
- * and endorses it and Registrar Staff approve it (`UpdateTransfereeCredit`).
+ * Records one credit: saved by the Student for themselves, or recorded by a
+ * Program Chair for a student in their college (ADR 0026, amended).
+ *
+ * A Student's credit starts as a `draft`: it sits in their own list, grants
+ * nothing, is seen by nobody else and notifies nobody until they send the whole
+ * list (`SubmitTransfereeCredits`). A Program Chair's credit starts `pending`
+ * at once, because the Chair is already the one who maps it. Neither is ever
+ * mapped to a subject here for a Student: `subject_id` is the Program Chair's
+ * decision (`SuggestCreditSubjects` only advises).
  *
  * Who the credit is for is decided here, not by the payload: a Student's
  * `student_id` is pinned to their own profile and anything they send is
  * ignored, and a Program Chair may only name a student in their own college.
- * `subject_id` is never guessed — the mapping is the Program Chair's decision
- * (`SuggestCreditSubjects` only advises).
  *
- * Asking twice is safe: an identical request (same student, school, subject
- * title and code) that is still open returns the existing row instead of a
- * duplicate.
+ * Saving twice is safe: an identical request (same student, school, subject
+ * title and code) that is still in the student's list or in the workflow
+ * returns the existing row instead of a duplicate. A Program Chair's request is
+ * compared only with rows the Chair can see (not the student's drafts).
  */
 final readonly class CreateTransfereeCredit
 {
-    public function __construct(
-        private AuditRecorder $auditRecorder,
-        private NotificationRecorder $notificationRecorder,
-    ) {}
+    public function __construct(private AuditRecorder $auditRecorder) {}
 
     /**
      * @param  array<string, mixed>  $validated
@@ -50,15 +47,23 @@ final readonly class CreateTransfereeCredit
     public function execute(array $validated, User $actor, AuditRequestContext $context): TransfereeCredit
     {
         $student = $this->resolveStudent($validated, $actor);
+        $isStudent = $actor->role === UserRole::Student;
 
         $institution = trim((string) $validated['source_institution']);
         $title = trim((string) $validated['source_subject_title']);
         $code = trim((string) ($validated['source_subject_code'] ?? ''));
 
-        return DB::transaction(function () use ($validated, $actor, $context, $student, $institution, $title, $code): TransfereeCredit {
+        $reusableStatuses = array_map(
+            static fn (TransfereeCreditStatus $status): string => $status->value,
+            $isStudent
+                ? [TransfereeCreditStatus::Draft, TransfereeCreditStatus::Pending, TransfereeCreditStatus::Endorsed]
+                : [TransfereeCreditStatus::Pending, TransfereeCreditStatus::Endorsed],
+        );
+
+        return DB::transaction(function () use ($validated, $actor, $context, $student, $isStudent, $institution, $title, $code, $reusableStatuses): TransfereeCredit {
             $existing = TransfereeCredit::query()
                 ->where('student_id', $student->id)
-                ->whereIn('status', [TransfereeCreditStatus::Pending->value, TransfereeCreditStatus::Endorsed->value])
+                ->whereIn('status', $reusableStatuses)
                 ->whereRaw('LOWER(TRIM(source_institution)) = ?', [mb_strtolower($institution)])
                 ->whereRaw('LOWER(TRIM(source_subject_title)) = ?', [mb_strtolower($title)])
                 ->whereRaw('LOWER(TRIM(source_subject_code)) = ?', [mb_strtolower($code)])
@@ -78,9 +83,9 @@ final readonly class CreateTransfereeCredit
                 'credited_units' => $validated['credited_units'],
                 'source_school_year' => $validated['source_school_year'] ?? null,
                 'source_semester' => $validated['source_semester'] ?? null,
-                'subject_id' => $actor->role === UserRole::Student ? null : ($validated['subject_id'] ?? null),
+                'subject_id' => $isStudent ? null : ($validated['subject_id'] ?? null),
                 'requested_by' => $actor->id,
-                'status' => TransfereeCreditStatus::Pending,
+                'status' => $isStudent ? TransfereeCreditStatus::Draft : TransfereeCreditStatus::Pending,
             ]);
 
             $this->auditRecorder->record(
@@ -98,10 +103,6 @@ final readonly class CreateTransfereeCredit
                 null,
                 $context,
             );
-
-            if ($actor->role === UserRole::Student) {
-                $this->notifyProgramChairs($student, $credit);
-            }
 
             return $credit->refresh()->load(['student.user', 'subject']);
         });
@@ -140,35 +141,5 @@ final readonly class CreateTransfereeCredit
         }
 
         return $student;
-    }
-
-    /**
-     * The Program Chairs who can see this credit: those of the student's
-     * college, and any chair without an assigned college (who is unscoped).
-     */
-    private function notifyProgramChairs(StudentProfile $student, TransfereeCredit $credit): void
-    {
-        $college = $student->program->college;
-
-        $chairIds = User::query()
-            ->where('role', UserRole::ProgramChair->value)
-            ->where('status', UserStatus::Active->value)
-            ->where(function (Builder $query) use ($college): void {
-                $query->whereNull('college');
-
-                if ($college !== null) {
-                    $query->orWhere('college', $college->value);
-                }
-            })
-            ->pluck('id')
-            ->map(static fn (mixed $id): int => (int) $id)
-            ->all();
-
-        $this->notificationRecorder->recordMany(
-            array_values($chairIds),
-            NotificationType::TransfereeCreditRequested,
-            "Student {$student->student_number} asked for a credit mapping: ".
-            "{$credit->source_subject_title} from {$credit->source_institution}.",
-        );
     }
 }

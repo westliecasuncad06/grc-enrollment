@@ -37,9 +37,13 @@ final readonly class BuildEnrollmentBlockPool
     ) {}
 
     /**
+     * `$ignoreEnrollmentWindow` is for a freshman paying at the Cashier (ADR 0043): the Cashier
+     * is the gate there, so a closed audience window must not make every block look
+     * `window_closed`. Every other reason (seats, schedule, prerequisites) still applies.
+     *
      * @return list<EnrollmentBlock>
      */
-    public function execute(StudentProfile $student, AcademicTerm $term): array
+    public function execute(StudentProfile $student, AcademicTerm $term, bool $ignoreEnrollmentWindow = false): array
     {
         $context = $this->accessContext->execute($term, $student);
 
@@ -71,7 +75,7 @@ final readonly class BuildEnrollmentBlockPool
                 $student,
                 $blockCode,
                 array_values($blockSections->all()),
-                $context->viewerWindowIsOpen,
+                $context->viewerWindowIsOpen || $ignoreEnrollmentWindow,
                 $alreadyEnrolled,
                 $preference,
             ));

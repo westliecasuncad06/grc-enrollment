@@ -22,6 +22,7 @@ final readonly class BuildEnrollmentStatusOverview
         EnrollmentStatus::Draft,
         EnrollmentStatus::PendingProgramHeadApproval,
         EnrollmentStatus::PendingStudentReview,
+        EnrollmentStatus::AwaitingFirstPayment,
         EnrollmentStatus::PendingRegistrarApproval,
         EnrollmentStatus::PendingPayment,
         EnrollmentStatus::Enrolled,

@@ -6,6 +6,7 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentCategory;
+use App\Domain\Enrollment\EnrollmentRouting;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Enrollment\OverloadEvaluator;
@@ -65,6 +66,10 @@ final readonly class SubmitEnrollment
     ) {}
 
     /**
+     * `$notify` is false only for a freshman's pay-first enrollment (ADR 0043), which is
+     * approved and paid in the same transaction: nobody is waiting on an approval, so
+     * "pending Registrar approval" notices would be wrong. The audit entry is always written.
+     *
      * @param  list<int>  $sectionIds
      */
     public function execute(
@@ -74,8 +79,15 @@ final readonly class SubmitEnrollment
         User $actor,
         AuditRequestContext $context,
         ?string $blockCode = null,
+        bool $notify = true,
     ): Enrollment {
-        return DB::transaction(function () use ($student, $term, $sectionIds, $actor, $context, $blockCode): Enrollment {
+        return DB::transaction(function () use ($student, $term, $sectionIds, $actor, $context, $blockCode, $notify): Enrollment {
+            // Lock order is PROFILE, then sections: the order `ConfirmFreshmanPayment` and
+            // `TransitionEnrollment` take. The routing below must read the payment status from the
+            // locked row, not from the profile the request loaded earlier: a first payment confirmed
+            // in between would otherwise leave a paid transferee's new enrollment stuck at the hold.
+            $lockedStudent = StudentProfile::query()->whereKey($student->id)->lockForUpdate()->firstOrFail();
+
             // `orderBy('id')` gives every concurrent submission the same
             // lock order; without it, two submissions sharing a subject
             // could lock in opposite orders and deadlock instead of one
@@ -134,12 +146,17 @@ final readonly class SubmitEnrollment
             $needsProgramHead = ! ($isBlockSubmission || $isRegularCategory)
                 || $overloadVerdict === OverloadVerdict::RequiresApproval;
 
+            // A transferee who has not paid waits at the payment hold instead of
+            // joining the Registrar's queue (ADR 0043, amended 2026-10-05).
+            $afterReview = EnrollmentRouting::statusAfterReview($lockedStudent);
+            $awaitsPayment = $afterReview === EnrollmentStatus::AwaitingFirstPayment;
+
             $enrollment = Enrollment::create([
                 'student_id' => $student->id,
                 'academic_term_id' => $term->id,
                 'status' => $needsProgramHead
                     ? EnrollmentStatus::PendingProgramHeadApproval
-                    : EnrollmentStatus::PendingRegistrarApproval,
+                    : $afterReview,
                 'total_units' => $totalUnits,
                 'requires_overload_approval' => $overloadVerdict === OverloadVerdict::RequiresApproval,
                 'submitted_at' => now(),
@@ -173,7 +190,20 @@ final readonly class SubmitEnrollment
                 $context,
             );
 
-            if (! $needsProgramHead) {
+            if (! $notify) {
+                // Notices suppressed: see the docblock above.
+            } elseif (! $needsProgramHead && $awaitsPayment) {
+                // The Registrar is not told: nothing reaches them before the first payment.
+                Notification::create([
+                    'user_id' => $actor->id,
+                    'type' => NotificationType::EnrollmentSubmitted,
+                    'message' => sprintf(
+                        'Your enrollment for %s %s has been saved. Take your queue number to the school Cashier and make your first payment; once you have paid, it goes to the Registrar for approval.',
+                        $term->school_year,
+                        $term->semester,
+                    ),
+                ]);
+            } elseif (! $needsProgramHead) {
                 $this->notificationRecorder->recordManyForRoles(
                     [UserRole::RegistrarStaff, UserRole::RegistrarHead],
                     NotificationType::EnrollmentSubmitted,
@@ -198,11 +228,17 @@ final readonly class SubmitEnrollment
                 Notification::create([
                     'user_id' => $actor->id,
                     'type' => NotificationType::EnrollmentSubmitted,
-                    'message' => sprintf(
-                        'Your enrollment for %s %s has been submitted and is pending Program Head schedule review, then Registrar approval. Once approved, please proceed to the school Cashier kiosk on campus to claim your queuing ticket.',
-                        $term->school_year,
-                        $term->semester,
-                    ),
+                    'message' => $awaitsPayment
+                        ? sprintf(
+                            'Your enrollment for %s %s has been submitted and is pending Program Head schedule review. After that, take your queue number to the school Cashier and make your first payment; the Registrar approves once you have paid.',
+                            $term->school_year,
+                            $term->semester,
+                        )
+                        : sprintf(
+                            'Your enrollment for %s %s has been submitted and is pending Program Head schedule review, then Registrar approval. Once approved, please proceed to the school Cashier kiosk on campus to claim your queuing ticket.',
+                            $term->school_year,
+                            $term->semester,
+                        ),
                 ]);
 
                 $this->notificationRecorder->recordManyForRole(

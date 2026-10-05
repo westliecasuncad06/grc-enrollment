@@ -55,12 +55,21 @@ export const enrollmentBlocksQueryKey = (
 ) => ["enrollment-blocks", userId, academicTermId] as const
 
 /**
+ * How often the regular-student section picker re-reads the blocks. The
+ * picker shows ONE section at a time and its open-seat count must visibly
+ * drop as other students enroll, so this follows the same 3s tier as the
+ * student's live queue view (ADR 0029).
+ */
+export const ENROLLMENT_BLOCKS_POLL_MS = 3_000
+
+/**
  * The regular-student block picker. A student's submission reserves its seats
  * immediately (and a rejection or void releases them), so the open-seat badge
- * must follow that quickly: polled every 10s, and re-read on returning to the
- * tab/app (a phone browser that was in the background). There is no
- * WebSocket/SSE push in this stack — short polling is the deliberate stand-in
- * (see `useEnrollmentsQuery`).
+ * — and which single section is on offer — must follow that quickly: polled
+ * every `ENROLLMENT_BLOCKS_POLL_MS`, and re-read on returning to the tab/app
+ * (a phone browser that was in the background). There is no WebSocket/SSE
+ * push in this stack — short polling is the deliberate stand-in (see
+ * `useEnrollmentsQuery`).
  */
 export function useEnrollmentBlocksQuery(academicTermId: number | null) {
   const { session } = useAuth()
@@ -69,7 +78,7 @@ export function useEnrollmentBlocksQuery(academicTermId: number | null) {
     queryKey: enrollmentBlocksQueryKey(session?.userId ?? null, academicTermId),
     queryFn: ({ signal }) => getEnrollmentBlocks(academicTermId!, signal),
     enabled: session !== null && academicTermId !== null,
-    refetchInterval: 10_000,
+    refetchInterval: ENROLLMENT_BLOCKS_POLL_MS,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: "always",
   })

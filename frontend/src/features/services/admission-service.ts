@@ -2,6 +2,7 @@ import {
   accountSetupEnvelopeSchema,
   accountSetupSchema,
   decideProfileChangeRequestSchema,
+  nextStudentNumberEnvelopeSchema,
   paginatedProfileChangeRequestsSchema,
   paginatedStudentProfilesSchema,
   profileChangeRequestEnvelopeSchema,
@@ -89,6 +90,24 @@ export async function provisionStudent(
   return envelope.data
 }
 
+/**
+ * The number the next new account would get. A preview: nothing is reserved, so it can change
+ * before the account is saved. Null when every number for the year is in use.
+ */
+export async function getNextStudentNumber(
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const envelope = parse(
+    nextStudentNumberEnvelopeSchema,
+    await getAuthenticatedJson(
+      `${STUDENT_PROFILES_PATH}/next-student-number`,
+      signal,
+    ),
+    "next student number",
+  )
+  return envelope.data.student_number
+}
+
 export async function listStudentProfiles(
   filters: StudentProfileFilters,
   signal?: AbortSignal,
@@ -158,6 +177,21 @@ export async function resendAccountSetupInvitation(
       `${STUDENT_PROFILES_PATH}/${id}/account-setup-invitations`,
     ),
     "account invitation status",
+  )
+  return envelope.data
+}
+
+/**
+ * Sends a freshman's "view the live queue" link again. The old link stops
+ * working: the new email carries a new one.
+ */
+export async function resendQueueLink(id: number): Promise<StudentProfile> {
+  const envelope = parse(
+    studentProfileEnvelopeSchema,
+    await postAuthenticatedJson(
+      `${STUDENT_PROFILES_PATH}/${id}/queue-link-resends`,
+    ),
+    "queue link status",
   )
   return envelope.data
 }

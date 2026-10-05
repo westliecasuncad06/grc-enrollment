@@ -7,6 +7,7 @@ import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { CertificateOfRegistrationDocument } from "@/features/components/portal/certificate-of-registration-document"
 import { DataTable } from "@/features/components/portal/data-table"
+import { FreshmanPaymentDialog } from "@/features/components/portal/freshman-payment-dialog"
 import {
   PaymentClassificationDialog,
   ScholarshipTierDialog,
@@ -61,9 +62,7 @@ import {
   useEnrollmentsListQuery,
   useRemoveScholarshipDiscountMutation,
 } from "@/features/hooks/use-enrollment"
-import {
-  useStudentAccountQuery,
-} from "@/features/hooks/use-student-account"
+import { useStudentAccountQuery } from "@/features/hooks/use-student-account"
 import {
   useClaimQueueTicketMutation,
   useQueueTicketsQuery,
@@ -82,6 +81,7 @@ import type {
   ScholarshipPercentage,
 } from "@/features/schemas/enrollment-schema"
 import { isApiClientError } from "@/features/services/api-client"
+import type { FreshmanPayment } from "@/features/schemas/freshman-schema"
 import type { QueueTicket } from "@/features/schemas/queue-ticket-schema"
 import { playQueueAlert } from "@/features/lib/queue-announcement"
 import { formatYearLevel } from "@/features/lib/format-year-level"
@@ -155,6 +155,147 @@ function formatPhp(amount: string): string {
   }).format(Number(amount))
 }
 
+/**
+ * Lets the Cashier see at a glance that the person in front of them is a
+ * freshman — someone who took a number at Admission before any account or
+ * enrollment exists, and is paying for the first time.
+ */
+function FreshmanBadge({ ticket }: { ticket: QueueTicket }) {
+  if (ticket.is_freshman) return <Badge variant="secondary">Freshman</Badge>
+  // A transferee also pays first (ADR 0043, amended 2026-10-05): their number came from the end
+  // of their credit mapping, and they already have an account.
+  return ticket.is_transferee ? (
+    <Badge variant="secondary">Transferee</Badge>
+  ) : null
+}
+
+/**
+ * The Now-serving card for a freshman: no enrollment and no assessment yet, so the only payment
+ * action is the first-payment dialog (ADR 0043).
+ */
+function FreshmanServing({
+  ticket,
+  pending,
+  onConfirm,
+  onAnnounce,
+  onSkip,
+}: {
+  ticket: QueueTicket
+  pending: boolean
+  onConfirm: () => void
+  onAnnounce: () => void
+  onSkip: () => void
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-3xl font-bold">{ticket.ticket_number}</span>
+        {ticket.priority === "priority" && (
+          <Badge variant="outline">Priority</Badge>
+        )}
+        <FreshmanBadge ticket={ticket} />
+      </div>
+      <p className="text-sm text-muted-foreground">{ticket.student_number}</p>
+      <p className="text-sm">
+        {ticket.is_transferee
+          ? "Confirming the first payment holds the money as credit and sends the subjects the transferee chose to the Registrar for approval. It does not enroll them, and they already have an account."
+          : "No enrollment yet. Confirming the first payment submits the freshman to the first section with open seats and sends their account setup email. The Registrar's approval is what enrolls them."}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={onConfirm}>
+          Confirm first payment
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          onClick={onAnnounce}
+        >
+          Announce ticket 📢
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          onClick={onSkip}
+        >
+          Skip
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** What happened when the Cashier confirmed a freshman's first payment. */
+function FreshmanPaymentResultNotice({
+  result,
+  isTransferee,
+  onViewCor,
+  onDismiss,
+}: {
+  result: FreshmanPayment
+  isTransferee: boolean
+  onViewCor: (documentId: number) => void
+  onDismiss: () => void
+}) {
+  const documentId = result.document?.id ?? null
+  const heldAmount = result.held_amount
+    ? ` of ${formatPhp(result.held_amount)}`
+    : ""
+  // Only a freshman's account is set up after they pay; a transferee already has one.
+  const accountNote = isTransferee ? "" : " The account setup email was sent."
+
+  return (
+    <Alert role="status">
+      <AlertDescription className="grid gap-2">
+        {result.outcome === "enrolled" ? (
+          <p>
+            <strong>{result.student.name}</strong> is enrolled in{" "}
+            <strong>{result.block_code}</strong>
+            {result.document?.document_number
+              ? ` — COR ${result.document.document_number}`
+              : ""}
+            .{accountNote}
+          </p>
+        ) : result.outcome === "awaiting_registrar_approval" ? (
+          <p>
+            <strong>{result.student.name}</strong>&apos;s payment{heldAmount} is
+            received. Their enrollment is now waiting for Registrar approval;
+            they are enrolled only after it.{accountNote}
+          </p>
+        ) : isTransferee ? (
+          <p>
+            <strong>{result.student.name}</strong>&apos;s payment{heldAmount} is
+            held: they have not chosen their subjects yet. They were told to
+            choose and submit them on the Enrollment page.
+          </p>
+        ) : (
+          <p>
+            <strong>{result.student.name}</strong>&apos;s payment{heldAmount} is
+            held: every section is full. They will be notified when a section
+            opens.{accountNote}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {documentId !== null && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onViewCor(documentId)}
+            >
+              View COR
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
+            Dismiss
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 function WaitingTicketCard({
   ticket,
   enrollment,
@@ -173,6 +314,7 @@ function WaitingTicketCard({
         {ticket.priority === "priority" && (
           <Badge variant="outline">Priority</Badge>
         )}
+        <FreshmanBadge ticket={ticket} />
         <CardDescription>{ticket.student_number}</CardDescription>
       </CardHeader>
       <CardContent>
@@ -270,6 +412,13 @@ export function AccountingPaymentWorkspace() {
     string | null
   >(null)
   const [error, setError] = useState("")
+  // A freshman at the Cashier has no enrollment yet: their first payment goes through its own
+  // dialog (ADR 0043), and its outcome is shown until the Cashier dismisses it.
+  const [freshmanTicket, setFreshmanTicket] = useState<QueueTicket | null>(null)
+  const [freshmanResult, setFreshmanResult] = useState<{
+    result: FreshmanPayment
+    isTransferee: boolean
+  } | null>(null)
 
   const ticketsQuery = useQueueTicketsQuery(
     { cycle: "open", page: 1, per_page: 100 },
@@ -322,8 +471,9 @@ export function AccountingPaymentWorkspace() {
   // The assessment the payment is against: net of any scholarship line.
   const assessment = nowServingEnrollment?.assessment ?? null
   const discountItem =
-    assessment?.items.find((item) => item.category === "scholarship_discount") ??
-    null
+    assessment?.items.find(
+      (item) => item.category === "scholarship_discount",
+    ) ?? null
   const discountAmount = discountItem?.amount
     ? Math.abs(Number(discountItem.amount))
     : 0
@@ -334,9 +484,12 @@ export function AccountingPaymentWorkspace() {
   // Below the minimum (a 100% scholarship's zero included) the assessment is
   // collected in full, so no amount is typed or sent; the API falls back to it.
   const fixedAmount = netTotal !== null && netTotal < MIN_FIRST_PAYMENT
-  const amount = amountOverride ?? (netTotal !== null ? netTotal.toFixed(2) : "")
+  const amount =
+    amountOverride ?? (netTotal !== null ? netTotal.toFixed(2) : "")
   const amountBelowMinimum =
-    !fixedAmount && amount.trim() !== "" && !(Number(amount) >= MIN_FIRST_PAYMENT)
+    !fixedAmount &&
+    amount.trim() !== "" &&
+    !(Number(amount) >= MIN_FIRST_PAYMENT)
   const isPartialPayment =
     !amountBelowMinimum &&
     netTotal !== null &&
@@ -435,11 +588,14 @@ export function AccountingPaymentWorkspace() {
   }
 
   const confirmPayment = async () => {
-    if (!nowServing || confirmDisabled || amountBelowMinimum) return
+    // A freshman's ticket has no enrollment (yet); their first payment is not confirmed here.
+    const servingEnrollmentId = nowServing?.enrollment_id ?? null
+    if (servingEnrollmentId === null || confirmDisabled || amountBelowMinimum)
+      return
     setError("")
     try {
       const result = await paymentMutation.mutateAsync({
-        id: nowServing.enrollment_id,
+        id: servingEnrollmentId,
         amount: fixedAmount || !amount.trim() ? undefined : Number(amount),
         promissoryNoteOnFile,
       })
@@ -530,9 +686,7 @@ export function AccountingPaymentWorkspace() {
             </p>
             {lastConfirmation.document.document_number && (
               <div className="grid gap-1 rounded-lg border bg-card p-4">
-                <p className="font-medium">
-                  Certificate of Registration
-                </p>
+                <p className="font-medium">Certificate of Registration</p>
                 <p className="font-mono text-sm text-muted-foreground">
                   {lastConfirmation.document.document_number}
                 </p>
@@ -586,7 +740,8 @@ export function AccountingPaymentWorkspace() {
         <CardHeader>
           <CardTitle level={2}>Find student</CardTitle>
           <CardDescription>
-            Search a student number, student name, or email before serving an eligible payment ticket.
+            Search a student number, student name, or email before serving an
+            eligible payment ticket.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -620,7 +775,8 @@ export function AccountingPaymentWorkspace() {
           )}
           {candidateQuery.isError && submittedStudentNumber && (
             <p className="text-sm text-destructive">
-              No eligible payment ticket was found for this student number, name, or email.
+              No eligible payment ticket was found for this student number,
+              name, or email.
             </p>
           )}
           {candidateQuery.data && (
@@ -630,7 +786,8 @@ export function AccountingPaymentWorkspace() {
                   {candidateQuery.data.student_name}
                 </p>
                 <p className="text-muted-foreground">
-                  {candidateQuery.data.student_number} · {formatYearLevel(candidateQuery.data.year_level)}
+                  {candidateQuery.data.student_number} ·{" "}
+                  {formatYearLevel(candidateQuery.data.year_level)}
                   {candidateQuery.data.ticket
                     ? ` · ${candidateQuery.data.ticket.ticket_number}`
                     : ""}
@@ -719,7 +876,29 @@ export function AccountingPaymentWorkspace() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
-                {nowServing ? (
+                {freshmanResult && (
+                  <FreshmanPaymentResultNotice
+                    result={freshmanResult.result}
+                    isTransferee={freshmanResult.isTransferee}
+                    onViewCor={setViewingCorDocumentId}
+                    onDismiss={() => setFreshmanResult(null)}
+                  />
+                )}
+                {nowServing?.enrollment_id === null ? (
+                  <FreshmanServing
+                    ticket={nowServing}
+                    pending={ticketMutation.isPending}
+                    onConfirm={() => setFreshmanTicket(nowServing)}
+                    onAnnounce={() => {
+                      ticketMutation.mutate({
+                        id: nowServing.id,
+                        action: "announce",
+                      })
+                      playQueueAlert(nowServing.ticket_number)
+                    }}
+                    onSkip={skipCurrent}
+                  />
+                ) : nowServing ? (
                   <div className="grid gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-3xl font-bold">
@@ -728,6 +907,7 @@ export function AccountingPaymentWorkspace() {
                       {nowServing.priority === "priority" && (
                         <Badge variant="outline">Priority</Badge>
                       )}
+                      <FreshmanBadge ticket={nowServing} />
                     </div>
                     <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                       {nowServing.student_number}
@@ -790,7 +970,8 @@ export function AccountingPaymentWorkspace() {
                             Student details
                           </dt>
                           <dd>
-                            {accountQuery.data.student_number} · {formatYearLevel(accountQuery.data.year_level)}
+                            {accountQuery.data.student_number} ·{" "}
+                            {formatYearLevel(accountQuery.data.year_level)}
                           </dd>
                         </div>
                         <div className="grid gap-1">
@@ -805,7 +986,9 @@ export function AccountingPaymentWorkspace() {
                           <dt className="text-muted-foreground">
                             Total outstanding
                           </dt>
-                          <dd className={`font-semibold ${accountQuery.data.outstanding_balance !== "0.00" ? "text-destructive" : "text-emerald-600"}`}>
+                          <dd
+                            className={`font-semibold ${accountQuery.data.outstanding_balance !== "0.00" ? "text-destructive" : "text-emerald-600"}`}
+                          >
                             {formatPhp(accountQuery.data.outstanding_balance)}
                           </dd>
                         </div>
@@ -813,73 +996,95 @@ export function AccountingPaymentWorkspace() {
                           <dt className="text-muted-foreground">
                             Advance credit
                           </dt>
-                          <dd className={`font-semibold ${accountQuery.data.advance_payment_balance !== "0.00" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                            {formatPhp(accountQuery.data.advance_payment_balance)}
+                          <dd
+                            className={`font-semibold ${accountQuery.data.advance_payment_balance !== "0.00" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}
+                          >
+                            {formatPhp(
+                              accountQuery.data.advance_payment_balance,
+                            )}
                           </dd>
                         </div>
                         {accountQuery.data.has_promissory_note_on_file && (
                           <div className="sm:col-span-2">
-                            <Badge variant="outline" className="border-amber-600/40 text-amber-800 bg-amber-50 dark:bg-amber-950/20">
+                            <Badge
+                              variant="outline"
+                              className="border-amber-600/40 text-amber-800 bg-amber-50 dark:bg-amber-950/20"
+                            >
                               Promissory note on file
                             </Badge>
                           </div>
                         )}
                       </dl>
                     )}
-                    {accountQuery.data?.transactions && accountQuery.data.transactions.length > 0 && (
-                      <details className="group rounded-lg border bg-muted/20 p-2.5 transition-colors">
-                        <summary className="flex cursor-pointer select-none items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground">
-                          <span className="flex items-center gap-2">
-                            <span>Payment History with Cashier</span>
-                            <Badge variant="secondary" className="text-[10px] py-0 px-1.5 font-normal">
-                              {accountQuery.data.transactions.length} record{accountQuery.data.transactions.length === 1 ? "" : "s"}
-                            </Badge>
-                          </span>
-                          <span className="text-[11px] font-normal text-muted-foreground group-open:hidden">
-                            Click to view past payments
-                          </span>
-                        </summary>
-                        <div className="overflow-x-auto rounded-md border bg-card mt-2.5">
-                          <table className="w-full text-left text-xs" aria-label="Student payment history">
-                            <thead className="bg-muted/50 text-muted-foreground">
-                              <tr>
-                                <th className="p-2">Date & Time</th>
-                                <th className="p-2">Type</th>
-                                <th className="p-2">Ref / OR</th>
-                                <th className="p-2">Cashier</th>
-                                <th className="p-2 text-right">Amount</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                              {accountQuery.data.transactions.map((tx) => (
-                                <tr key={tx.id} className="hover:bg-muted/30">
-                                  <td className="p-2 text-muted-foreground">
-                                    {new Date(tx.processed_at).toLocaleString()}
-                                  </td>
-                                  <td className="p-2 font-medium">
-                                    {tx.transaction_type_label}
-                                    {tx.promissory_note_on_file && (
-                                      <Badge variant="secondary" className="ml-1 text-[9px] py-0">
-                                        Promissory
-                                      </Badge>
-                                    )}
-                                  </td>
-                                  <td className="p-2 font-mono">
-                                    {tx.reference_number}
-                                  </td>
-                                  <td className="p-2 text-muted-foreground">
-                                    {tx.cashier_name}
-                                  </td>
-                                  <td className="p-2 text-right font-semibold">
-                                    {formatPhp(tx.amount)}
-                                  </td>
+                    {accountQuery.data?.transactions &&
+                      accountQuery.data.transactions.length > 0 && (
+                        <details className="group rounded-lg border bg-muted/20 p-2.5 transition-colors">
+                          <summary className="flex cursor-pointer select-none items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground">
+                            <span className="flex items-center gap-2">
+                              <span>Payment History with Cashier</span>
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] py-0 px-1.5 font-normal"
+                              >
+                                {accountQuery.data.transactions.length} record
+                                {accountQuery.data.transactions.length === 1
+                                  ? ""
+                                  : "s"}
+                              </Badge>
+                            </span>
+                            <span className="text-[11px] font-normal text-muted-foreground group-open:hidden">
+                              Click to view past payments
+                            </span>
+                          </summary>
+                          <div className="overflow-x-auto rounded-md border bg-card mt-2.5">
+                            <table
+                              className="w-full text-left text-xs"
+                              aria-label="Student payment history"
+                            >
+                              <thead className="bg-muted/50 text-muted-foreground">
+                                <tr>
+                                  <th className="p-2">Date & Time</th>
+                                  <th className="p-2">Type</th>
+                                  <th className="p-2">Ref / OR</th>
+                                  <th className="p-2">Cashier</th>
+                                  <th className="p-2 text-right">Amount</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </details>
-                    )}
+                              </thead>
+                              <tbody className="divide-y">
+                                {accountQuery.data.transactions.map((tx) => (
+                                  <tr key={tx.id} className="hover:bg-muted/30">
+                                    <td className="p-2 text-muted-foreground">
+                                      {new Date(
+                                        tx.processed_at,
+                                      ).toLocaleString()}
+                                    </td>
+                                    <td className="p-2 font-medium">
+                                      {tx.transaction_type_label}
+                                      {tx.promissory_note_on_file && (
+                                        <Badge
+                                          variant="secondary"
+                                          className="ml-1 text-[9px] py-0"
+                                        >
+                                          Promissory
+                                        </Badge>
+                                      )}
+                                    </td>
+                                    <td className="p-2 font-mono">
+                                      {tx.reference_number}
+                                    </td>
+                                    <td className="p-2 text-muted-foreground">
+                                      {tx.cashier_name}
+                                    </td>
+                                    <td className="p-2 text-right font-semibold">
+                                      {formatPhp(tx.amount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      )}
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
@@ -967,6 +1172,7 @@ export function AccountingPaymentWorkspace() {
                           {ticket.priority === "priority" && (
                             <Badge variant="outline">Priority</Badge>
                           )}
+                          <FreshmanBadge ticket={ticket} />
                         </span>
                       ),
                     },
@@ -1072,8 +1278,9 @@ export function AccountingPaymentWorkspace() {
             <AlertDialogTitle>Confirm received payment</AlertDialogTitle>
             <AlertDialogDescription>
               This is a manual payment — no external reference is collected.
-              Confirming generates the Certificate of Registration and is recorded in the
-              operational audit log. Confirming twice has no additional effect.
+              Confirming generates the Certificate of Registration and is
+              recorded in the operational audit log. Confirming twice has no
+              additional effect.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <FieldGroup>
@@ -1129,14 +1336,15 @@ export function AccountingPaymentWorkspace() {
                     {formatPhp(nowServingEnrollment.assessment.total_amount)}
                   </span>
                 </div>
-                {accountQuery.data && Number(accountQuery.data.prior_balance) > 0 && (
-                  <div className="flex justify-between text-amber-700 dark:text-amber-400">
-                    <span>Unpaid Prior Balance:</span>
-                    <span className="font-semibold">
-                      {formatPhp(accountQuery.data.prior_balance)}
-                    </span>
-                  </div>
-                )}
+                {accountQuery.data &&
+                  Number(accountQuery.data.prior_balance) > 0 && (
+                    <div className="flex justify-between text-amber-700 dark:text-amber-400">
+                      <span>Unpaid Prior Balance:</span>
+                      <span className="font-semibold">
+                        {formatPhp(accountQuery.data.prior_balance)}
+                      </span>
+                    </div>
+                  )}
                 {accountQuery.data && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>Total Account Outstanding:</span>
@@ -1152,20 +1360,41 @@ export function AccountingPaymentWorkspace() {
                   </span>
                 </div>
                 {(() => {
-                  const assessed = Number(nowServingEnrollment.assessment.total_amount)
+                  const assessed = Number(
+                    nowServingEnrollment.assessment.total_amount,
+                  )
                   const entered = Number(amount) || 0
                   const remaining = Math.max(0, assessed - entered)
                   const isPartial = entered > 0 && entered < assessed
-                  const priorBalance = accountQuery.data ? Number(accountQuery.data.prior_balance) : 0
-                  const overallOutstanding = accountQuery.data ? Number(accountQuery.data.outstanding_balance) : assessed
-                  const remainingOverall = Math.max(0, overallOutstanding - entered)
+                  const priorBalance = accountQuery.data
+                    ? Number(accountQuery.data.prior_balance)
+                    : 0
+                  const overallOutstanding = accountQuery.data
+                    ? Number(accountQuery.data.outstanding_balance)
+                    : assessed
+                  const remainingOverall = Math.max(
+                    0,
+                    overallOutstanding - entered,
+                  )
                   return (
                     <>
                       <div className="flex justify-between border-t pt-1.5 font-medium">
-                        <span className={isPartial ? "text-destructive font-semibold" : "text-muted-foreground"}>
+                        <span
+                          className={
+                            isPartial
+                              ? "text-destructive font-semibold"
+                              : "text-muted-foreground"
+                          }
+                        >
                           Remaining Term Balance:
                         </span>
-                        <span className={isPartial ? "font-bold text-destructive" : "font-bold text-emerald-600"}>
+                        <span
+                          className={
+                            isPartial
+                              ? "font-bold text-destructive"
+                              : "font-bold text-emerald-600"
+                          }
+                        >
                           {formatPhp(String(remaining.toFixed(2)))}
                         </span>
                       </div>
@@ -1181,12 +1410,22 @@ export function AccountingPaymentWorkspace() {
                       )}
                       {isPartial && (
                         <p className="text-[11px] text-amber-800 font-medium pt-1">
-                          * Note: Partial payment detected. Ensure a promissory note is on file for the remaining balance.
+                          * Note: Partial payment detected. Ensure a promissory
+                          note is on file for the remaining balance.
                         </p>
                       )}
                       {priorBalance > 0 && (
                         <p className="text-[11px] text-amber-800 font-medium pt-1">
-                          * Note: Student has {formatPhp(String(priorBalance.toFixed(2)))} in unpaid balance from prior terms. This payment clears the current term assessment ({formatPhp(nowServingEnrollment.assessment.total_amount)}). Prior balances must be settled separately via &quot;Record Payment&quot; in the Student Account section.
+                          * Note: Student has{" "}
+                          {formatPhp(String(priorBalance.toFixed(2)))} in unpaid
+                          balance from prior terms. This payment clears the
+                          current term assessment (
+                          {formatPhp(
+                            nowServingEnrollment.assessment.total_amount,
+                          )}
+                          ). Prior balances must be settled separately via
+                          &quot;Record Payment&quot; in the Student Account
+                          section.
                         </p>
                       )}
                     </>
@@ -1243,6 +1482,19 @@ export function AccountingPaymentWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {freshmanTicket && (
+        <FreshmanPaymentDialog
+          ticket={freshmanTicket}
+          onClose={() => setFreshmanTicket(null)}
+          onConfirmed={(result) => {
+            setFreshmanTicket(null)
+            setFreshmanResult({
+              result,
+              isTransferee: freshmanTicket.is_transferee,
+            })
+          }}
+        />
+      )}
       {step === "classification" && nowServingEnrollment && (
         <PaymentClassificationDialog
           studentName={studentDisplayName}

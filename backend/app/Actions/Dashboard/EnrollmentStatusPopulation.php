@@ -68,7 +68,8 @@ final readonly class EnrollmentStatusPopulation
     {
         return match ($actor->role) {
             UserRole::RegistrarStaff => [EnrollmentStatus::PendingRegistrarApproval],
-            UserRole::AccountingStaff => [EnrollmentStatus::PendingPayment],
+            // A transferee's enrollment at the payment hold is waiting on the Cashier too.
+            UserRole::AccountingStaff => [EnrollmentStatus::AwaitingFirstPayment, EnrollmentStatus::PendingPayment],
             default => null,
         };
     }

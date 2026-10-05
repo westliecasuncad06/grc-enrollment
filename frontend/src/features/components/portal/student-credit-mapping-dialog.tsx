@@ -1,7 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle2, FilePlus2, School } from "lucide-react"
+import {
+  CheckCircle2,
+  FilePlus2,
+  Pencil,
+  School,
+  Send,
+  Trash2,
+} from "lucide-react"
 
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
@@ -20,7 +27,10 @@ import { Input } from "@/features/components/ui/input"
 import { StudentTorUpload } from "@/features/components/portal/tor-documents-panel"
 import {
   useCreateTransfereeCreditMutation,
+  useDeleteTransfereeCreditMutation,
+  useSubmitTransfereeCreditsMutation,
   useTransfereeCreditsQuery,
+  useUpdateTransfereeCreditMutation,
 } from "@/features/hooks/use-transferee-credits"
 import type { TransfereeCredit } from "@/features/schemas/transferee-credit-schema"
 
@@ -35,20 +45,40 @@ function creditBadgeVariant(
 
 /** Where the request is in its route: the student's own words, not the API's. */
 function creditStatusLabel(credit: TransfereeCredit): string {
+  if (credit.status === "draft") return "Not yet sent"
   if (credit.status === "pending") return "Awaiting Program Head"
-  if (credit.status === "endorsed") return "Awaiting Registrar"
+  if (credit.status === "endorsed") return "Awaiting Registrar Head"
   return credit.status_label
 }
 
+function creditTitle(credit: TransfereeCredit): string {
+  return credit.source_subject_code
+    ? `${credit.source_subject_code} — ${credit.source_subject_title}`
+    : credit.source_subject_title
+}
+
+function creditDetails(credit: TransfereeCredit): string {
+  return [
+    `${credit.source_institution} · ${credit.credited_units} units`,
+    credit.source_school_year ? ` · ${credit.source_school_year}` : "",
+    credit.source_semester ? ` (${credit.source_semester})` : "",
+    credit.source_grade ? ` · Grade: ${credit.source_grade}` : "",
+    credit.subject_code ? ` → Mapped to GRC ${credit.subject_code}` : "",
+  ].join("")
+}
+
 /**
- * The student's own "request a credit mapping" form and list. It always acts
- * for the signed-in student (the API pins the request to them and ignores any
- * student id), so it takes no student. Mapping a previous subject to a GRC
- * subject is the Program Chair's decision, and the Registrar approves it
- * (ADR 0026).
+ * The student's own "credit mapping" list. It always acts for the signed-in
+ * student (the API pins every request to them and ignores any student id), so it
+ * takes no student. The student first saves the subjects they took at another
+ * school as a private list (a draft: nobody else sees it), can edit or remove
+ * them, and then sends the whole list to the Program Head in one step. Mapping
+ * each subject to a GRC subject is the Program Head's decision, and the
+ * Registrar Head approves it (ADR 0026, amended).
  */
 export function StudentCreditMappingDialog() {
   const [open, setOpen] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [sourceInstitution, setSourceInstitution] = useState("")
   const [sourceSubjectCode, setSourceSubjectCode] = useState("")
   const [sourceSubjectTitle, setSourceSubjectTitle] = useState("")
@@ -60,10 +90,40 @@ export function StudentCreditMappingDialog() {
   const [successMessage, setSuccessMessage] = useState("")
 
   const creditsQuery = useTransfereeCreditsQuery(
-    { page: 1, per_page: 20 },
+    { page: 1, per_page: 50 },
     { enabled: open },
   )
   const createMutation = useCreateTransfereeCreditMutation()
+  const updateMutation = useUpdateTransfereeCreditMutation()
+  const deleteMutation = useDeleteTransfereeCreditMutation()
+  const submitMutation = useSubmitTransfereeCreditsMutation()
+  const busy =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    deleteMutation.isPending ||
+    submitMutation.isPending
+
+  const resetSubjectFields = () => {
+    setEditingId(null)
+    setSourceSubjectCode("")
+    setSourceSubjectTitle("")
+    setSourceGrade("")
+    setSourceSchoolYear("")
+    setSourceSemester("")
+  }
+
+  const startEditing = (credit: TransfereeCredit) => {
+    setError("")
+    setSuccessMessage("")
+    setEditingId(credit.id)
+    setSourceInstitution(credit.source_institution)
+    setSourceSubjectCode(credit.source_subject_code)
+    setSourceSubjectTitle(credit.source_subject_title)
+    setSourceGrade(credit.source_grade ?? "")
+    setCreditedUnits(String(credit.credited_units))
+    setSourceSchoolYear(credit.source_school_year ?? "")
+    setSourceSemester(credit.source_semester ?? "")
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -93,32 +153,81 @@ export function StudentCreditMappingDialog() {
     }
 
     try {
-      await createMutation.mutateAsync({
-        source_institution: sourceInstitution.trim(),
-        source_subject_code: sourceSubjectCode.trim().toUpperCase() || undefined,
-        source_subject_title: sourceSubjectTitle.trim(),
-        source_grade: sourceGrade.trim() || undefined,
-        credited_units: units,
-        source_school_year: sourceSchoolYear.trim(),
-        source_semester: sourceSemester.trim(),
-      })
-
-      setSuccessMessage("Credit mapping request submitted. Your Program Head will map it to a subject in your curriculum, and the Registrar approves it after that.")
-      setSourceSubjectCode("")
-      setSourceSubjectTitle("")
-      setSourceGrade("")
-      setSourceSchoolYear("")
-      setSourceSemester("")
+      if (editingId !== null) {
+        await updateMutation.mutateAsync({
+          id: editingId,
+          input: {
+            source_institution: sourceInstitution.trim(),
+            source_subject_code: sourceSubjectCode.trim().toUpperCase(),
+            source_subject_title: sourceSubjectTitle.trim(),
+            source_grade: sourceGrade.trim() || null,
+            credited_units: units,
+            source_school_year: sourceSchoolYear.trim(),
+            source_semester: sourceSemester.trim(),
+          },
+        })
+        setSuccessMessage("Changes saved to your list.")
+      } else {
+        await createMutation.mutateAsync({
+          source_institution: sourceInstitution.trim(),
+          source_subject_code:
+            sourceSubjectCode.trim().toUpperCase() || undefined,
+          source_subject_title: sourceSubjectTitle.trim(),
+          source_grade: sourceGrade.trim() || undefined,
+          credited_units: units,
+          source_school_year: sourceSchoolYear.trim(),
+          source_semester: sourceSemester.trim(),
+        })
+        setSuccessMessage(
+          "Saved to your list. It is not sent to your Program Head until you press Submit to Program Head.",
+        )
+      }
+      resetSubjectFields()
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to submit credit mapping request. Please try again.",
+          : "Failed to save the subject. Please try again.",
       )
     }
   }
 
-  const existingCredits = creditsQuery.data?.data ?? []
+  const handleRemove = async (credit: TransfereeCredit) => {
+    setError("")
+    setSuccessMessage("")
+    try {
+      await deleteMutation.mutateAsync(credit.id)
+      if (editingId === credit.id) resetSubjectFields()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to remove the subject. Please try again.",
+      )
+    }
+  }
+
+  const handleSendList = async () => {
+    setError("")
+    setSuccessMessage("")
+    try {
+      await submitMutation.mutateAsync()
+      resetSubjectFields()
+      setSuccessMessage(
+        "Your list was sent to your Program Head. They will map each subject to your curriculum, and the Registrar Head approves it after that.",
+      )
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to send your list. Please try again.",
+      )
+    }
+  }
+
+  const allCredits = creditsQuery.data?.data ?? []
+  const drafts = allCredits.filter((credit) => credit.status === "draft")
+  const sentCredits = allCredits.filter((credit) => credit.status !== "draft")
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -135,9 +244,10 @@ export function StudentCreditMappingDialog() {
             <DialogTitle>Transferee Credit Mapping</DialogTitle>
           </div>
           <DialogDescription>
-            Submit subjects previously completed at another college or university.
-            Your Program Head maps each one to a subject in your GRC curriculum,
-            and the Registrar approves it.
+            List the subjects you completed at another college or university,
+            then send the whole list to your Program Head. Your Program Head
+            maps each one to a subject in your GRC curriculum, and the Registrar
+            Head approves it.
           </DialogDescription>
         </DialogHeader>
 
@@ -156,27 +266,34 @@ export function StudentCreditMappingDialog() {
 
         <StudentTorUpload enabled={open} />
 
-        <form onSubmit={(event) => void handleSubmit(event)} className="grid gap-4 py-2">
+        <form
+          onSubmit={(event) => void handleSubmit(event)}
+          className="grid gap-4 py-2"
+        >
           <FieldGroup className="grid gap-3 sm:grid-cols-2">
             <Field className="sm:col-span-2">
-              <FieldLabel htmlFor="source-institution">Previous School / Institution</FieldLabel>
+              <FieldLabel htmlFor="source-institution">
+                Previous School / Institution
+              </FieldLabel>
               <Input
                 id="source-institution"
                 placeholder="e.g. University of the East, TIP, UST"
                 value={sourceInstitution}
                 onChange={(e) => setSourceInstitution(e.target.value)}
-                disabled={createMutation.isPending}
+                disabled={busy}
               />
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="source-subject-code">Previous Subject Code (optional)</FieldLabel>
+              <FieldLabel htmlFor="source-subject-code">
+                Previous Subject Code (optional)
+              </FieldLabel>
               <Input
                 id="source-subject-code"
                 placeholder="e.g. CS101, ENG01"
                 value={sourceSubjectCode}
                 onChange={(e) => setSourceSubjectCode(e.target.value)}
-                disabled={createMutation.isPending}
+                disabled={busy}
               />
             </Field>
 
@@ -190,18 +307,20 @@ export function StudentCreditMappingDialog() {
                 step="0.5"
                 value={creditedUnits}
                 onChange={(e) => setCreditedUnits(e.target.value)}
-                disabled={createMutation.isPending}
+                disabled={busy}
               />
             </Field>
 
             <Field className="sm:col-span-2">
-              <FieldLabel htmlFor="source-subject-title">Subject Title / Description</FieldLabel>
+              <FieldLabel htmlFor="source-subject-title">
+                Subject Title / Description
+              </FieldLabel>
               <Input
                 id="source-subject-title"
                 placeholder="e.g. Introduction to Computer Science"
                 value={sourceSubjectTitle}
                 onChange={(e) => setSourceSubjectTitle(e.target.value)}
-                disabled={createMutation.isPending}
+                disabled={busy}
               />
             </Field>
 
@@ -212,7 +331,7 @@ export function StudentCreditMappingDialog() {
                 placeholder="e.g. 2023-2024"
                 value={sourceSchoolYear}
                 onChange={(e) => setSourceSchoolYear(e.target.value)}
-                disabled={createMutation.isPending}
+                disabled={busy}
               />
             </Field>
 
@@ -223,50 +342,114 @@ export function StudentCreditMappingDialog() {
                 placeholder="e.g. 1st Semester, 2nd Semester"
                 value={sourceSemester}
                 onChange={(e) => setSourceSemester(e.target.value)}
-                disabled={createMutation.isPending}
+                disabled={busy}
               />
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="source-grade">Grade Obtained (optional)</FieldLabel>
+              <FieldLabel htmlFor="source-grade">
+                Grade Obtained (optional)
+              </FieldLabel>
               <Input
                 id="source-grade"
                 placeholder="e.g. 1.25, 88%, A"
                 value={sourceGrade}
                 onChange={(e) => setSourceGrade(e.target.value)}
-                disabled={createMutation.isPending}
+                disabled={busy}
               />
             </Field>
           </FieldGroup>
 
-          <Button type="submit" disabled={createMutation.isPending} className="mt-2">
-            {createMutation.isPending ? "Submitting Request…" : "Submit Subject for Crediting"}
-          </Button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button type="submit" disabled={busy}>
+              {editingId !== null ? "Save Changes" : "Add Subject to My List"}
+            </Button>
+            {editingId !== null && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={resetSubjectFields}
+              >
+                Cancel edit
+              </Button>
+            )}
+          </div>
         </form>
 
-        {existingCredits.length > 0 && (
+        {drafts.length > 0 && (
+          <div className="mt-4 border-t pt-4">
+            <h4 className="text-sm font-semibold text-foreground mb-2">
+              Your list (not yet sent) ({drafts.length})
+            </h4>
+            <div className="grid gap-2">
+              {drafts.map((credit) => (
+                <div
+                  key={credit.id}
+                  className="flex items-center justify-between gap-2 rounded-lg border p-2.5 text-xs"
+                >
+                  <div className="grid gap-0.5">
+                    <span className="font-semibold text-foreground">
+                      {creditTitle(credit)}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {creditDetails(credit)}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      aria-label={`Edit ${credit.source_subject_title}`}
+                      onClick={() => startEditing(credit)}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      aria-label={`Remove ${credit.source_subject_title}`}
+                      onClick={() => void handleRemove(credit)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              className="mt-3"
+              disabled={busy}
+              onClick={() => void handleSendList()}
+            >
+              <Send className="mr-1.5 size-4" />
+              Submit to Program Head
+            </Button>
+          </div>
+        )}
+
+        {sentCredits.length > 0 && (
           <div className="mt-4 border-t pt-4">
             <h4 className="text-sm font-semibold text-foreground mb-2">
               Your Credited & Pending Subjects
             </h4>
             <div className="grid gap-2">
-              {existingCredits.map((credit) => (
+              {sentCredits.map((credit) => (
                 <div
                   key={credit.id}
                   className="flex items-center justify-between rounded-lg border p-2.5 text-xs"
                 >
                   <div className="grid gap-0.5">
                     <span className="font-semibold text-foreground">
-                      {credit.source_subject_code
-                        ? `${credit.source_subject_code} — ${credit.source_subject_title}`
-                        : credit.source_subject_title}
+                      {creditTitle(credit)}
                     </span>
                     <span className="text-muted-foreground">
-                      {credit.source_institution} · {credit.credited_units} units
-                      {credit.source_school_year ? ` · ${credit.source_school_year}` : ""}
-                      {credit.source_semester ? ` (${credit.source_semester})` : ""}
-                      {credit.source_grade ? ` · Grade: ${credit.source_grade}` : ""}
-                      {credit.subject_code ? ` → Mapped to GRC ${credit.subject_code}` : ""}
+                      {creditDetails(credit)}
                     </span>
                   </div>
                   <Badge variant={creditBadgeVariant(credit.status)}>
@@ -279,7 +462,12 @@ export function StudentCreditMappingDialog() {
         )}
 
         <DialogFooter className="mt-4 border-t pt-3">
-          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setOpen(false)}
+          >
             Close
           </Button>
         </DialogFooter>

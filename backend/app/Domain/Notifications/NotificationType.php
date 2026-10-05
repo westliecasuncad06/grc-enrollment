@@ -23,6 +23,9 @@ enum NotificationType: string
     case TransfereeCreditRejected = 'transferee_credit_rejected';
     case TransfereeCreditRequested = 'transferee_credit_requested';
     case TransfereeCreditEndorsed = 'transferee_credit_endorsed';
+    case TransfereeCreditReturned = 'transferee_credit_returned';
+    /** A transferee's credit mapping has nothing left open, so they now hold a queue number (ADR 0043, amended). */
+    case TransfereeQueueNumberIssued = 'transferee_queue_number_issued';
     case ScheduleSubmittedForDean = 'schedule_submitted_for_dean';
     case ScheduleDeanApproved = 'schedule_dean_approved';
     case ScheduleExecutiveApproved = 'schedule_executive_approved';
@@ -47,4 +50,9 @@ enum NotificationType: string
     case SectionChangeRejected = 'section_change_rejected';
     case SectionProfessorReassigned = 'section_professor_reassigned';
     case StudentYearLevelPromoted = 'student_year_level_promoted';
+    // ADR 0043: a freshman who paid while every section was full, and the moment one opens.
+    case FreshmanAwaitingSection = 'freshman_awaiting_section';
+    case FreshmanSectionAvailable = 'freshman_section_available';
+    // A freshman who paid and is submitted to a block, waiting for the Registrar's approval (2026-10-04).
+    case FreshmanAwaitingRegistrarApproval = 'freshman_awaiting_registrar_approval';
 }

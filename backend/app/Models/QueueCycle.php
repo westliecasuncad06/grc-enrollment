@@ -67,18 +67,25 @@ final class QueueCycle extends Model
 
     /**
      * No `waiting`/`serving` ticket remains whose enrollment is still
-     * `pending_payment` — the read-only half of the reset rule (see
-     * `App\Actions\Enrollment\ClaimQueueTicket`). Scoped to `pending_payment`
+     * `pending_payment`, or whose freshman owner has not paid yet — the
+     * read-only half of the reset rule (see
+     * `App\Actions\Enrollment\AllocateQueueTicket`). Scoped to those states
      * so a ticket left behind by a payment `ConfirmPayment` confirmed but
      * never marked `complete` on the ticket does not block the cycle from
      * ever draining — a known, documented gap this method deliberately
-     * routes around rather than silently inheriting.
+     * routes around rather than silently inheriting. A freshman's ticket has
+     * no enrollment, so it counts as outstanding until their first payment is
+     * confirmed (`freshman_payment_confirmed_at`); without that the cycle
+     * would reset to Q001 while a freshman was still waiting for their number.
      */
     public function isDrained(): bool
     {
         return ! $this->tickets()
             ->whereIn('status', [QueueTicketStatus::Waiting->value, QueueTicketStatus::Serving->value])
-            ->whereHas('enrollment', fn ($query) => $query->where('status', EnrollmentStatus::PendingPayment->value))
+            ->where(function ($query): void {
+                $query->whereHas('enrollment', fn ($enrollment) => $enrollment->where('status', EnrollmentStatus::PendingPayment->value))
+                    ->orWhereHas('studentProfile', fn ($profile) => $profile->whereNull('freshman_payment_confirmed_at'));
+            })
             ->exists();
     }
 

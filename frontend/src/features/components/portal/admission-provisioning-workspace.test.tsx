@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
 import { renderWithSession } from "@/tests/render-app"
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}))
 
 const profile = {
   type: "student_profile",
@@ -41,6 +43,22 @@ const profile = {
   academic_setup_editable: true,
   account_setup_status: "pending",
   invitation_delivery_status: "sent",
+} as const
+
+// A freshman who took a queue number at Admission: no account yet, the setup email follows payment.
+const freshmanProfile = {
+  ...profile,
+  id: 33,
+  student_number: "2027-08-01002",
+  name: "Juan Dela Cruz",
+  first_name: "Juan",
+  last_name: "Dela Cruz",
+  email: "juan.delacruz@grc.test",
+  account_setup_status: "awaiting_payment",
+  invitation_delivery_status: "not_sent",
+  freshman_payment_confirmed_at: null,
+  queue_ticket_number: "Q012",
+  queue_link_delivery_status: "sent",
 } as const
 
 const enrolledProfile = {
@@ -259,6 +277,18 @@ describe("Student Records workspace", () => {
           ),
         )
       }
+      if (url.includes("/api/v1/student-profiles/next-student-number")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "next_student_number",
+                student_number: "2026-10-01936",
+              },
+            }),
+          ),
+        )
+      }
       if (url.includes("/api/v1/student-profiles")) {
         return Promise.resolve(
           new Response(JSON.stringify({ data: [profile], ...pagination })),
@@ -313,9 +343,9 @@ describe("Student Records workspace", () => {
     expect(
       screen.queryByRole("button", { name: "Generate" }),
     ).not.toBeInTheDocument()
-    expect(studentNumberField).toHaveAttribute(
-      "placeholder",
-      "Assigned automatically",
+    // The form shows the number the account will get (a preview, not reserved until saved).
+    expect(await screen.findByDisplayValue("2026-10-01936")).toBe(
+      studentNumberField,
     )
     await user.type(studentNumberField, "0000-00-00000")
     expect(studentNumberField).not.toHaveValue("0000-00-00000")
@@ -438,7 +468,513 @@ describe("Student Records workspace", () => {
     expect(body).not.toHaveProperty("student_number")
   })
 
-  it("only lets a Returnee or an Existing Student say the student already has a student number", async () => {
+  describe("a freshman pays first", () => {
+    async function admitFreshman(
+      user: ReturnType<typeof userEvent.setup>,
+      created: Record<string, unknown>,
+    ) {
+      fetchMock.mockImplementation((input, init) => {
+        const url = urlOf(input)
+        if (url.includes("/api/v1/programs"))
+          return Promise.resolve(new Response(JSON.stringify(programs)))
+        if (url.includes("/api/v1/admission-requirement-types"))
+          return Promise.resolve(
+            new Response(JSON.stringify(intakeRequirements)),
+          )
+        if (url.endsWith("/api/v1/student-profiles") && init?.method === "POST")
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: created }), { status: 201 }),
+          )
+        if (url.includes("/queue-link-resends"))
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: created }), { status: 200 }),
+          )
+        if (url.includes("/admission-requirements"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: {
+                  type: "admission_requirements",
+                  student: {
+                    student_profile_id: created.id,
+                    student_number: created.student_number,
+                    name: created.name,
+                    student_type: "freshman",
+                    student_type_label: "Freshman",
+                    admission_status: "admitted",
+                  },
+                  categories: [],
+                  summary: {
+                    required_count: 0,
+                    submitted_count: 0,
+                    missing_count: 0,
+                    complete: true,
+                  },
+                },
+              }),
+            ),
+          )
+        if (url.includes("/api/v1/student-profile-change-requests"))
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: [], ...pagination })),
+          )
+        if (url.includes("/api/v1/student-profiles"))
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: [created], ...pagination })),
+          )
+        return Promise.reject(new Error(`Unexpected request: ${url}`))
+      })
+      renderWorkspace()
+      await fillAccountBasics(user)
+      await chooseStudentType(user, "Freshman")
+      await user.click(
+        screen.getByRole("button", {
+          name: "Save student and issue queue number",
+        }),
+      )
+    }
+
+    describe("when saving fails", () => {
+      async function submitWithServerError(
+        user: ReturnType<typeof userEvent.setup>,
+        studentType: string,
+        buttonName: string,
+        failure: {
+          status: number
+          message: string
+          errors: Record<string, string[]>
+        } = {
+          status: 500,
+          message: "An unexpected server error occurred.",
+          errors: {},
+        },
+      ) {
+        fetchMock.mockImplementation((input, init) => {
+          const url = urlOf(input)
+          if (url.includes("/api/v1/programs"))
+            return Promise.resolve(new Response(JSON.stringify(programs)))
+          if (url.includes("/api/v1/admission-requirement-types"))
+            return Promise.resolve(
+              new Response(JSON.stringify(intakeRequirements)),
+            )
+          if (
+            url.endsWith("/api/v1/student-profiles") &&
+            init?.method === "POST"
+          )
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  error: {
+                    code:
+                      failure.status === 422
+                        ? "VALIDATION_FAILED"
+                        : "INTERNAL_ERROR",
+                    message: failure.message,
+                    errors: failure.errors,
+                    request_id: "req-500",
+                  },
+                }),
+                { status: failure.status },
+              ),
+            )
+          return Promise.reject(new Error(`Unexpected request: ${url}`))
+        })
+        renderWorkspace()
+        await fillAccountBasics(user)
+        await chooseStudentType(user, studentType)
+        await user.click(screen.getByRole("button", { name: buttonName }))
+      }
+
+      it("tells Admission the student was not saved, not that an account failed: a freshman has no account until they pay", async () => {
+        const user = userEvent.setup()
+        await submitWithServerError(
+          user,
+          "Freshman",
+          "Save student and issue queue number",
+        )
+
+        expect(await screen.findByText("Student not saved")).toBeInTheDocument()
+        expect(
+          screen.getByText(/No student record or queue number was created/),
+        ).toBeInTheDocument()
+        expect(
+          screen.queryByText("Account not created"),
+        ).not.toBeInTheDocument()
+        await waitFor(() =>
+          expect(toast.error).toHaveBeenCalledWith(
+            "Failed to save the student.",
+          ),
+        )
+        // What was typed is still there to send again.
+        expect(screen.getByLabelText("First name")).toHaveValue(
+          profile.first_name,
+        )
+        expect(screen.getByLabelText("Email address")).toHaveValue(
+          profile.email,
+        )
+      })
+
+      it("shows the server's own explanation and request number for a server fault, so the cause is not guessed", async () => {
+        const user = userEvent.setup()
+        await submitWithServerError(
+          user,
+          "Freshman",
+          "Save student and issue queue number",
+          {
+            status: 500,
+            message:
+              'The database is behind this version of the app. Open a terminal in the backend folder, run "php artisan migrate", then try again. Nothing was saved.',
+            errors: {},
+          },
+        )
+
+        expect(await screen.findByText("Student not saved")).toBeInTheDocument()
+        expect(
+          screen.getByText(/run "php artisan migrate"/),
+        ).toBeInTheDocument()
+        expect(screen.getByText(/Request req-500/)).toBeInTheDocument()
+        expect(
+          screen.getByText(/No student record or queue number was created/),
+        ).toBeInTheDocument()
+        // A fault on the server is not something to "review the form details" for.
+        expect(
+          screen.queryByText(/Review the form details/),
+        ).not.toBeInTheDocument()
+      })
+
+      it("still asks to review the form when the server rejected what was typed", async () => {
+        const user = userEvent.setup()
+        await submitWithServerError(
+          user,
+          "Freshman",
+          "Save student and issue queue number",
+          {
+            status: 422,
+            message: "The submitted data is invalid.",
+            errors: { email: ["The email has already been taken."] },
+          },
+        )
+
+        expect(
+          await screen.findByText(/Review the form details and try again/),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText("The email has already been taken."),
+        ).toBeInTheDocument()
+        expect(screen.queryByText(/Request req-500/)).not.toBeInTheDocument()
+      })
+
+      it("keeps the account wording for a student who does get an account now", async () => {
+        const user = userEvent.setup()
+        await submitWithServerError(
+          user,
+          "Transferee",
+          "Create account and email setup",
+        )
+
+        expect(
+          await screen.findByText("Account not created"),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            /No account was created, so the same details can be sent again/,
+          ),
+        ).toBeInTheDocument()
+        await waitFor(() =>
+          expect(toast.error).toHaveBeenCalledWith(
+            "Failed to create the account.",
+          ),
+        )
+      })
+    })
+
+    it("asks Admission to issue a queue number, not to email account setup, once Freshman is chosen", async () => {
+      const user = userEvent.setup()
+      renderWorkspace()
+      expect(
+        screen.getByRole("button", { name: "Create account and email setup" }),
+      ).toBeInTheDocument()
+
+      await chooseStudentType(user, "Freshman")
+
+      expect(
+        screen.getByRole("button", {
+          name: "Save student and issue queue number",
+        }),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", {
+          name: "Create account and email setup",
+        }),
+      ).not.toBeInTheDocument()
+
+      await chooseStudentType(user, "Transferee")
+
+      expect(
+        screen.getByRole("button", { name: "Create account and email setup" }),
+      ).toBeInTheDocument()
+    })
+
+    it("shows the queue number and that the link was emailed, with no setup-email resend", async () => {
+      const user = userEvent.setup()
+      await admitFreshman(user, freshmanProfile)
+
+      expect(await screen.findByText("Q012")).toBeInTheDocument()
+      expect(screen.getByText("Awaiting payment")).toBeInTheDocument()
+      expect(
+        screen.getByText(freshmanProfile.student_number),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          /live queue link was emailed to juan\.delacruz@grc\.test/i,
+        ),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: "Resend queue link" }),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: "Resend setup email" }),
+      ).not.toBeInTheDocument()
+      await waitFor(() =>
+        expect(toast.success).toHaveBeenCalledWith(
+          "Student saved. Queue number Q012 was emailed to juan.delacruz@grc.test.",
+        ),
+      )
+    })
+
+    it("warns Admission, and shows the number to read out, when the email could not be sent", async () => {
+      const user = userEvent.setup()
+      await admitFreshman(user, {
+        ...freshmanProfile,
+        queue_link_delivery_status: "failed",
+      })
+
+      expect(await screen.findByText("Q012")).toBeInTheDocument()
+      expect(
+        screen.getByText(/email could not be sent.*tell the student/i),
+      ).toBeInTheDocument()
+      await waitFor(() =>
+        expect(toast.warning).toHaveBeenCalledWith(
+          "Student saved and queue number Q012 issued, but the email could not be sent. Tell the student the number, or resend the link.",
+        ),
+      )
+      expect(toast.success).not.toHaveBeenCalled()
+    })
+
+    it("sends the queue link again from the delivery card", async () => {
+      const user = userEvent.setup()
+      await admitFreshman(user, freshmanProfile)
+
+      await user.click(
+        await screen.findByRole("button", { name: "Resend queue link" }),
+      )
+
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls.some(
+            ([input, init]) =>
+              urlOf(input).includes(
+                `/api/v1/student-profiles/${freshmanProfile.id}/queue-link-resends`,
+              ) && init?.method === "POST",
+          ),
+        ).toBe(true),
+      )
+      await waitFor(() =>
+        expect(toast.success).toHaveBeenCalledWith(
+          "Queue link resent to juan.delacruz@grc.test.",
+        ),
+      )
+    })
+
+    it("lists a freshman who has not paid as awaiting payment and offers the queue link, not the setup email", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation((input) => {
+        const url = urlOf(input)
+        if (url.includes("/api/v1/programs"))
+          return Promise.resolve(new Response(JSON.stringify(programs)))
+        if (url.includes("/api/v1/admission-requirement-types"))
+          return Promise.resolve(
+            new Response(JSON.stringify(intakeRequirements)),
+          )
+        if (url.includes("/api/v1/student-profile-change-requests"))
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: [], ...pagination })),
+          )
+        if (url.includes("/api/v1/student-profiles"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ data: [freshmanProfile], ...pagination }),
+            ),
+          )
+        return Promise.reject(new Error(`Unexpected request: ${url}`))
+      })
+      renderWorkspace()
+
+      await user.click(screen.getByRole("tab", { name: "Student Directory" }))
+
+      const table = await screen.findByRole("table")
+      expect(within(table).getByText("Awaiting payment")).toBeInTheDocument()
+      expect(
+        within(table).getByRole("button", { name: "Resend link" }),
+      ).toBeInTheDocument()
+      expect(
+        within(table).queryByRole("button", { name: "Resend email" }),
+      ).not.toBeInTheDocument()
+    })
+  })
+
+  describe("what Admission has typed is kept", () => {
+    async function fillEverything(user: ReturnType<typeof userEvent.setup>) {
+      await fillAccountBasics(user)
+      await chooseStudentType(user, "Transferee")
+      await user.click(
+        await screen.findByRole("checkbox", { name: "Form 137" }),
+      )
+    }
+
+    async function expectEverythingStillThere() {
+      expect(screen.getByLabelText("First name")).toHaveValue(
+        profile.first_name,
+      )
+      expect(screen.getByLabelText("Last name")).toHaveValue(profile.last_name)
+      expect(screen.getByLabelText("Email address")).toHaveValue(profile.email)
+      expect(screen.getByLabelText("Complete address")).toHaveValue(
+        profile.address,
+      )
+      // The program's name needs the list of programs, which a fresh page has to fetch again.
+      await waitFor(() =>
+        expect(screen.getByLabelText("Program")).toHaveTextContent("BSIT"),
+      )
+      expect(screen.getByLabelText("Enrollment category")).toHaveTextContent(
+        "Regular",
+      )
+      expect(screen.getByLabelText("Student type")).toHaveTextContent(
+        "Transferee",
+      )
+      expect(
+        await screen.findByRole("checkbox", { name: "Form 137" }),
+      ).toBeChecked()
+      expect(
+        screen.getByRole("checkbox", { name: "Form 138" }),
+      ).not.toBeChecked()
+    }
+
+    function savedDraftKeys(): string[] {
+      return Object.keys(window.sessionStorage).filter((key) =>
+        key.startsWith("grc.form-draft."),
+      )
+    }
+
+    it("keeps the Create Account details when Admission switches to another tab and comes back", async () => {
+      const user = userEvent.setup()
+      renderWorkspace()
+      await fillEverything(user)
+
+      await user.click(screen.getByRole("tab", { name: "Student Directory" }))
+      expect(
+        await screen.findByRole("heading", { name: "Student directory" }),
+      ).toBeInTheDocument()
+      await user.click(screen.getByRole("tab", { name: "Create Account" }))
+
+      await expectEverythingStillThere()
+    })
+
+    it("keeps them when Admission leaves the page and returns to it", async () => {
+      const user = userEvent.setup()
+      const first = renderWorkspace()
+      await fillEverything(user)
+
+      first.unmount()
+      renderWorkspace()
+
+      await expectEverythingStillThere()
+    })
+
+    it("does not show one staff member's unsaved details to another", async () => {
+      const user = userEvent.setup()
+      const first = renderWorkspace()
+      await fillEverything(user)
+      first.unmount()
+
+      renderWithSession(<AdmissionProvisioningWorkspace />, {
+        session: {
+          userId: "6",
+          displayName: "Other Admission Staff",
+          role: "admission_staff",
+          signedInAt: "2026-08-26T00:00:00Z",
+        },
+      })
+
+      expect(screen.getByLabelText("First name")).toHaveValue("")
+      expect(screen.getByLabelText("Email address")).toHaveValue("")
+    })
+
+    it("lets go of the details once the account is created", async () => {
+      const user = userEvent.setup()
+      const first = renderWorkspace()
+      await fillAccountBasics(user)
+      await chooseStudentType(user, "Transferee")
+      await user.click(
+        screen.getByRole("button", { name: "Create account and email setup" }),
+      )
+      await waitFor(() => expect(toast.success).toHaveBeenCalled())
+      expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
+
+      first.unmount()
+
+      expect(savedDraftKeys()).toEqual([])
+      renderWorkspace()
+      expect(screen.getByLabelText("First name")).toHaveValue("")
+      expect(screen.getByLabelText("Email address")).toHaveValue("")
+    })
+
+    it("offers to clear what was typed, and clearing really empties the form and the saved copy", async () => {
+      const user = userEvent.setup()
+      renderWorkspace()
+      expect(
+        screen.queryByRole("button", { name: "Clear form" }),
+      ).not.toBeInTheDocument()
+      await user.type(screen.getByLabelText("First name"), profile.first_name)
+
+      const clear = await screen.findByRole("button", { name: "Clear form" })
+      expect(
+        screen.getByText(
+          /kept in this browser until you create the account or sign out/i,
+        ),
+      ).toBeInTheDocument()
+      await user.click(clear)
+
+      expect(screen.getByLabelText("First name")).toHaveValue("")
+      expect(
+        screen.queryByRole("button", { name: "Clear form" }),
+      ).not.toBeInTheDocument()
+      expect(savedDraftKeys()).toEqual([])
+    })
+
+    it("keeps the Student Directory search box and the search that was run", async () => {
+      const user = userEvent.setup()
+      renderWorkspace()
+      await user.click(screen.getByRole("tab", { name: "Student Directory" }))
+      await user.type(screen.getByLabelText("Search student records"), "Amina")
+      await user.click(screen.getByRole("button", { name: "Search" }))
+
+      await user.click(screen.getByRole("tab", { name: "Create Account" }))
+      await user.click(screen.getByRole("tab", { name: "Student Directory" }))
+
+      expect(screen.getByLabelText("Search student records")).toHaveValue(
+        "Amina",
+      )
+      await waitFor(() => {
+        const lastDirectoryRead = fetchMock.mock.calls
+          .map(([input]) => urlOf(input))
+          .filter((url) => url.includes("/api/v1/student-profiles?"))
+          .at(-1)
+        expect(lastDirectoryRead).toContain("search=Amina")
+      })
+    })
+  })
+
+  it("lets a Transferee, a Returnee or an Existing Student say the student already has a student number, but not a Freshman", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -453,7 +989,7 @@ describe("Student Records workspace", () => {
     await chooseStudentType(user, "Freshman")
     expect(checkbox).toBeDisabled()
     await chooseStudentType(user, "Transferee")
-    expect(checkbox).toBeDisabled()
+    expect(checkbox).toBeEnabled()
     await chooseStudentType(user, "Returnee")
     expect(checkbox).toBeEnabled()
     await chooseStudentType(user, "Existing Student")
@@ -536,9 +1072,12 @@ describe("Student Records workspace", () => {
 
     await waitFor(() => expect(checkbox).not.toBeChecked())
     expect(checkbox).toBeDisabled()
-    expect(screen.getByLabelText("Student number")).toHaveValue("")
+    // The typed number is gone; the field shows the number a new (freshman) account gets.
+    expect(screen.getByLabelText("Student number")).toHaveValue("2026-10-01936")
     await user.click(
-      screen.getByRole("button", { name: "Create account and email setup" }),
+      screen.getByRole("button", {
+        name: "Save student and issue queue number",
+      }),
     )
     expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
     const body = provisioningBody()

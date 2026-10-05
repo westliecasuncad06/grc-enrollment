@@ -11,6 +11,8 @@ use App\Models\TransfereeCredit;
 
 final readonly class EvaluateCreditMappingStatus
 {
+    private const SUBMIT_HINT = 'You have subjects saved but not yet sent. Submit your list to your Program Head to start credit mapping.';
+
     public function execute(StudentProfile $student): CreditMappingStatusResult
     {
         $studentType = $student->student_type instanceof StudentType
@@ -30,7 +32,10 @@ final readonly class EvaluateCreditMappingStatus
             ->where('student_id', $student->id)
             ->get();
 
-        $totalCredits = $credits->count();
+        // A draft is the student's own unsent list (ADR 0026, amended): it is not part of the
+        // workflow until it is submitted, so it is never counted as a credit in progress or done.
+        $draftCredits = $credits->where('status', TransfereeCreditStatus::Draft)->count();
+        $totalCredits = $credits->count() - $draftCredits;
         $pendingCredits = $credits->where('status', TransfereeCreditStatus::Pending)->count();
         $endorsedCredits = $credits->where('status', TransfereeCreditStatus::Endorsed)->count();
         $approvedCredits = $credits->where('status', TransfereeCreditStatus::Approved)->count();
@@ -45,7 +50,9 @@ final readonly class EvaluateCreditMappingStatus
                 return new CreditMappingStatusResult(
                     isCompleted: false,
                     requiresCreditMapping: true,
-                    reason: 'Credit mapping has not been submitted or completed yet. Please wait for the Program Head / Registrar to evaluate your credits from your previous school.',
+                    reason: $draftCredits > 0
+                        ? self::SUBMIT_HINT
+                        : 'Credit mapping has not been submitted or completed yet. Please wait for the Program Head / Registrar Head to evaluate your credits from your previous school.',
                     totalCredits: 0,
                     pendingCredits: 0,
                     endorsedCredits: 0,
@@ -59,7 +66,7 @@ final readonly class EvaluateCreditMappingStatus
                 return new CreditMappingStatusResult(
                     isCompleted: false,
                     requiresCreditMapping: true,
-                    reason: 'Credit mapping is currently in progress. Please wait for the Program Head and Registrar to finalize your credit evaluation.',
+                    reason: 'Credit mapping is currently in progress. Please wait for the Program Head and Registrar Head to finalize your credit evaluation.',
                     totalCredits: $totalCredits,
                     pendingCredits: $pendingCredits,
                     endorsedCredits: $endorsedCredits,
@@ -114,7 +121,9 @@ final readonly class EvaluateCreditMappingStatus
         return new CreditMappingStatusResult(
             isCompleted: false,
             requiresCreditMapping: true,
-            reason: 'Your credit mapping or curriculum migration has not been completed yet. Please contact your Program Head or Registrar before enrolling.',
+            reason: $draftCredits > 0
+                ? self::SUBMIT_HINT
+                : 'Your credit mapping or curriculum migration has not been completed yet. Please contact your Program Head or Registrar Head before enrolling.',
             totalCredits: $totalCredits,
             pendingCredits: $pendingCredits,
             endorsedCredits: $endorsedCredits,

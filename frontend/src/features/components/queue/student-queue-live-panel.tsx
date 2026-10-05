@@ -63,6 +63,18 @@ function getStageGuidance(queue: StudentQueueView): string {
         : "Your queue number is not available yet. Claim it in person at the school Cashier kiosk."
     case "enrolled":
       return "Payment has been confirmed and your enrollment is complete."
+    case "freshman_awaiting_payment":
+      return "Go to the Cashier and wait for your number to be called. Your student account is set up after the Cashier confirms your payment; you will get an email then."
+    case "freshman_paid":
+      return "Your payment has been confirmed. Check your email for the account setup email to create your password."
+    case "transferee_awaiting_payment":
+      return "Choose your subjects on the Enrollment page if you have not yet, then go to the Cashier and wait for your number to be called."
+    case "awaiting_first_payment":
+      return "Your subjects are saved. Take your queue number to the Cashier and wait for it to be called; once you have paid, your enrollment goes to the Registrar for approval."
+    case "transferee_paid":
+      return "Your payment has been confirmed. Your enrollment now waits for Registrar approval; you will get an email once you are enrolled."
+    case "transferee_enrolled":
+      return "You are enrolled: your payment was confirmed and the Registrar approved your enrollment. You no longer need this queue number."
   }
 }
 

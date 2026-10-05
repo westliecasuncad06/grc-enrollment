@@ -2,6 +2,7 @@
 
 namespace App\Actions\Scheduling;
 
+use App\Actions\Enrollment\NotifyAwaitingFreshmen;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
@@ -50,6 +51,7 @@ final class TransitionScheduleProposal
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
         private readonly NotifyScheduleTransition $notifyScheduleTransition,
+        private readonly NotifyAwaitingFreshmen $notifyAwaitingFreshmen,
     ) {}
 
     public function execute(
@@ -180,6 +182,9 @@ final class TransitionScheduleProposal
                         'message' => $message,
                     ]);
                 }
+
+                // ADR 0043: freshmen who paid while every section was full learn a section opened.
+                $this->notifyAwaitingFreshmen->forSections($publishedSectionIds);
             }
 
             $reviewerNotificationTerm = null;

@@ -28,6 +28,8 @@ const ticket = {
   id: 1,
   enrollment_id: 9,
   student_number: "2026-08-0001",
+  student_id: 4,
+  is_freshman: false,
   ticket_number: "Q000009",
   queue_date: "2026-08-23",
   status: "waiting",

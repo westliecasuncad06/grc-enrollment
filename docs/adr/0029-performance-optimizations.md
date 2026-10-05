@@ -90,6 +90,18 @@ call is never cached. Unused `pandas` is dropped from `ml-service/requirements.t
 `next start`. `NEXT_DIST_DIR` lets a build write outside `.next`, so it cannot clobber a running
 `next dev`.
 
+## Update 2026-10-04 — Regular-student section picker polls at 3 s
+
+The stakeholders asked that a Regular student see the open seats of their section drop in real time and that
+only ONE section (the first with seats) be offered at a time, the next appearing when it fills. The
+`GET /enrollment-blocks` query that feeds that picker (`useEnrollmentBlocksQuery`) therefore moves from 10 s
+to **3 s** (`ENROLLMENT_BLOCKS_POLL_MS`), the same tier as the student's own queue view. It still pauses in a
+background tab (`refetchIntervalInBackground: false`) and re-reads on window focus, and it only runs for a
+Regular student who is on the Enrollment page with no active enrollment this term. It is still polling, not
+push (no WebSocket/SSE, as in ADR 0023/0027). This endpoint runs `BuildEnrollmentBlockPool`, which is heavier
+than the queue view, so watch its request rate at enrollment peaks; if it proves costly, raise the constant
+(5 s is the next sensible step) rather than add push infrastructure.
+
 ## Not done, and why
 
 - **Server-side cache of reference lists** (`/academic-terms`, `/programs`, `/subjects`, `/curricula`,

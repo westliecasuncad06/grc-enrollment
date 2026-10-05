@@ -2401,6 +2401,53 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/student-profiles/next-student-number:
+    get:
+      operationId: getNextStudentNumber
+      summary: Preview the student number the next new account would get
+      description: >
+        Admission Staff, the same permission as creating a student profile (ADR
+        0042, amended 2026-10-04). A preview only: nothing is reserved, so an
+        account saved first takes the number and the next preview moves on.
+        `student_number` is null when every number for the current year is in use.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The number the next new account would get.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [type, student_number]
+                    properties:
+                      type:
+                        type: string
+                        const: next_student_number
+                      student_number:
+                        type: [string, "null"]
+                        description: "`YYYY-MM-NNNNN`, or null when the year's numbers are used up."
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/student-profiles/{studentProfile}:
     parameters:
       - $ref: "#/components/parameters/RequestId"
@@ -2494,13 +2541,269 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles/{studentProfile}/queue-link-resends:
+    post:
+      operationId: postStudentProfileQueueLinkResend
+      summary: Send a freshman's live-queue link again
+      description: >
+        Admission Staff only. Replaces the secret in the freshman's
+        "view my queue number" link and emails the new one; the previous link
+        stops working at once (ADR 0044). Refused (422) for a student with no
+        queue number or whose first payment is already confirmed.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          description: Student profile ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The record reflects the latest link delivery attempt.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The student has no queue number, or has already paid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles/{studentProfile}/freshman-payment-preview:
+    get:
+      operationId: getStudentProfileFreshmanPaymentPreview
+      summary: Preview a freshman's or transferee's first payment
+      description: >
+        Accounting Staff only (ADR 0043, amended 2026-10-05). Shows what
+        confirming this student's first payment will do before the Cashier
+        presses the button. For a freshman: the section they would be submitted
+        to (the first block, in block-number order, with a seat in every
+        subject; only for the Regular enrollment category), its seats and the
+        estimated assessment, or that every section is full and the payment
+        would be held as credit. For a transferee: the subjects they chose,
+        waiting at the payment hold, and the estimated assessment, or that they
+        have not chosen yet and the payment would be held. Writes nothing.
+        Refused (422) for a student who does not pay first.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          description: Student profile ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: What the confirmation would do.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreshmanPaymentPreviewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles/{studentProfile}/freshman-payment:
+    post:
+      operationId: postStudentProfileFreshmanPayment
+      summary: Confirm a freshman's or transferee's first payment
+      description: >
+        Accounting Staff only (ADR 0043, amended 2026-10-04 and 2026-10-05).
+        One transaction, for a freshman or a transferee. The amount must be
+        at least the configured minimum (PHP 1,000.00) and never needs a
+        promissory note; the unpaid balance stays on the student's account.
+        The money is always held as advance credit first and the queue ticket
+        is served. The payment does not enroll anyone: a freshman with a block
+        that has open seats is submitted to it, and a transferee's own
+        enrollment moves from `awaiting_first_payment` to
+        `pending_registrar_approval`; Registrar Staff approval then enrolls
+        them from the held credit, makes the COR and sends the one enrollment
+        confirmation email. Otherwise (every section full or an Irregular
+        freshman; a transferee who has not chosen subjects yet) the payment
+        stays held and the student is told what happens next. After commit a
+        freshman's account setup invitation is emailed (a transferee already
+        has an account). Idempotent on
+        `student_profiles.freshman_payment_confirmed_at`, the key for both
+        types: a repeat answers 200 with the same result and changes and sends
+        nothing. Refused (422) below the minimum, or for a student who does
+        not pay first.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          description: Student profile ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmFreshmanPaymentRequest"
+      responses:
+        "200":
+          description: The payment was already confirmed; nothing changed.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreshmanPaymentResponse"
+        "201":
+          description: The payment was confirmed now.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreshmanPaymentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/freshman-enrollees:
+    get:
+      operationId: getFreshmanEnrollees
+      summary: List the freshmen who pay first
+      description: >
+        Registrar Staff and the Registrar Head only; read-only (ADR 0043). A
+        freshman's enrollment needs no Registrar approval, so this is where the
+        Registrar sees who was enrolled and in which section, who is waiting
+        for a section to open, and who has not paid yet. Newest payment first.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [enrolled, enrolling, awaiting_section, awaiting_payment]
+        - name: search
+          in: query
+          required: false
+          description: Matches the student's name or student number.
+          schema:
+            type: string
+            maxLength: 255
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The paginated list.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedFreshmanEnrolleeCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/student-profiles/{studentProfile}/account-setup-invitations:
     post:
       operationId: postStudentProfileAccountSetupInvitation
       summary: Resend a pending Student account setup invitation
       description: >
         Admission Staff only. Replaces any previous setup code before sending
-        a new email. Active accounts cannot receive another setup invitation.
+        a new email. Active accounts cannot receive another setup invitation,
+        and neither can a freshman whose first payment the Cashier has not
+        confirmed yet (422).
       security:
         - bearerAuth: []
       tags:
@@ -3198,6 +3501,7 @@ paths:
               - draft
               - pending_program_head_approval
               - pending_student_review
+              - awaiting_first_payment
               - pending_registrar_approval
               - pending_payment
               - enrolled
@@ -3804,12 +4108,13 @@ paths:
         (`subject_id`). Registrar Staff and Registrar Head cannot create one
         (ADR 0026). `source_subject_code` may be left blank and
         `credited_units` may be fractional. `source_grade` stays a free
-        string with no equivalence rule encoded. Always created `pending`;
-        the API never guesses `subject_id`. A request identical to a
-        still-open one (same student, school, subject title and code)
-        returns that row with 200 instead of creating a duplicate. A
-        Student's request notifies the Program Chairs of the student's
-        college.
+        string with no equivalence rule encoded. A Student's request is
+        created as a private `draft` (nobody else sees it and nobody is
+        notified until `POST /transferee-credits/submit`); a Program Chair's
+        is created `pending`. The API never guesses `subject_id`. A request
+        identical to one still in the student's list or in the workflow (same
+        student, school, subject title and code) returns that row with 200
+        instead of creating a duplicate.
       security:
         - bearerAuth: []
       tags:
@@ -3835,7 +4140,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TransfereeCreditResponse"
         "201":
-          description: The recorded, pending transferee credit.
+          description: The recorded transferee credit (a draft for a Student, pending for a Program Chair).
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
@@ -3859,24 +4164,71 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/transferee-credits/submit:
+    post:
+      operationId: postTransfereeCreditsSubmit
+      summary: Send the student's saved list to the Program Chair
+      description: >
+        Student only. Every `draft` credit of the caller becomes `pending`
+        (with `submitted_at`) in one transaction, and the Program Chairs of the
+        student's college get one notice with the number of subjects. The
+        student is always the caller. Idempotent: a repeat finds no draft,
+        changes nothing, notifies nobody, and answers 200 with an empty `data`.
+        Every credit sent is audited (`transferee_credit.submitted`).
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The credits this call sent (empty when there was nothing to send).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmittedTransfereeCreditsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The student's record could not be found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/transferee-credits/{transfereeCredit}:
     patch:
       operationId: patchTransfereeCredit
-      summary: Map, endorse or decline a credit (Program Chair); approve or reject it (Registrar Staff)
+      summary: Edit a draft (Student); map, endorse or decline a credit (Program Chair); approve, reject or return it (Registrar Head)
       description: >
         No `role:` middleware — TransfereeCreditPolicy resolves the ability
-        (ADR 0026). A Program Chair may only act on a credit of a student in
-        their own college. With no `action`, the Program Chair edits or maps
-        a credit, allowed only while it is `pending`. `action: endorse`
-        (Program Chair, `pending` → `endorsed`) needs a mapped subject, which
-        the same request may set through `subject_id`, and notifies Registrar
-        Staff. `action: decline` (Program Chair, `pending` → `rejected`)
-        requires a reason and notifies the Student. `action: approve` or
-        `action: reject` is Registrar Staff only and requires the credit to
-        currently be `endorsed`; `reject` requires a reason. A reason is
-        recorded in the audit row. Each step re-checks the status under a
-        row lock, so a repeated request changes nothing a second time. An
-        approved credit that is mapped to a subject counts as credited for
+        (ADR 0026, amended). A Student may only correct the content of their
+        own `draft` (no `action`, no `subject_id`). A Program Chair may only
+        act on a credit of a student in their own college and never sees a
+        draft. With no `action`, the Program Chair edits or maps a credit,
+        allowed only while it is `pending`. `action: endorse` (Program Chair,
+        `pending` → `endorsed`) needs a mapped subject, which the same request
+        may set through `subject_id`, notifies the Registrar Head, and clears
+        any earlier return. `action: decline` (Program Chair, `pending` →
+        `rejected`) requires a reason and notifies the Student. `action:
+        approve`, `reject` or `return` is the Registrar Head only and requires
+        the credit to currently be `endorsed`; `reject` and `return` require a
+        reason. `return` sends the credit back to `pending`, records who, when
+        and why, and notifies the Program Chairs of the student's college. A
+        reason is recorded in the audit row. Each step re-checks the status
+        under a row lock, so a repeated request changes nothing a second time.
+        An approved credit that is mapped to a subject counts as credited for
         eligibility, standing, promotion and the prospectus; it carries no
         GRC grade. Every write is audited (FR-FIN-003).
       security:
@@ -3932,6 +4284,48 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: deleteTransfereeCredit
+      summary: Remove a subject from the student's saved list
+      description: >
+        Student only, and only the student's own credit while it is still a
+        `draft`. A credit that has been sent is part of the workflow and is
+        never deleted (422). Audited as `transferee_credit.deleted`.
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: transfereeCredit
+          in: path
+          required: true
+          description: Transferee credit ID.
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: The draft was removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No transferee credit exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The credit is no longer a draft.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/transferee-credits/{transfereeCredit}/suggestions:
     get:
       operationId: getTransfereeCreditSuggestions
@@ -3975,6 +4369,169 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           description: No transferee credit exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles/{studentProfile}/transferee-credits/suggestions:
+    get:
+      operationId: getStudentCreditMappingSuggestions
+      summary: Suggestions for every pending credit of a student, and their curriculum (Program Chair)
+      description: >
+        Program Chair only, and only for a student of their own college (a Chair
+        with no assigned college is unscoped). For the side-by-side mapping
+        screen (ADR 0026, amended): `credits` has one entry per `pending` credit
+        of the student (never a draft or a decided credit), each with the same
+        ranked suggestions the per-credit endpoint gives, computed together so
+        the cost does not grow with the number of subjects; `curriculum_subjects`
+        are the active subjects of the student's own curriculum to choose from,
+        one per subject, ordered by year level, semester and code. Advice only:
+        computed on every request, never stored, never written to `subject_id`.
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          description: Student profile ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The suggestions per pending credit and the curriculum subjects.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentCreditMappingWorkspaceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles/{studentProfile}/transferee-credits/submit-to-registrar-head:
+    post:
+      operationId: postStudentCreditsSubmitToRegistrarHead
+      summary: Send a whole student to the Registrar Head (Program Chair)
+      description: >
+        Program Chair only, and only for a student of their own college. Every
+        `pending` credit of the student becomes `endorsed` (with `endorsed_by`
+        and `endorsed_at`, clearing any earlier return) in one transaction, and
+        the Registrar Head gets one notice with the count. All or nothing: if
+        any pending credit still has no mapped subject, nothing is endorsed and
+        the answer is 422 with the credits still unmapped in `errors.credits`
+        (a credit with no equivalent is declined first, which makes it
+        `rejected`). Idempotent: a repeat finds no pending credit, changes
+        nothing, notifies nobody, and answers 200 with an empty `data`. Each
+        endorsement is audited (`transferee_credit.endorsed`).
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          description: Student profile ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The credits this call endorsed (empty when nothing was pending).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmittedTransfereeCreditsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: A pending credit has no mapped subject; nothing was endorsed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles/{studentProfile}/transferee-credits/approve-all:
+    post:
+      operationId: postStudentCreditsApproveAll
+      summary: Approve all of a student's endorsed credits (Registrar Head)
+      description: >
+        Registrar Head only. Every `endorsed` credit of the student becomes
+        `approved` (with `processed_by` and `processed_at`) in one transaction,
+        and the student gets one notice with the count. Only `endorsed` credits
+        are touched: a pending credit has not been sent to the Head, a draft is
+        private, a decided credit is decided. Idempotent: a repeat finds no
+        endorsed credit, changes nothing, notifies nobody, and answers 200 with
+        an empty `data`. Each approval is audited
+        (`transferee_credit.approved`). An approved credit that is mapped to a
+        subject counts as credited; it carries no GRC grade.
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          description: Student profile ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The credits this call approved (empty when nothing was endorsed).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmittedTransfereeCreditsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
           content:
             application/json:
               schema:
@@ -4667,6 +5224,55 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: The request body or eligible pending-payment enrollment is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/public/queue-view/{token}:
+    get:
+      operationId: getPublicQueueView
+      summary: Read a freshman's or transferee's live queue view from their emailed link
+      description: >
+        No sign-in (ADR 0044). The 48-character token in the path is the
+        credential: it identifies exactly one queue ticket, issued to a
+        freshman at Admission (or to a transferee when their credit mapping
+        closes), and only its SHA-256 is stored. Returns the
+        same ticket-number-only shape as the signed-in Student's view with
+        stage `freshman_awaiting_payment` / `freshman_paid` or
+        `transferee_awaiting_payment` / `transferee_paid` (and `transferee_enrolled`
+        once the Registrar has approved them); it never returns
+        a name, e-mail or student number. An unknown or malformed token is a
+        plain 404. Rate limited per link (40 a minute) with a generous
+        per-address ceiling.
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: token
+          in: path
+          required: true
+          description: The secret from the emailed link.
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9]{48}$"
+      responses:
+        "200":
+          description: The live queue view for that freshman's ticket.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentQueueViewResponse"
+        "404":
+          description: The token is not known (it never existed or was replaced).
           content:
             application/json:
               schema:
@@ -6234,6 +6840,9 @@ paths:
               - transferee_credit.endorsed
               - transferee_credit.approved
               - transferee_credit.rejected
+              - transferee_credit.submitted
+              - transferee_credit.returned
+              - transferee_credit.deleted
         - name: auditable_type
           in: query
           required: false
@@ -7462,6 +8071,7 @@ components:
             - transferee_credit_rejected
             - transferee_credit_requested
             - transferee_credit_endorsed
+            - transferee_credit_returned
             - schedule_submitted_for_dean
             - schedule_dean_approved
             - schedule_executive_approved
@@ -8284,11 +8894,15 @@ components:
           type: string
           description: >
             PRD §4.2's authoritative lifecycle — see
-            App\Domain\Enrollment\EnrollmentStatus.
+            App\Domain\Enrollment\EnrollmentStatus. `awaiting_first_payment` is
+            the payment hold of a transferee who has not paid yet (ADR 0043,
+            amended 2026-10-05): the Registrar does not see the enrollment
+            until the Cashier has confirmed the first payment.
           enum:
             - draft
             - pending_program_head_approval
             - pending_student_review
+            - awaiting_first_payment
             - pending_registrar_approval
             - pending_payment
             - enrolled
@@ -8979,38 +9593,39 @@ components:
             - decline
             - approve
             - reject
+            - return
         reason:
           type: ["string", "null"]
           maxLength: 1000
-          description: Required exactly when action is decline or reject.
+          description: Required exactly when action is decline, reject or return.
         source_institution:
           type: string
-          description: Prohibited when action is approve, reject or decline.
+          description: Prohibited when action is approve, reject, decline or return.
         source_subject_code:
           type: ["string", "null"]
-          description: Prohibited when action is approve, reject or decline.
+          description: Prohibited when action is approve, reject, decline or return.
         source_subject_title:
           type: string
-          description: Prohibited when action is approve, reject or decline.
+          description: Prohibited when action is approve, reject, decline or return.
         source_grade:
           type: ["string", "null"]
-          description: Prohibited when action is approve, reject or decline.
+          description: Prohibited when action is approve, reject, decline or return.
         source_school_year:
           type: ["string", "null"]
-          description: Prohibited when action is approve, reject or decline.
+          description: Prohibited when action is approve, reject, decline or return.
         source_semester:
           type: ["string", "null"]
-          description: Prohibited when action is approve, reject or decline.
+          description: Prohibited when action is approve, reject, decline or return.
         credited_units:
           type: number
           exclusiveMinimum: 0
           maximum: 99.9
-          description: Prohibited when action is approve, reject or decline.
+          description: Prohibited when action is approve, reject, decline or return.
         subject_id:
           type: ["integer", "null"]
           description: >
             The subject of the student's curriculum the credit counts as.
-            Prohibited when action is approve, reject or decline. `endorse`
+            Prohibited when action is approve, reject, decline or return. `endorse`
             needs one, from this request or already on the credit.
     PaginatedTransfereeCreditCollection:
       type: object
@@ -9036,6 +9651,16 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/TransfereeCreditResource"
+    SubmittedTransfereeCreditsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransfereeCreditResource"
     TransfereeCreditResource:
       type: object
       additionalProperties: false
@@ -9059,6 +9684,9 @@ components:
         - status
         - status_label
         - endorsed_at
+        - submitted_at
+        - returned_at
+        - return_reason
         - processed_at
         - created_at
       properties:
@@ -9102,6 +9730,7 @@ components:
         status:
           type: string
           enum:
+            - draft
             - pending
             - endorsed
             - approved
@@ -9111,12 +9740,84 @@ components:
         endorsed_at:
           type: ["string", "null"]
           format: date-time
+        submitted_at:
+          type: ["string", "null"]
+          format: date-time
+          description: When the Student sent the credit to the Program Chair.
+        returned_at:
+          type: ["string", "null"]
+          format: date-time
+          description: When the Registrar Head last returned the credit to the Program Chair (cleared when it is endorsed again).
+        return_reason:
+          type: ["string", "null"]
+          description: Why the Registrar Head returned it (cleared when it is endorsed again).
         processed_at:
           type: ["string", "null"]
           format: date-time
         created_at:
           type: ["string", "null"]
           format: date-time
+    StudentCreditMappingWorkspaceResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - student_id
+            - credits
+            - curriculum_subjects
+          properties:
+            student_id:
+              type: integer
+            credits:
+              type: array
+              description: One entry per pending credit of the student, ordered by id.
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - credit_id
+                  - suggestions
+                properties:
+                  credit_id:
+                    type: integer
+                  suggestions:
+                    type: array
+                    maxItems: 5
+                    items:
+                      $ref: "#/components/schemas/CreditSubjectSuggestion"
+            curriculum_subjects:
+              type: array
+              description: >
+                Active subjects of the student's own curriculum, one per
+                subject, ordered by year level, semester and code.
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - subject_id
+                  - subject_code
+                  - subject_title
+                  - units
+                  - year_level
+                  - semester
+                properties:
+                  subject_id:
+                    type: integer
+                  subject_code:
+                    type: string
+                  subject_title:
+                    type: string
+                  units:
+                    type: number
+                  year_level:
+                    type: integer
+                  semester:
+                    type: string
     CreditSubjectSuggestionsResponse:
       type: object
       additionalProperties: false
@@ -9287,9 +9988,28 @@ components:
             - no_active_enrollment
             - pending_program_head_approval
             - pending_student_review
+            - awaiting_first_payment
             - pending_registrar_approval
             - pending_payment
             - enrolled
+            - freshman_awaiting_payment
+            - freshman_paid
+            - transferee_awaiting_payment
+            - transferee_paid
+            - transferee_enrolled
+          description: >
+            `freshman_awaiting_payment` and `freshman_paid` appear only on the
+            public live-queue link (ADR 0044): a freshman holding a queue
+            number from Admission who has not, or has, had their first
+            payment confirmed by the Cashier. `transferee_awaiting_payment`
+            and `transferee_paid` are the same for a transferee holding the
+            queue number issued when their credit mapping closed.
+            `transferee_enrolled` replaces `transferee_paid` on that link once the
+            Registrar has approved their enrollment.
+            `awaiting_first_payment` is the signed-in transferee's own stage
+            while their chosen subjects wait at the payment hold; until the
+            Cashier has taken their first payment, `ticket` is the number
+            they were emailed even when they have no enrollment yet.
         can_claim:
           type: boolean
           description: >
@@ -9393,7 +10113,10 @@ components:
         - type
         - id
         - enrollment_id
+        - student_id
         - student_number
+        - is_freshman
+        - is_transferee
         - ticket_number
         - queue_date
         - status
@@ -9410,9 +10133,25 @@ components:
         id:
           type: integer
         enrollment_id:
+          type: [integer, 'null']
+          description: >
+            Null for a freshman who took a queue number at Admission, or a
+            transferee whose credit mapping closed, and has no enrollment yet
+            (ADR 0043).
+        student_id:
           type: integer
+          description: The student profile; always present.
         student_number:
           type: string
+        is_freshman:
+          type: boolean
+          description: >
+            Lets the Cashier see that the person being served is a freshman.
+        is_transferee:
+          type: boolean
+          description: >
+            Lets the Cashier see that the person being served is a transferee,
+            who also pays first (ADR 0043, amended 2026-10-05).
         ticket_number:
           type: string
           description: >
@@ -10203,6 +10942,11 @@ components:
         - academic_setup_editable
         - account_setup_status
         - invitation_delivery_status
+        - freshman_payment_confirmed_at
+        - freshman_status
+        - advance_payment_held
+        - queue_ticket_number
+        - queue_link_delivery_status
       properties:
         type:
           type: string
@@ -10284,10 +11028,343 @@ components:
           description: False after the Student has any enrollment.
         account_setup_status:
           type: string
-          enum: [pending, active]
+          enum: [awaiting_payment, pending, active]
+          description: >
+            `awaiting_payment`: a freshman who has a queue number but whose
+            first payment the Cashier has not confirmed; the account setup
+            email is sent only after that (ADR 0043).
         invitation_delivery_status:
           type: string
           enum: [not_sent, sent, failed]
+        freshman_payment_confirmed_at:
+          type: [string, 'null']
+          format: date-time
+          description: Set once, when the Cashier confirms a freshman's first payment.
+        queue_ticket_number:
+          type: [string, 'null']
+          description: A freshman's queue number issued at Admission; null for every other student.
+        queue_link_delivery_status:
+          type: [string, 'null']
+          enum: [not_sent, sent, failed, null]
+          description: Delivery of the emailed live-queue link; null when there is no queue number.
+        freshman_status:
+          type: [string, 'null']
+          enum: [awaiting_payment, awaiting_section, enrolling, null]
+          description: >
+            Where a freshman is in the pay-first flow (ADR 0043); null for every
+            other student. `awaiting_payment`: no confirmed first payment yet.
+            `awaiting_section`: paid, but every section was full so the payment
+            is held and no enrollment is in progress. `enrolling`: paid, with an
+            enrollment in progress or done. Derived, not stored.
+        advance_payment_held:
+          type: boolean
+          description: >
+            True while a freshman's first payment is held as credit and has not yet been applied
+            to an enrollment (ADR 0043) — the condition under which a Registrar approval completes
+            the enrollment from that credit. The student's own screens use it to say there is no
+            queue number to claim and nothing more to pay. About the money, not the term: false once
+            the credit is applied, and for any student who never held any. Derived, not stored.
+    FreshmanPaymentPreviewResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/FreshmanPaymentPreviewResource"
+    FreshmanPaymentPreviewResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - student_id
+        - student_number
+        - student_name
+        - student_type
+        - ticket_number
+        - minimum_amount
+        - already_confirmed
+        - can_enroll
+        - enrollment
+        - block
+        - estimated_total
+      properties:
+        type:
+          type: string
+          const: freshman_payment_preview
+        student_id:
+          type: integer
+        student_number:
+          type: string
+        student_name:
+          type: string
+        student_type:
+          type: [string, 'null']
+          description: "`freshman` or `transferee`: the two students who pay first (ADR 0043, amended 2026-10-05)."
+        enrollment:
+          description: >
+            A transferee's own chosen subjects waiting at the payment hold
+            (`awaiting_first_payment`); null for a freshman and for a
+            transferee who has not chosen yet.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [id, status, status_label, total_units, subjects]
+              properties:
+                id:
+                  type: integer
+                status:
+                  type: string
+                status_label:
+                  type: string
+                total_units:
+                  type: number
+                subjects:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [code, title, units]
+                    properties:
+                      code:
+                        type: string
+                      title:
+                        type: string
+                      units:
+                        type: number
+        ticket_number:
+          type: [string, 'null']
+          description: The student's queue number, if one was issued.
+        minimum_amount:
+          type: string
+          description: Decimal string; the smallest first payment accepted (PHP).
+        already_confirmed:
+          type: boolean
+          description: True when the first payment was already confirmed; confirming again changes nothing.
+        can_enroll:
+          type: boolean
+          description: >
+            For a freshman: false when every section is full or they are in the Irregular category, so the payment
+            would be held as credit. For a transferee: true when they have chosen subjects (`enrollment` is set);
+            false when they have not, so the payment would be held until they choose and submit.
+        block:
+          description: The section the freshman would get; null when `can_enroll` is false and always null for a transferee.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [block_code, total_units, seats_remaining, subjects]
+              properties:
+                block_code:
+                  type: string
+                total_units:
+                  type: number
+                seats_remaining:
+                  type: integer
+                  description: The fewest seats left among the block's subjects.
+                subjects:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [code, title, units]
+                    properties:
+                      code:
+                        type: string
+                      title:
+                        type: string
+                      units:
+                        type: number
+        estimated_total:
+          type: [string, 'null']
+          description: Decimal string; what the enrollment would be assessed to owe. Null when `block` is null.
+    ConfirmFreshmanPaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [amount]
+      properties:
+        amount:
+          type: number
+          minimum: 1000
+          maximum: 99999999.99
+          description: >
+            At least the configured minimum (`enrollment.freshman_payment.minimum_amount`,
+            PHP 1,000.00). Anything at or above it enrolls the freshman; the unpaid
+            balance stays on the account. There is no promissory-note field.
+        external_reference:
+          type: [string, 'null']
+          maxLength: 255
+          description: The Cashier's receipt reference.
+    FreshmanPaymentResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/FreshmanPaymentResource"
+    FreshmanPaymentResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - outcome
+        - block_code
+        - student
+        - enrollment
+        - payment
+        - document
+        - held_amount
+      properties:
+        type:
+          type: string
+          const: freshman_payment
+        outcome:
+          type: string
+          enum: [awaiting_registrar_approval, awaiting_section, enrolled]
+          description: >
+            `awaiting_registrar_approval`: the payment is in and the freshman is
+            submitted to `block_code` (a transferee's chosen enrollment moves
+            from `awaiting_first_payment` to `pending_registrar_approval`);
+            Registrar Staff approval enrolls them and
+            only then is the enrolled email sent (2026-10-04).
+            `awaiting_section`: the payment is held as credit; the freshman is
+            told when a section opens, a transferee is told to choose and submit
+            their subjects (2026-10-05).
+            `enrolled`: the Registrar has approved (returned only by a repeat call).
+        block_code:
+          type: [string, 'null']
+        student:
+          type: object
+          additionalProperties: false
+          required: [id, student_number, name]
+          properties:
+            id:
+              type: integer
+            student_number:
+              type: string
+            name:
+              type: string
+        enrollment:
+          description: Null when the payment was held.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [id, status, total_units]
+              properties:
+                id:
+                  type: integer
+                status:
+                  type: string
+                total_units:
+                  type: number
+        payment:
+          description: The recorded payment; null when the payment was held.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [external_reference, amount, promissory_note_on_file, confirmed_at]
+              properties:
+                external_reference:
+                  type: [string, 'null']
+                amount:
+                  type: [string, 'null']
+                  description: Decimal string, never a float.
+                promissory_note_on_file:
+                  type: boolean
+                confirmed_at:
+                  type: string
+                  format: date-time
+        document:
+          description: The Certificate of Registration made for the enrollment; null when the payment was held.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [id, document_type, document_number, generated_at]
+              properties:
+                id:
+                  type: integer
+                document_type:
+                  type: string
+                document_number:
+                  type: string
+                generated_at:
+                  type: string
+                  format: date-time
+        held_amount:
+          type: [string, 'null']
+          description: Decimal string; how much is held as credit when `outcome` is `awaiting_section`, otherwise null.
+    PaginatedFreshmanEnrolleeCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/FreshmanEnrolleeResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    FreshmanEnrolleeResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - student_number
+        - name
+        - program_code
+        - year_level
+        - status
+        - status_label
+        - block_code
+        - amount_paid
+        - ticket_number
+        - payment_confirmed_at
+      properties:
+        type:
+          type: string
+          const: freshman_enrollee
+        id:
+          type: integer
+          description: The student profile ID.
+        student_number:
+          type: string
+        name:
+          type: string
+        program_code:
+          type: string
+        year_level:
+          type: integer
+        status:
+          type: string
+          enum: [enrolled, enrolling, awaiting_section, awaiting_payment]
+          description: >
+            `enrolled`; `enrolling` (paid, with an enrollment in progress, for
+            example the section that opened for a waiting freshman, awaiting
+            Registrar Staff approval); `awaiting_section` (paid, held until a
+            section opens); `awaiting_payment` (queue number issued, first
+            payment not confirmed yet).
+        status_label:
+          type: string
+        block_code:
+          type: [string, 'null']
+          description: The section the freshman is in; null while waiting.
+        amount_paid:
+          type: [string, 'null']
+          description: Decimal string; everything the freshman has paid, including held credit. Null before payment.
+        ticket_number:
+          type: [string, 'null']
+        payment_confirmed_at:
+          type: [string, 'null']
+          format: date-time
     StoreStudentProfileRequest:
       type: object
       additionalProperties: false

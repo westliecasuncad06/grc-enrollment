@@ -2,7 +2,6 @@
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
-import { PublishedSectionsPanel } from "@/features/components/portal/published-sections-panel"
 import { ScheduleDecisionControls } from "@/features/components/portal/schedule-decision-workspace"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
@@ -26,15 +25,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/features/components/ui/tabs"
-import {
-  useAcademicTermsQuery,
-  useProgramsQuery,
-  useSectionsQuery,
-  useSubjectsQuery,
-} from "@/features/hooks/use-reference-data"
-import { useCurriculaQuery } from "@/features/hooks/use-curricula"
+import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
-import { useSectionPlansQuery } from "@/features/hooks/use-section-plans"
 import { getActiveAcademicTerm } from "@/features/services/reference-data-service"
 import type { ScheduleProposal } from "@/features/schemas/scheduling-schema"
 
@@ -81,44 +73,36 @@ export function SubmittedSchedulesWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "registrar_head"
   const termsQuery = useAcademicTermsQuery({ enabled: authorized })
-  const subjectsQuery = useSubjectsQuery({ enabled: authorized })
-  const sectionsQuery = useSectionsQuery({ enabled: authorized })
   const proposalsQuery = useScheduleProposalsQuery({ enabled: authorized })
-  const curriculaQuery = useCurriculaQuery()
-  const programsQuery = useProgramsQuery({ enabled: authorized })
   const activeTerm = getActiveAcademicTerm(termsQuery.data)
-  // College and year level live on the section plan a published section came
-  // from; a slow plan fetch must not block the section list itself.
-  const sectionPlansQuery = useSectionPlansQuery(
-    activeTerm?.id ?? 0,
-    authorized && activeTerm !== null,
+  // A plan a Program Head is still drafting is not "submitted" yet.
+  const submittedProposals = (proposalsQuery.data ?? []).filter(
+    (proposal) => proposal.is_submitted !== false,
   )
-  const published = (sectionsQuery.data ?? []).filter(
-    (section) => section.status === "published",
+  // The current publish only: a plan that is published for the active term. Drafts, plans
+  // still waiting for a decision and plans from earlier terms stay out of this tab (History
+  // keeps them).
+  const currentPublished = submittedProposals.filter(
+    (proposal) =>
+      proposal.status === "published" &&
+      activeTerm !== null &&
+      proposal.academic_term_id === activeTerm.id,
   )
-  const sectionsListQuery = {
-    isPending:
-      termsQuery.isPending ||
-      subjectsQuery.isPending ||
-      sectionsQuery.isPending,
-    isError:
-      termsQuery.isError || subjectsQuery.isError || sectionsQuery.isError,
-    error: termsQuery.error ?? subjectsQuery.error ?? sectionsQuery.error,
-    data: published,
+  const currentPlansQuery = {
+    isPending: termsQuery.isPending || proposalsQuery.isPending,
+    isError: termsQuery.isError || proposalsQuery.isError,
+    error: termsQuery.error ?? proposalsQuery.error,
+    data: currentPublished,
     refetch: () => {
       void termsQuery.refetch()
-      void subjectsQuery.refetch()
-      void sectionsQuery.refetch()
+      void proposalsQuery.refetch()
     },
   }
   const submittedProposalsQuery = {
     isPending: proposalsQuery.isPending,
     isError: proposalsQuery.isError,
     error: proposalsQuery.error,
-    // A plan a Program Head is still drafting is not "submitted" yet.
-    data: (proposalsQuery.data ?? []).filter(
-      (proposal) => proposal.is_submitted !== false,
-    ),
+    data: submittedProposals,
     refetch: () => {
       void proposalsQuery.refetch()
     },
@@ -127,14 +111,13 @@ export function SubmittedSchedulesWorkspace() {
   return (
     <WorkspacePage
       title="Submitted schedules"
-      description="See the class schedules each Program Head has submitted and the sections that are already published. This view is read-only."
+      description="See the current published class schedules each Program Head submitted, and the decision history. This view is read-only."
       unauthorized={!authorized}
-      lastUpdated={sectionsQuery.dataUpdatedAt}
+      lastUpdated={proposalsQuery.dataUpdatedAt}
     >
       <Tabs defaultValue="submitted" className="gap-4">
         <TabsList aria-label="Submitted schedule views">
           <TabsTrigger value="submitted">Submitted plans</TabsTrigger>
-          <TabsTrigger value="published">Published sections</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
@@ -143,15 +126,15 @@ export function SubmittedSchedulesWorkspace() {
             <CardHeader>
               <CardTitle level={2}>Plans from Program Heads</CardTitle>
               <CardDescription>
-                Every submitted department plan with its current status. Open
-                one to see its sections.
+                The current published plan for each college in the active term.
+                Open one to see its sections.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <AsyncBoundary
-                query={submittedProposalsQuery}
+                query={currentPlansQuery}
                 isEmpty={(proposals) => proposals.length === 0}
-                emptyMessage="No Program Head has submitted a schedule yet."
+                emptyMessage="No plan is published for the current term yet."
                 loadingLabel="Loading submitted schedules…"
               >
                 {(proposals) => (
@@ -231,35 +214,6 @@ export function SubmittedSchedulesWorkspace() {
                     </div>
                   )
                 }}
-              </AsyncBoundary>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="published">
-          <Card>
-            <CardHeader>
-              <CardTitle level={2}>Published sections</CardTitle>
-              <CardDescription>
-                Finalized sections in the current master schedule.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AsyncBoundary
-                query={sectionsListQuery}
-                isEmpty={(sections) => sections.length === 0}
-                emptyMessage="No published sections are available."
-                loadingLabel="Loading the master schedule…"
-              >
-                {(sections) => (
-                  <PublishedSectionsPanel
-                    sections={sections}
-                    subjects={subjectsQuery.data ?? []}
-                    sectionPlans={sectionPlansQuery.data ?? []}
-                    curricula={curriculaQuery.data ?? []}
-                    programs={programsQuery.data ?? []}
-                  />
-                )}
               </AsyncBoundary>
             </CardContent>
           </Card>

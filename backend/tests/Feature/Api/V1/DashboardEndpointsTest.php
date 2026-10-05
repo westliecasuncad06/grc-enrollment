@@ -227,6 +227,26 @@ final class DashboardEndpointsTest extends TestCase
         );
     }
 
+    public function test_stuck_enrollments_lists_a_student_waiting_at_the_payment_hold_with_the_days_since_their_review_finished(): void
+    {
+        $term = $this->makeActiveTerm();
+        $curriculum = $this->makeProgramAndCurriculum();
+        $waiting = $this->makeStudent($curriculum, 'STU-1101');
+
+        $this->makeEnrollment($waiting, $term, EnrollmentStatus::AwaitingFirstPayment, [
+            'program_head_decided_at' => now()->subDays(4),
+        ]);
+
+        $token = $this->tokenFor($this->makeUser(UserRole::Dean, 'dean-hold'));
+        $response = $this->withToken($token)->getJson('/api/v1/stuck-enrollments')->assertOk();
+
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.student_number', 'STU-1101');
+        $response->assertJsonPath('data.0.status', 'awaiting_first_payment');
+        $response->assertJsonPath('data.0.status_label', 'Awaiting First Payment');
+        $response->assertJsonPath('data.0.days_in_status', 4);
+    }
+
     public function test_stuck_enrollments_flags_rows_past_a_configured_threshold(): void
     {
         config(['enrollment.dashboard.stuck_threshold_days' => 2]);

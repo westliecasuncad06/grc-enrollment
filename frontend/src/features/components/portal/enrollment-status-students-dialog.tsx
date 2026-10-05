@@ -36,6 +36,7 @@ function statusBadgeVariant(
   if (
     status === "pending_program_head_approval" ||
     status === "pending_student_review" ||
+    status === "awaiting_first_payment" ||
     status === "pending_registrar_approval" ||
     status === "pending_payment"
   )

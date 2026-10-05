@@ -126,7 +126,7 @@ final class StoreStudentProfileRequest extends FormRequest
         if ($studentType !== null && ! $studentType->canHaveExistingStudentNumber()) {
             $validator->errors()->add(
                 'has_existing_student_number',
-                'Only a Returnee or an Existing Student can already have a student number.',
+                'Only a Transferee, a Returnee or an Existing Student can already have a student number.',
             );
         }
     }

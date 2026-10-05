@@ -118,6 +118,8 @@ const enrollmentStatusValues = [
   "draft",
   "pending_program_head_approval",
   "pending_student_review",
+  // A transferee's chosen subjects wait here for the Cashier's first payment (ADR 0043, amended 2026-10-05).
+  "awaiting_first_payment",
   "pending_registrar_approval",
   "pending_payment",
   "enrolled",

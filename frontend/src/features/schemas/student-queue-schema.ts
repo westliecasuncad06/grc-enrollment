@@ -4,9 +4,19 @@ const studentQueueStageValues = [
   "no_active_enrollment",
   "pending_program_head_approval",
   "pending_student_review",
+  // A transferee's chosen subjects wait for the Cashier's first payment (the signed-in view).
+  "awaiting_first_payment",
   "pending_registrar_approval",
   "pending_payment",
   "enrolled",
+  // A freshman reaching the Cashier before any account or enrollment exists (the public live link).
+  "freshman_awaiting_payment",
+  "freshman_paid",
+  // The same for a transferee holding the number issued when their credit mapping closed.
+  "transferee_awaiting_payment",
+  "transferee_paid",
+  // The Registrar has approved them since: the link must stop saying it waits for approval.
+  "transferee_enrolled",
 ] as const
 
 const queueTicketStatusValues = [

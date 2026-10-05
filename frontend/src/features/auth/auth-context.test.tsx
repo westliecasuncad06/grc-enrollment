@@ -7,6 +7,7 @@ import { AuthProvider } from "@/features/auth/auth-context"
 import type { AuthGateway, AuthSession } from "@/features/auth/auth-types"
 import { useAuth } from "@/features/auth/use-auth"
 import { getAuthenticatedJson } from "@/features/services/api-client"
+import { browserFormDraftStore } from "@/features/services/form-draft-store"
 
 const validSession: AuthSession = {
   userId: "1",
@@ -153,6 +154,46 @@ describe("AuthProvider", () => {
     expect(signOut).toHaveBeenCalled()
   })
 
+  it("wipes every saved form draft on sign-out, so the next person starts clean", async () => {
+    browserFormDraftStore.write("1", "admission.create-account.v1", {
+      first_name: "Ana",
+    })
+    browserFormDraftStore.write("2", "admission.create-account.v1", {
+      first_name: "Ben",
+    })
+    const user = userEvent.setup()
+    renderProvider(
+      createGateway({ restore: () => Promise.resolve(validSession) }),
+    )
+
+    await screen.findByText(/authenticated:Test Student/)
+    // A reload with a live session keeps what was typed…
+    expect(
+      browserFormDraftStore.read("1", "admission.create-account.v1"),
+    ).not.toBeNull()
+    await user.click(screen.getByRole("button", { name: "Sign out" }))
+
+    expect(
+      browserFormDraftStore.read("1", "admission.create-account.v1"),
+    ).toBeNull()
+    expect(
+      browserFormDraftStore.read("2", "admission.create-account.v1"),
+    ).toBeNull()
+  })
+
+  it("keeps saved form drafts when the session simply ran out, so signing in again brings them back", async () => {
+    browserFormDraftStore.write("1", "admission.create-account.v1", {
+      first_name: "Ana",
+    })
+
+    renderProvider(createGateway({ restore: () => Promise.resolve(null) }))
+
+    await screen.findByText(/anonymous:none/)
+    expect(
+      browserFormDraftStore.read("1", "admission.create-account.v1"),
+    ).toEqual({ first_name: "Ana" })
+  })
+
   it("signs out locally even when the server-side revoke rejects", async () => {
     const user = userEvent.setup()
     renderProvider(
@@ -177,7 +218,7 @@ describe("AuthProvider", () => {
       vi.unstubAllGlobals()
     })
 
-    it("clears the session and drops to anonymous when an authenticated request 401s", async () => {
+    it("clears the session, but not a half-typed form, when an authenticated request 401s", async () => {
       const clearSession = vi.fn()
       renderProvider(
         createGateway({
@@ -187,6 +228,9 @@ describe("AuthProvider", () => {
       )
 
       await screen.findByText(/authenticated:Test Student/)
+      browserFormDraftStore.write("1", "admission.create-account.v1", {
+        first_name: "Ana",
+      })
 
       vi.stubGlobal("fetch", fetchMock)
       fetchMock.mockResolvedValue(
@@ -213,6 +257,10 @@ describe("AuthProvider", () => {
           "anonymous:none:persistence-on",
         )
       })
+      // An expired token is not a sign-out: the half-typed form is the last thing to throw away.
+      expect(
+        browserFormDraftStore.read("1", "admission.create-account.v1"),
+      ).toEqual({ first_name: "Ana" })
     })
   })
 })

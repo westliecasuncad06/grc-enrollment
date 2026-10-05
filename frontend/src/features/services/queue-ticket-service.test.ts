@@ -28,6 +28,10 @@ const ticket = {
   id: 1,
   enrollment_id: 9,
   student_number: "2026-0001",
+  student_id: 4,
+  is_freshman: false,
+  // The API now says whether the ticket belongs to a transferee too (ADR 0043, amended 2026-10-05).
+  is_transferee: false,
   ticket_number: "Q000009",
   queue_date: "2026-07-30",
   status: "waiting",

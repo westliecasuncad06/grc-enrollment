@@ -33,12 +33,24 @@ enum StudentType: string
 
     /**
      * Whether Admission may enter a student number the student already has
-     * instead of getting a new one (ADR 0042). Only a Returnee and an Existing
-     * Student have records at the school; a Freshman has no number yet and a
-     * Transferee's number belongs to the school they came from.
+     * instead of getting a new one (ADR 0042, amended 2026-10-04). A Returnee and
+     * an Existing Student have records at the school, and a Transferee's number
+     * from the school they came from is entered too (the owner's decision). Only
+     * a Freshman has no number yet, so is always given a new one.
      */
     public function canHaveExistingStudentNumber(): bool
     {
-        return $this === self::Returnee || $this === self::ExistingStudent;
+        return $this !== self::Freshman;
+    }
+
+    /**
+     * Whether the student gets a queue number and pays at the Cashier BEFORE the
+     * Registrar approves their enrollment (ADR 0043, amended 2026-10-05): a
+     * Freshman at Admission, a Transferee once their credit mapping closes. A
+     * Returnee and an Existing Student follow the ordinary flow.
+     */
+    public function isPayFirst(): bool
+    {
+        return $this === self::Freshman || $this === self::Transferee;
     }
 }

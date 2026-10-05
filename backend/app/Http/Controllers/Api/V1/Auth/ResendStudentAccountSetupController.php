@@ -27,7 +27,11 @@ final class ResendStudentAccountSetupController extends Controller
             ->whereNull('account_setup_completed_at')
             ->first();
 
-        if ($student instanceof User && $student->studentProfile !== null) {
+        // An unpaid freshman has no account to set up yet; the answer stays the
+        // same generic one so this endpoint never reveals who is on file.
+        if ($student instanceof User
+            && $student->studentProfile !== null
+            && ! $student->studentProfile->isFreshmanAwaitingPayment()) {
             $sendInvitation->handle(
                 $student->studentProfile,
                 $student,

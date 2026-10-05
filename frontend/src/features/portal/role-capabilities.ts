@@ -321,6 +321,18 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         ClipboardCheck,
       ),
       portalModule(
+        "freshman-enrollees",
+        "Freshmen Enrollees",
+        "View the freshmen who paid first and were enrolled automatically, and those still waiting for a section.",
+        UserCheck,
+      ),
+      portalModule(
+        "credit-mappings",
+        "Credit Mappings",
+        "Approve, reject or return the credit mappings the Program Head has endorsed.",
+        Network,
+      ),
+      portalModule(
         "submitted-schedules",
         "Submitted Schedules",
         "See the class schedules Program Heads have submitted and the sections already published.",
@@ -423,9 +435,15 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         ClipboardCheck,
       ),
       portalModule(
+        "freshman-enrollees",
+        "Freshmen Enrollees",
+        "View the freshmen who paid first and were enrolled automatically, and those still waiting for a section.",
+        UserCheck,
+      ),
+      portalModule(
         "credit-mappings",
         "Credit Mappings",
-        "Approve or reject the credit mappings the Program Head has endorsed.",
+        "Follow the credit mappings the Program Head has endorsed. The Registrar Head decides them.",
         Network,
       ),
       portalModule(

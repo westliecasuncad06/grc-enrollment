@@ -9,6 +9,7 @@ use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
+use App\Domain\Identity\StudentType;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Notifications\NotificationType;
@@ -221,6 +222,22 @@ final class EnrollmentStudentReviewTest extends TestCase
         // The Registrar's queue now holds it, and the Chair is told it was accepted.
         $this->assertDatabaseHas('notifications', ['user_id' => $registrar->id, 'type' => NotificationType::EnrollmentProgramHeadApproved->value]);
         $this->assertDatabaseHas('notifications', ['user_id' => $chair->id, 'type' => NotificationType::EnrollmentRevisionAccepted->value]);
+    }
+
+    public function test_a_transferee_who_has_not_paid_goes_to_the_payment_hold_not_the_registrar_when_accepting_the_changes(): void
+    {
+        ['student' => $student, 'enrollment' => $enrollment] = $this->enrollmentSentToTheStudent();
+        $student->update(['student_type' => StudentType::Transferee]);
+        $registrar = $this->makeUser(UserRole::RegistrarStaff);
+
+        $this->as($student->user)->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'student_accept_revision'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'awaiting_first_payment');
+
+        self::assertSame(EnrollmentStatus::AwaitingFirstPayment, $enrollment->refresh()->status);
+        self::assertNotNull($enrollment->program_head_decided_at);
+        // Nobody at the Registrar is told yet: the enrollment has not been paid.
+        $this->assertDatabaseMissing('notifications', ['user_id' => $registrar->id, 'type' => NotificationType::EnrollmentProgramHeadApproved->value]);
     }
 
     public function test_declining_needs_a_reason_and_returns_it_to_the_chair_with_that_reason(): void

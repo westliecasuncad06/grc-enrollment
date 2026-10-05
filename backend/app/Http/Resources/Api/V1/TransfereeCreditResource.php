@@ -40,6 +40,9 @@ final class TransfereeCreditResource extends JsonResource
      *     status: string,
      *     status_label: string,
      *     endorsed_at: ?string,
+     *     submitted_at: ?string,
+     *     returned_at: ?string,
+     *     return_reason: ?string,
      *     processed_at: ?string,
      *     created_at: ?string
      * }
@@ -69,6 +72,9 @@ final class TransfereeCreditResource extends JsonResource
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
             'endorsed_at' => $this->resource->endorsed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'submitted_at' => $this->resource->submitted_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'returned_at' => $this->resource->returned_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'return_reason' => $this->resource->return_reason,
             'processed_at' => $this->resource->processed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'created_at' => $this->resource->created_at?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];

@@ -1,11 +1,13 @@
 import { z } from "zod"
 
 /**
- * A credit request goes Student → Program Chair (maps, endorses) → Registrar
- * Staff (approves). `endorsed` is the Program Chair's hand-over to the
- * Registrar. See ADR 0026.
+ * A credit starts as a Student's private `draft`, is sent (`pending`), mapped
+ * and endorsed by the Program Chair (`endorsed`), and decided by the Registrar
+ * Head (`approved` | `rejected`); the Head may also return an endorsed credit to
+ * the Program Chair (`pending` again). See ADR 0026, amended.
  */
 const transfereeCreditStatusValues = [
+  "draft",
   "pending",
   "endorsed",
   "approved",
@@ -36,6 +38,9 @@ export const transfereeCreditResourceSchema = z
     status: z.enum(transfereeCreditStatusValues),
     status_label: z.string().min(1),
     endorsed_at: z.iso.datetime().nullable().default(null),
+    submitted_at: z.iso.datetime().nullable().default(null),
+    returned_at: z.iso.datetime().nullable().default(null),
+    return_reason: z.string().nullable().default(null),
     processed_at: z.iso.datetime().nullable(),
     created_at: z.iso.datetime().nullable(),
   })
@@ -43,6 +48,11 @@ export const transfereeCreditResourceSchema = z
 
 export const transfereeCreditEnvelopeSchema = z
   .object({ data: transfereeCreditResourceSchema })
+  .strict()
+
+/** What `POST /transferee-credits/submit` answers: the credits that call sent (empty on a repeat). */
+export const submittedTransfereeCreditsEnvelopeSchema = z
+  .object({ data: z.array(transfereeCreditResourceSchema) })
   .strict()
 
 const paginationLinksSchema = z
@@ -116,8 +126,8 @@ export const updateTransfereeCreditInputSchema = z
 /**
  * Every step after a credit exists (one PATCH, told apart by `action`):
  * the Program Chair `endorse`s (optionally mapping in the same step) or
- * `decline`s a pending request; Registrar Staff `approve` or `reject` an
- * endorsed one. `decline` and `reject` need a reason.
+ * `decline`s a pending request; the Registrar Head `approve`s, `reject`s or
+ * `return`s an endorsed one. `decline`, `reject` and `return` need a reason.
  */
 export const transfereeCreditActionInputSchema = z.union([
   z
@@ -132,12 +142,14 @@ export const transfereeCreditActionInputSchema = z.union([
     .strict(),
   z.object({ action: z.literal("approve") }).strict(),
   z.object({ action: z.literal("reject"), reason: z.string().min(1) }).strict(),
+  z.object({ action: z.literal("return"), reason: z.string().min(1) }).strict(),
 ])
 
-/** The Registrar's two decisions. */
+/** The Registrar Head's three decisions. */
 export const decideTransfereeCreditInputSchema = z.union([
   z.object({ action: z.literal("approve") }).strict(),
   z.object({ action: z.literal("reject"), reason: z.string().min(1) }).strict(),
+  z.object({ action: z.literal("return"), reason: z.string().min(1) }).strict(),
 ])
 
 /** A candidate GRC subject for a credit, computed on demand by the API. */
@@ -157,6 +169,41 @@ export const creditSubjectSuggestionSchema = z
 
 export const creditSubjectSuggestionsEnvelopeSchema = z
   .object({ data: z.array(creditSubjectSuggestionSchema) })
+  .strict()
+
+/**
+ * What the Program Chair's side-by-side screen loads for one student: the
+ * suggestions for each pending credit, and the subjects of the student's own
+ * curriculum to choose from. Advice only: nothing in it is a mapping.
+ */
+export const curriculumSubjectOptionSchema = z
+  .object({
+    subject_id: z.number().int().positive(),
+    subject_code: z.string().min(1),
+    subject_title: z.string().min(1),
+    units: z.number().nonnegative(),
+    year_level: z.number().int().positive(),
+    semester: z.string().min(1),
+  })
+  .strict()
+
+export const creditSuggestionGroupSchema = z
+  .object({
+    credit_id: z.number().int().positive(),
+    suggestions: z.array(creditSubjectSuggestionSchema),
+  })
+  .strict()
+
+export const creditMappingWorkspaceEnvelopeSchema = z
+  .object({
+    data: z
+      .object({
+        student_id: z.number().int().positive(),
+        credits: z.array(creditSuggestionGroupSchema),
+        curriculum_subjects: z.array(curriculumSubjectOptionSchema),
+      })
+      .strict(),
+  })
   .strict()
 
 export type TransfereeCredit = z.infer<typeof transfereeCreditResourceSchema>
@@ -179,6 +226,13 @@ export type DecideTransfereeCreditInput = z.infer<
 export type CreditSubjectSuggestion = z.infer<
   typeof creditSubjectSuggestionSchema
 >
+export type CurriculumSubjectOption = z.infer<
+  typeof curriculumSubjectOptionSchema
+>
+export type CreditSuggestionGroup = z.infer<typeof creditSuggestionGroupSchema>
+export type CreditMappingWorkspace = z.infer<
+  typeof creditMappingWorkspaceEnvelopeSchema
+>["data"]
 export interface Paginated<T> {
   data: readonly T[]
   links: z.infer<typeof paginationLinksSchema>

@@ -73,6 +73,7 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "it-control-enrollment-override": "Enrollment overrides",
   graduates: "Graduates directory",
   "professor-information": "My Information",
+  "freshman-enrollees": "Freshmen enrollees",
 }
 
 const unmigratedRegionNames: Partial<Record<string, string>> = {}
@@ -133,6 +134,35 @@ describe("connectedModuleRegistry", () => {
         ).toBeInTheDocument()
         view.unmount()
       }
+    },
+  )
+
+  it.each([
+    ["program_chair", "Students waiting for review"],
+    ["registrar_head", "Students waiting for approval"],
+    ["registrar_staff", "Transferee credits"],
+  ] as const)(
+    "gives the %s the credit mappings workspace built for that role",
+    { timeout: 60_000 },
+    async (role, heading) => {
+      const ModuleComponent = connectedModuleRegistry["credit-mappings"]
+      const view = renderWithSession(<ModuleComponent />, {
+        session: {
+          userId: "5",
+          displayName: "Test User",
+          role,
+          signedInAt: "2026-07-29T12:00:00Z",
+        },
+      })
+
+      expect(
+        await view.findByRole(
+          "heading",
+          { name: heading },
+          { timeout: 30_000 },
+        ),
+      ).toBeInTheDocument()
+      view.unmount()
     },
   )
 

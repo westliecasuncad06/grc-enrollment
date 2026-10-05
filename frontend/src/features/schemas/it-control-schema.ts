@@ -69,6 +69,7 @@ export const itControlStudentAccountSchema = z
         "draft",
         "pending_program_head_approval",
         "pending_student_review",
+        "awaiting_first_payment",
         "pending_registrar_approval",
         "pending_payment",
         "enrolled",

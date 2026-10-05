@@ -25,101 +25,109 @@ function paginated(entries: unknown[]) {
     meta: {
       current_page: 1,
       last_page: 1,
-      per_page: 20,
+      per_page: 100,
       total: entries.length,
     },
   }
 }
 
-const pendingCredit = {
-  type: "transferee_credit",
-  id: 7,
-  student_id: 30,
-  student_number: "2026-0002",
-  student_name: "Maria Santos",
-  source_institution: "Technological Institute of the Philippines",
-  source_subject_code: "CS 101",
-  source_subject_title: "Intro to Computing",
-  source_grade: "1.50",
-  credited_units: 3,
-  source_school_year: "2023-2024",
-  source_semester: "1st",
-  subject_id: null,
-  subject_code: null,
-  subject_title: null,
-  requested_by_student: true,
-  status: "pending",
-  status_label: "Pending",
-  endorsed_at: null,
-  processed_at: null,
-  created_at: "2026-09-01T00:00:00Z",
+function credit(overrides: Record<string, unknown>) {
+  return {
+    type: "transferee_credit",
+    id: 7,
+    student_id: 30,
+    student_number: "2026-0002",
+    student_name: "Maria Santos",
+    source_institution: "Technological Institute of the Philippines",
+    source_subject_code: "CS 101",
+    source_subject_title: "Intro to Computing",
+    source_grade: "1.50",
+    credited_units: 3,
+    source_school_year: "2023-2024",
+    source_semester: "1st",
+    subject_id: null,
+    subject_code: null,
+    subject_title: null,
+    requested_by_student: true,
+    status: "pending",
+    status_label: "Pending",
+    endorsed_at: null,
+    processed_at: null,
+    created_at: "2026-09-01T00:00:00Z",
+    ...overrides,
+  }
 }
 
-const endorsedCredit = {
-  ...pendingCredit,
+const mariaFirst = credit({ id: 7 })
+const mariaSecond = credit({
   id: 8,
+  source_subject_code: "MAT 101",
+  source_subject_title: "College Algebra",
+})
+const juan = credit({
+  id: 9,
+  student_id: 31,
   student_name: "Juan Dela Cruz",
   student_number: "2026-0003",
+  source_subject_code: "STA 201",
   source_subject_title: "Statistics",
+})
+const endorsedCredit = credit({
+  id: 10,
+  student_id: 32,
+  student_name: "Ana Reyes",
+  student_number: "2026-0004",
+  source_subject_title: "Physics",
   subject_id: 11,
-  subject_code: "MATH201",
-  subject_title: "Statistics and Probability",
+  subject_code: "PHY201",
+  subject_title: "General Physics",
   status: "endorsed",
   status_label: "Endorsed",
   endorsed_at: "2026-09-02T00:00:00Z",
-}
+})
 
-const suggestions = [
-  {
-    type: "credit_subject_suggestion",
-    subject_id: 10,
-    subject_code: "CS101",
-    subject_title: "Introduction to Computing",
-    units: 3,
-    year_level: 1,
-    semester: "1st",
-    score: 1,
-    reasons: ["Same subject code", "Same title", "Same units"],
-  },
-  {
-    type: "credit_subject_suggestion",
-    subject_id: 12,
-    subject_code: "CS105",
-    subject_title: "Introduction to Computing Systems",
-    units: 3,
-    year_level: 1,
-    semester: "2nd",
-    score: 0.5,
-    reasons: ["Similar title (80% match)", "Same units"],
-  },
-]
-
-const subjects = [
-  { code: "CS101", title: "Introduction to Computing", id: 10 },
-  { code: "CS105", title: "Introduction to Computing Systems", id: 12 },
-  { code: "MATH101", title: "College Algebra", id: 13 },
-].map((subject) => ({
-  type: "subject",
-  ...subject,
+const suggestion = (
+  id: number,
+  code: string,
+  title: string,
+  score: number,
+) => ({
+  type: "credit_subject_suggestion",
+  subject_id: id,
+  subject_code: code,
+  subject_title: title,
   units: 3,
-  status: "active",
-  status_label: "Active",
-  is_completion_only: false,
+  year_level: 1,
+  semester: "1st",
+  score,
+  reasons: ["Same units"],
+})
+
+const curriculumSubjects = [
+  [10, "CS101", "Introduction to Computing"],
+  [13, "MATH101", "College Algebra"],
+].map(([id, code, title]) => ({
+  subject_id: id,
+  subject_code: code,
+  subject_title: title,
+  units: 3,
+  year_level: 1,
+  semester: "1st",
 }))
 
 interface Recorded {
   patches: unknown[]
   posts: unknown[]
+  submits: number
 }
 
-function mockRoutes(
-  recorded: Recorded,
-  overrides: {
-    patchResponse?: () => Response
-    pending?: unknown[]
-    tors?: unknown[]
-  } = {},
-) {
+function mockRoutes(recorded: Recorded, overrides: { tors?: unknown[] } = {}) {
+  // Maria's two credits, as the server would hold them while the chair works.
+  const maria: Record<string, unknown>[] = [
+    { ...mariaFirst },
+    { ...mariaSecond },
+  ]
+
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const url = requestUrl(input)
     const method = init?.method ?? "GET"
@@ -129,33 +137,67 @@ function mockRoutes(
         new Response(JSON.stringify(paginated(overrides.tors ?? []))),
       )
     }
-    if (url.includes("/suggestions")) {
+    if (url.includes("/student-profiles/30/transferee-credits/suggestions")) {
       return Promise.resolve(
-        new Response(JSON.stringify({ data: suggestions })),
+        new Response(
+          JSON.stringify({
+            data: {
+              student_id: 30,
+              credits: [
+                {
+                  credit_id: 7,
+                  suggestions: [
+                    suggestion(10, "CS101", "Introduction to Computing", 1),
+                  ],
+                },
+                {
+                  credit_id: 8,
+                  suggestions: [
+                    suggestion(13, "MATH101", "College Algebra", 0.9),
+                  ],
+                },
+              ],
+              curriculum_subjects: curriculumSubjects,
+            },
+          }),
+        ),
       )
     }
-    if (url.includes("/transferee-credits") && method === "PATCH") {
-      recorded.patches.push(JSON.parse(init?.body as string))
+    if (url.includes("/submit-to-registrar-head") && method === "POST") {
+      recorded.submits += 1
       return Promise.resolve(
-        overrides.patchResponse?.() ??
-          new Response(
-            JSON.stringify({
-              data: {
-                ...pendingCredit,
-                subject_id: 10,
-                subject_code: "CS101",
-                status: "endorsed",
-                status_label: "Endorsed",
-              },
-            }),
-          ),
+        new Response(
+          JSON.stringify({
+            data: maria.map((row) => ({
+              ...row,
+              status: "endorsed",
+              status_label: "Endorsed",
+            })),
+          }),
+        ),
       )
+    }
+    const patch = /\/transferee-credits\/(\d+)$/.exec(url)
+    if (patch && method === "PATCH") {
+      const body = JSON.parse(init?.body as string) as Record<string, unknown>
+      recorded.patches.push(body)
+      const row = maria.find((entry) => entry.id === Number(patch[1]))!
+      const subject = curriculumSubjects.find(
+        (entry) => entry.subject_id === body.subject_id,
+      )!
+      row.subject_id = subject.subject_id
+      row.subject_code = subject.subject_code
+      row.subject_title = subject.subject_title
+      return Promise.resolve(new Response(JSON.stringify({ data: row })))
     }
     if (url.includes("/transferee-credits") && method === "POST") {
       recorded.posts.push(JSON.parse(init?.body as string))
       return Promise.resolve(
-        new Response(JSON.stringify({ data: pendingCredit }), { status: 201 }),
+        new Response(JSON.stringify({ data: mariaFirst }), { status: 201 }),
       )
+    }
+    if (url.includes("/transferee-credits") && url.includes("student_id=30")) {
+      return Promise.resolve(new Response(JSON.stringify(paginated(maria))))
     }
     if (
       url.includes("/transferee-credits") &&
@@ -167,9 +209,7 @@ function mockRoutes(
     }
     if (url.includes("/transferee-credits")) {
       return Promise.resolve(
-        new Response(
-          JSON.stringify(paginated(overrides.pending ?? [pendingCredit])),
-        ),
+        new Response(JSON.stringify(paginated([...maria, juan]))),
       )
     }
     if (url.includes("/academic-record/students")) {
@@ -199,21 +239,8 @@ function mockRoutes(
         ),
       )
     }
-    if (url.includes("/subjects")) {
-      return Promise.resolve(new Response(JSON.stringify({ data: subjects })))
-    }
     return Promise.resolve(new Response(JSON.stringify({ data: [] })))
   }
-}
-
-/** Opens the review of the first request in the table and returns its dialog. */
-async function openReview(user: ReturnType<typeof userEvent.setup>) {
-  const table = await screen.findByRole("table", {
-    name: "Credit requests to review",
-  })
-  await user.click(within(table).getByRole("button", { name: "Review" }))
-
-  return screen.findByRole("dialog", { name: "Review credit request" })
 }
 
 describe("ProgramChairCreditMappingsWorkspace", () => {
@@ -221,7 +248,7 @@ describe("ProgramChairCreditMappingsWorkspace", () => {
   let recorded: Recorded
 
   beforeEach(() => {
-    recorded = { patches: [], posts: [] }
+    recorded = { patches: [], posts: [], submits: 0 }
     vi.stubGlobal("fetch", fetchMock)
   })
   afterEach(() => {
@@ -240,215 +267,138 @@ describe("ProgramChairCreditMappingsWorkspace", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it("lists the requests to review and the credits waiting for the Registrar", async () => {
+  it("lists the students waiting for review, one row per student, and the credits waiting for the Registrar Head", async () => {
     fetchMock.mockImplementation(mockRoutes(recorded))
     renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
       session: chairSession,
     })
 
-    const review = await screen.findByRole("table", {
-      name: "Credit requests to review",
+    const queue = await screen.findByRole("table", {
+      name: "Students waiting for review",
     })
     expect(
-      within(review).getByText("Maria Santos (2026-0002)"),
+      within(queue).getByText("Maria Santos (2026-0002)"),
     ).toBeInTheDocument()
+    expect(within(queue).getByText("2 subjects")).toBeInTheDocument()
     expect(
-      within(review).getByText("Intro to Computing (CS 101)"),
+      within(queue).getByText("Juan Dela Cruz (2026-0003)"),
     ).toBeInTheDocument()
-    expect(within(review).getByText("Not mapped")).toBeInTheDocument()
+    expect(within(queue).getByText("1 subject")).toBeInTheDocument()
 
     const waiting = await screen.findByRole("table", {
       name: "Endorsed credits",
     })
     expect(
-      within(waiting).getByText("Juan Dela Cruz (2026-0003)"),
+      within(waiting).getByText("Ana Reyes (2026-0004)"),
     ).toBeInTheDocument()
     expect(
-      within(waiting).getByText("MATH201 — Statistics and Probability"),
-    ).toBeInTheDocument()
-  })
-
-  it("shows the system's suggested subjects, best first, and endorses the chosen one", async () => {
-    fetchMock.mockImplementation(mockRoutes(recorded))
-    const user = userEvent.setup()
-    renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
-      session: chairSession,
-    })
-
-    const dialog = await openReview(user)
-    const list = await within(dialog).findByRole("list", {
-      name: "Suggested subjects",
-    })
-    const items = within(list).getAllByRole("listitem")
-    expect(items[0]).toHaveTextContent("CS101 — Introduction to Computing")
-    expect(items[0]).toHaveTextContent("100% match")
-    expect(items[0]).toHaveTextContent("Same subject code")
-    expect(items[1]).toHaveTextContent("CS105")
-
-    // Nothing is chosen for the chair: Endorse stays off until she picks.
-    expect(
-      within(dialog).getByRole("button", { name: "Endorse to Registrar" }),
-    ).toBeDisabled()
-
-    await user.click(within(dialog).getByRole("button", { name: "Use CS101" }))
-    expect(
-      within(dialog).getByRole("button", { name: "Chosen" }),
-    ).toHaveAttribute("aria-pressed", "true")
-    await user.click(
-      within(dialog).getByRole("button", { name: "Endorse to Registrar" }),
-    )
-
-    await waitFor(() =>
-      expect(recorded.patches).toEqual([
-        { action: "endorse", subject_id: 10, credited_units: 3 },
-      ]),
-    )
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "Review credit request" }),
-      ).not.toBeInTheDocument(),
-    )
-  })
-
-  it("saves a mapping without endorsing it yet", async () => {
-    fetchMock.mockImplementation(mockRoutes(recorded))
-    const user = userEvent.setup()
-    renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
-      session: chairSession,
-    })
-
-    const dialog = await openReview(user)
-    await user.click(
-      await within(dialog).findByRole("button", { name: "Use CS105" }),
-    )
-    await user.click(
-      within(dialog).getByRole("button", { name: "Save mapping" }),
-    )
-
-    await waitFor(() =>
-      expect(recorded.patches).toEqual([{ subject_id: 12, credited_units: 3 }]),
-    )
-    expect(await within(dialog).findByText(/Mapping saved/)).toBeInTheDocument()
-    // The dialog stays open: the chair endorses when she is ready.
-    expect(
-      screen.getByRole("dialog", { name: "Review credit request" }),
+      within(waiting).getByText("PHY201 — General Physics"),
     ).toBeInTheDocument()
   })
 
-  it("lets the chair credit a subject the system did not suggest", async () => {
-    fetchMock.mockImplementation(mockRoutes(recorded))
-    const user = userEvent.setup()
-    renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
-      session: chairSession,
-    })
-
-    const dialog = await openReview(user)
-    await user.click(
-      within(dialog).getByRole("combobox", { name: /Credit as/i }),
-    )
-    await user.click(
-      await screen.findByRole("option", { name: /MATH101 — College Algebra/ }),
-    )
-    await user.click(
-      within(dialog).getByRole("button", { name: "Endorse to Registrar" }),
-    )
-
-    await waitFor(() =>
-      expect(recorded.patches).toEqual([
-        { action: "endorse", subject_id: 13, credited_units: 3 },
-      ]),
-    )
-  })
-
-  it("declines a request only with a reason", async () => {
-    fetchMock.mockImplementation(mockRoutes(recorded))
-    const user = userEvent.setup()
-    renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
-      session: chairSession,
-    })
-
-    const dialog = await openReview(user)
-    await user.click(
-      within(dialog).getByRole("button", { name: "Decline request" }),
-    )
-
-    const confirm = within(dialog).getByRole("button", {
-      name: "Confirm decline",
-    })
-    expect(confirm).toBeDisabled()
-    await user.type(
-      within(dialog).getByLabelText("Reason for declining"),
-      "No transcript attached.",
-    )
-    expect(confirm).toBeEnabled()
-    await user.click(confirm)
-
-    await waitFor(() =>
-      expect(recorded.patches).toEqual([
-        { action: "decline", reason: "No transcript attached." },
-      ]),
-    )
-  })
-
-  it("keeps the review open and shows the reason when the API refuses a step", async () => {
-    fetchMock.mockImplementation(
-      mockRoutes(recorded, {
-        patchResponse: () =>
+  it("lists the students of every page of the pending queue, not only the first 100 rows", async () => {
+    // The API never returns more than 100 rows a page, and a transferee with a
+    // full transcript has dozens of rows, so a queue read once would hide students.
+    const requestedPages: number[] = []
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (
+        url.includes("/transferee-credits") &&
+        url.includes("status=pending")
+      ) {
+        const page = Number(new URL(url, "http://x").searchParams.get("page"))
+        requestedPages.push(page)
+        return Promise.resolve(
           new Response(
             JSON.stringify({
-              error: {
-                code: "VALIDATION_ERROR",
-                message: "The given data was invalid.",
-                errors: {
-                  action: [
-                    "This action requires the transferee credit to currently be 'pending'; it is currently 'endorsed'.",
-                  ],
-                },
-                request_id: "req-1",
+              ...paginated(page === 1 ? [mariaFirst] : [juan]),
+              meta: {
+                current_page: page,
+                last_page: 2,
+                per_page: 100,
+                total: 2,
               },
             }),
-            { status: 422 },
           ),
-      }),
-    )
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify(paginated([]))))
+    })
+    renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
+      session: chairSession,
+    })
+
+    const queue = await screen.findByRole("table", {
+      name: "Students waiting for review",
+    })
+    expect(
+      await within(queue).findByText("Juan Dela Cruz (2026-0003)"),
+    ).toBeInTheDocument()
+    expect(
+      within(queue).getByText("Maria Santos (2026-0002)"),
+    ).toBeInTheDocument()
+    expect(requestedPages).toEqual([1, 2])
+  })
+
+  it("opens one student's side-by-side screen from the queue", async () => {
+    fetchMock.mockImplementation(mockRoutes(recorded))
     const user = userEvent.setup()
     renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
       session: chairSession,
     })
 
-    const dialog = await openReview(user)
+    const queue = await screen.findByRole("table", {
+      name: "Students waiting for review",
+    })
     await user.click(
-      await within(dialog).findByRole("button", { name: "Use CS101" }),
-    )
-    await user.click(
-      within(dialog).getByRole("button", { name: "Endorse to Registrar" }),
+      within(queue).getByRole("button", { name: "Review Maria Santos" }),
     )
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      /currently 'endorsed'/,
-    )
     expect(
-      screen.getByRole("dialog", { name: "Review credit request" }),
+      await screen.findByRole("heading", {
+        name: "Map credits for Maria Santos",
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole("combobox", {
+        name: /Subject for .*Intro to Computing/,
+      }),
     ).toBeInTheDocument()
   })
 
-  it("says so when nothing in the student's curriculum matches", async () => {
-    fetchMock.mockImplementation((input, init) => {
-      if (requestUrl(input).includes("/suggestions")) {
-        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-      }
-      return mockRoutes(recorded)(input, init)
-    })
+  it("sends a student to the Registrar Head, tells the chair how many were sent, and closes the screen", async () => {
+    fetchMock.mockImplementation(mockRoutes(recorded))
     const user = userEvent.setup()
     renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
       session: chairSession,
     })
 
-    const dialog = await openReview(user)
+    const queue = await screen.findByRole("table", {
+      name: "Students waiting for review",
+    })
+    await user.click(
+      within(queue).getByRole("button", { name: "Review Maria Santos" }),
+    )
+    const confirmAll = await screen.findByRole("button", {
+      name: "Confirm all suggested",
+    })
+    await waitFor(() => expect(confirmAll).toBeEnabled())
+    await user.click(confirmAll)
+    const submit = screen.getByRole("button", {
+      name: "Submit to Registrar Head",
+    })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
 
     expect(
-      await within(dialog).findByText(/No close match was found/),
+      await screen.findByText(
+        "Sent 2 credits of Maria Santos to the Registrar Head.",
+      ),
     ).toBeInTheDocument()
+    expect(recorded.submits).toBe(1)
+    expect(
+      screen.queryByRole("heading", { name: "Map credits for Maria Santos" }),
+    ).not.toBeInTheDocument()
   })
 
   it("records a credit for a walk-in student found in the chair's college", async () => {
@@ -459,8 +409,11 @@ describe("ProgramChairCreditMappingsWorkspace", () => {
     })
 
     await user.type(await screen.findByLabelText(/Find student/i), "Santos")
+    const matches = await screen.findByRole("list", {
+      name: "Matching students",
+    })
     await user.click(
-      await screen.findByRole("button", { name: /Maria Santos/ }),
+      within(matches).getByRole("button", { name: /Maria Santos/ }),
     )
     await user.type(screen.getByLabelText("Previous school"), "FEU Tech")
     await user.type(screen.getByLabelText("Subject title"), "Programming 1")
@@ -541,7 +494,7 @@ describe("ProgramChairCreditMappingsWorkspace", () => {
       },
     )
 
-    await screen.findByRole("table", { name: "Credit requests to review" })
+    await screen.findByRole("table", { name: "Students waiting for review" })
     expect(await axe(container)).toHaveNoViolations()
   })
 })

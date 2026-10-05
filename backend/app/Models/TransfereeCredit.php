@@ -23,6 +23,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property ?int $requested_by
  * @property ?int $endorsed_by
  * @property ?CarbonImmutable $endorsed_at
+ * @property ?CarbonImmutable $submitted_at
+ * @property ?int $returned_by
+ * @property ?CarbonImmutable $returned_at
+ * @property ?string $return_reason
  * @property TransfereeCreditStatus $status
  * @property ?int $processed_by
  * @property ?CarbonImmutable $processed_at
@@ -33,6 +37,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property-read ?User $processor
  * @property-read ?User $requester
  * @property-read ?User $endorser
+ * @property-read ?User $returner
  */
 final class TransfereeCredit extends Model
 {
@@ -50,6 +55,10 @@ final class TransfereeCredit extends Model
         'requested_by',
         'endorsed_by',
         'endorsed_at',
+        'submitted_at',
+        'returned_by',
+        'returned_at',
+        'return_reason',
         'status',
         'processed_by',
         'processed_at',
@@ -64,6 +73,8 @@ final class TransfereeCredit extends Model
             'status' => TransfereeCreditStatus::class,
             'credited_units' => 'float',
             'endorsed_at' => 'immutable_datetime',
+            'submitted_at' => 'immutable_datetime',
+            'returned_at' => 'immutable_datetime',
             'processed_at' => 'immutable_datetime',
         ];
     }
@@ -109,10 +120,21 @@ final class TransfereeCredit extends Model
     }
 
     /**
-     * Who may see which credits (ADR 0026): Registrar Staff and Registrar
-     * Head read every credit (Registrar Head never writes one), a Program
-     * Chair reads their own college's students' credits, and a Student reads
-     * their own.
+     * @return BelongsTo<User, $this>
+     */
+    public function returner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'returned_by');
+    }
+
+    /**
+     * Who may see which credits (ADR 0026, amended): the Registrar Head decides
+     * credits and Registrar Staff follow them, both reading every credit; a
+     * Program Chair reads their own college's students' credits; a Student
+     * reads their own.
+     *
+     * A `draft` is the student's own saved list, not yet sent, and is private to
+     * them: no other role sees one, however it asks.
      *
      * An `approved` credit that is mapped to a subject counts as credited for
      * eligibility, standing, promotion and the prospectus (see
@@ -125,11 +147,15 @@ final class TransfereeCredit extends Model
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
+        $notDraft = TransfereeCreditStatus::Draft->value;
+
         if (in_array($user->role, [UserRole::RegistrarStaff, UserRole::RegistrarHead], true)) {
-            return $query;
+            return $query->where('status', '!=', $notDraft);
         }
 
         if ($user->role === UserRole::ProgramChair) {
+            $query->where('status', '!=', $notDraft);
+
             if ($user->college !== null) {
                 return $query->whereHas(
                     'student.program',

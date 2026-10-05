@@ -27,6 +27,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/features/components/ui/toggle-gr
 import { formatTimeRange } from "@/features/lib/format-time"
 import { formatYearLevel } from "@/features/lib/format-year-level"
 import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
+import { pickCurrentBlock } from "@/features/lib/pick-current-block"
 import { compareBySchedule } from "@/features/lib/schedule-order"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
@@ -306,8 +307,13 @@ function SelectedSectionModal({
 
 /**
  * Regular-student section and schedule selection.
- * Step 1: Student picks a section from thumbnail boxed buttons (schedules are hidden).
- * Step 2: Clicking a section reveals its schedule modal with table/calendar views and submission controls.
+ * Step 1: Student is offered ONE section at a time — the first with open seats
+ * (see `pickCurrentBlock`); when it fills up the next one takes its place on
+ * the next refresh. Schedules stay hidden until it is chosen.
+ * Step 2: Clicking the section reveals its schedule modal with table/calendar
+ * views and submission controls. The modal looks the chosen section up in the
+ * whole list, so a section that fills while it is open stays on screen and the
+ * submit step reports that it filled up.
  */
 export function EnrollmentSectionTable({
   blocks,
@@ -327,19 +333,33 @@ export function EnrollmentSectionTable({
   const selectedBlock = blocks.find(
     (block) => block.block_code === selectedBlockCode,
   )
+  const currentBlock = pickCurrentBlock(blocks)
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {blocks.map((block) => (
-          <SectionThumbnailCard
-            key={block.block_code}
-            block={block}
-            onChoose={onChoose}
-            disabled={disabled}
-          />
-        ))}
-      </div>
+      {currentBlock ? (
+        <div className="grid gap-3">
+          <div className="max-w-sm">
+            <SectionThumbnailCard
+              key={currentBlock.block_code}
+              block={currentBlock}
+              onChoose={onChoose}
+              disabled={disabled}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Open seats update automatically. When this section is full, the next
+            section appears here.
+          </p>
+        </div>
+      ) : (
+        <Alert>
+          <AlertDescription>
+            Every section for your year level is full right now. A section will
+            appear here as soon as seats open up.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {selectedBlock && (
         <SelectedSectionModal

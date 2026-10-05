@@ -18,10 +18,13 @@ use App\Policies\StudentProfilePolicy;
 use App\Policies\UserAccountPolicy;
 use App\Support\Auth\GoogleIdTokenVerifier;
 use App\Support\Auth\JwksGoogleIdTokenVerifier;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\LazyLoadingViolationException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 
@@ -53,6 +56,14 @@ class AppServiceProvider extends ServiceProvider
     {
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
         $this->preventNPlusOneQueries();
+
+        // A freshman's emailed live-queue link (ADR 0044) is polled every few seconds
+        // and shared by many people on one campus network, so the limit is per link,
+        // with only a generous per-address ceiling against flooding.
+        RateLimiter::for('public-queue-view', fn (Request $request): array => [
+            Limit::perMinute(40)->by('link:'.hash('sha256', (string) $request->route('token'))),
+            Limit::perMinute(3000)->by('ip:'.$request->ip()),
+        ]);
 
         Gate::define('view-faculty-directory', [FacultyMemberPolicy::class, 'viewAny']);
         Gate::define('view-it-control-account-browser', [ItControlPolicy::class, 'viewAccountBrowser']);

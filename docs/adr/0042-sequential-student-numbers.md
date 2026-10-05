@@ -30,4 +30,10 @@ The committed presentation data holds 6,379 numbers: 3,219 `YYYY-06-NNNNN` (2023
 - A browser still running the old frontend gets a 422 on `student_number` until it reloads (same consequence as ADR 0041).
 - The existing-number option accepts only `YYYY-MM-NNNNN`; any older number in another pattern is not accepted until its pattern is supplied.
 - The dev and Hostinger databases are not touched by this change; the committed `DATABASE/grc_enrollment.sql.gz` has no `student_number_sequences` table (`php artisan migrate` after importing it creates the table, and the first number of each year continues from the highest existing one).
-- Not decided here: whether a Transferee who already holds a GRC number should be allowed to keep it.
+- Not decided here: whether a Transferee who already holds a GRC number should be allowed to keep it. **Decided 2026-10-04 by the owner: yes** (see the amendment below).
+
+## Amendment 2026-10-04 — a Transferee may enter their existing number; the form previews the next one
+
+- **Who may enter an existing number:** every type except a Freshman (`StudentType::canHaveExistingStudentNumber()`, `studentTypeCanHaveExistingNumber` in the frontend). A Transferee's number from the school they came from is entered the same way as a Returnee's or an Existing Student's (`YYYY-MM-NNNNN`, unique). A Freshman is always given a new one. The "Only a Transferee, a Returnee or an Existing Student..." refusal is unchanged in every other way.
+- **Preview before saving:** `GET /api/v1/student-profiles/next-student-number` (Admission Staff, the same permission as creating a profile) returns the number the next new account would get, from `AssignStudentNumber::preview()`. It reads the counter and writes nothing, so the number is **not reserved**: an account saved first takes it, and the form refreshes its preview after every save. The form shows it read-only while a new number is asked for; the number actually given is shown after the save as before.
+- **Why the number is not reserved:** reserving it at form time would hold numbers for forms that are abandoned, and would leave gaps in the year's sequence. The trade-off is that the preview can be one number out of date while another Admission staff member saves an account.

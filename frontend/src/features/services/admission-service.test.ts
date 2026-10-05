@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   decideProfileChangeRequest,
+  getNextStudentNumber,
   listStudentProfiles,
   provisionStudent,
   requestStudentAccountSetupResend,
+  resendQueueLink,
   setupStudentAccount,
   type ProvisionStudentInput,
 } from "@/features/services/admission-service"
@@ -55,6 +57,11 @@ const profile = {
   academic_setup_editable: true,
   account_setup_status: "pending",
   invitation_delivery_status: "sent",
+  freshman_payment_confirmed_at: null,
+  freshman_status: null,
+  advance_payment_held: false,
+  queue_ticket_number: null,
+  queue_link_delivery_status: null,
 } as const
 
 const page = {
@@ -73,6 +80,32 @@ describe("admission-service", () => {
 
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
+
+  it("reads the number the next account would get, and null when none is left", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            type: "next_student_number",
+            student_number: "2026-10-01936",
+          },
+        }),
+      ),
+    )
+    await expect(getNextStudentNumber()).resolves.toBe("2026-10-01936")
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "/api/v1/student-profiles/next-student-number",
+    )
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: { type: "next_student_number", student_number: null },
+        }),
+      ),
+    )
+    await expect(getNextStudentNumber()).resolves.toBeNull()
+  })
 
   it("provisions with address, category and type without a password or curriculum override", async () => {
     fetchMock.mockResolvedValue(
@@ -101,6 +134,57 @@ describe("admission-service", () => {
     expect(body).not.toHaveProperty("student_number")
   })
 
+  it("reads a freshman's queue number and the delivery of the emailed link", async () => {
+    const freshman = {
+      ...profile,
+      account_setup_status: "awaiting_payment",
+      invitation_delivery_status: "not_sent",
+      queue_ticket_number: "Q012",
+      queue_link_delivery_status: "sent",
+    }
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: freshman }), { status: 201 }),
+    )
+
+    await expect(provisionStudent(input)).resolves.toMatchObject({
+      account_setup_status: "awaiting_payment",
+      queue_ticket_number: "Q012",
+      queue_link_delivery_status: "sent",
+    })
+  })
+
+  it("reads a profile from a server that predates the queue fields as having no queue number", async () => {
+    const older: Record<string, unknown> = { ...profile }
+    delete older.queue_ticket_number
+    delete older.queue_link_delivery_status
+    delete older.freshman_payment_confirmed_at
+    delete older.freshman_status
+    delete older.advance_payment_held
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: older }), { status: 201 }),
+    )
+
+    await expect(provisionStudent(input)).resolves.toMatchObject({
+      queue_ticket_number: null,
+      queue_link_delivery_status: null,
+      freshman_payment_confirmed_at: null,
+      freshman_status: null,
+      advance_payment_held: false,
+    })
+  })
+
+  it("asks the server to send a freshman's queue link again", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: profile })))
+
+    await resendQueueLink(31)
+
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      "http://127.0.0.1:8000/api/v1/student-profiles/31/queue-link-resends",
+    )
+    expect(request.method).toBe("POST")
+  })
+
   it("sends the number the student already has when the existing-number option is ticked", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ data: profile }), { status: 201 }),
@@ -122,8 +206,8 @@ describe("admission-service", () => {
     expect(body).toEqual(existing)
   })
 
-  it("refuses an existing student number for a Freshman or Transferee before calling the API", async () => {
-    for (const studentType of ["freshman", "transferee"] as const) {
+  it("refuses an existing student number for a Freshman before calling the API", async () => {
+    for (const studentType of ["freshman"] as const) {
       await expect(
         provisionStudent({
           ...input,

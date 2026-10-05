@@ -2,6 +2,9 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Actions\Enrollment\FreshmanPaymentRules;
+use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Identity\StudentType;
 use App\Models\StudentProfile;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -46,8 +49,13 @@ final class StudentProfileResource extends JsonResource
      *     financial_status_label: ?string,
      *     requirements_verified_at: ?string,
      *     academic_setup_editable: bool,
-     *     account_setup_status: 'pending'|'active',
-     *     invitation_delivery_status: 'not_sent'|'sent'|'failed'
+     *     account_setup_status: 'awaiting_payment'|'pending'|'active',
+     *     invitation_delivery_status: 'not_sent'|'sent'|'failed',
+     *     freshman_payment_confirmed_at: ?string,
+     *     freshman_status: 'awaiting_payment'|'awaiting_section'|'enrolling'|null,
+     *     advance_payment_held: bool,
+     *     queue_ticket_number: ?string,
+     *     queue_link_delivery_status: ?('not_sent'|'sent'|'failed')
      * }
      */
     public function toArray(Request $request): array
@@ -55,6 +63,7 @@ final class StudentProfileResource extends JsonResource
         $curriculum = $this->resource->curriculum;
         $user = $this->resource->user;
         $program = $this->resource->program;
+        $queueTicket = $this->resource->queueTicket;
 
         return [
             'type' => 'student_profile',
@@ -89,7 +98,14 @@ final class StudentProfileResource extends JsonResource
             'financial_status_label' => $this->resource->financial_status?->label(),
             'requirements_verified_at' => $this->resource->requirements_verified_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'academic_setup_editable' => ! ((bool) ($this->resource->enrollments_exists ?? false)),
-            'account_setup_status' => $user->account_setup_completed_at === null ? 'pending' : 'active',
+            // 'awaiting_payment': a freshman whose first payment the Cashier has not
+            // confirmed yet — no setup email is sent until then (see
+            // `SendStudentAccountSetupInvitation`).
+            'account_setup_status' => match (true) {
+                $user->account_setup_completed_at !== null => 'active',
+                $this->resource->isFreshmanAwaitingPayment() => 'awaiting_payment',
+                default => 'pending',
+            },
             'invitation_delivery_status' => match (true) {
                 $user->account_setup_invitation_failed_at !== null
                     && ($user->account_setup_invitation_sent_at === null
@@ -97,6 +113,68 @@ final class StudentProfileResource extends JsonResource
                 $user->account_setup_invitation_sent_at !== null => 'sent',
                 default => 'not_sent',
             },
+            'freshman_payment_confirmed_at' => $this->resource->freshman_payment_confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'freshman_status' => $this->freshmanStatus(),
+            'advance_payment_held' => $this->advancePaymentHeld(),
+            'queue_ticket_number' => $queueTicket?->ticket_number,
+            'queue_link_delivery_status' => match (true) {
+                $queueTicket === null => null,
+                $queueTicket->link_failed_at !== null
+                    && ($queueTicket->link_sent_at === null
+                        || $queueTicket->link_failed_at->greaterThan($queueTicket->link_sent_at)) => 'failed',
+                $queueTicket->link_sent_at !== null => 'sent',
+                default => 'not_sent',
+            },
         ];
+    }
+
+    /**
+     * Where a freshman is in the pay-first flow (ADR 0043); null for every other student.
+     * `awaiting_section`: paid, but no enrollment in progress (every section was full when
+     * they paid). `enrolling`: paid, with an enrollment in progress or done.
+     *
+     * @return 'awaiting_payment'|'awaiting_section'|'enrolling'|null
+     */
+    private function freshmanStatus(): ?string
+    {
+        $profile = $this->resource;
+
+        if ($profile->student_type !== StudentType::Freshman) {
+            return null;
+        }
+
+        if ($profile->freshman_payment_confirmed_at === null) {
+            return 'awaiting_payment';
+        }
+
+        $hasActiveEnrollment = $profile->getAttribute('active_enrollment_exists')
+            ?? $profile->enrollments()
+                ->whereNotIn('status', [EnrollmentStatus::Rejected->value, EnrollmentStatus::Cancelled->value, EnrollmentStatus::Withdrawn->value])
+                ->exists();
+
+        return $hasActiveEnrollment ? 'enrolling' : 'awaiting_section';
+    }
+
+    /**
+     * True while a pay-first student's (a freshman's or a transferee's) first payment is held as
+     * credit and has not yet been applied to an enrollment (ADR 0043, amended 2026-10-05): the very
+     * condition `SettleEnrollmentFromAdvanceCredit` completes an approval from. It lets the student's
+     * own screens say that nothing is left to queue for or pay, and it is about the money, not the
+     * term: once the credit is applied, or for anyone who never held any, it is false.
+     */
+    private function advancePaymentHeld(): bool
+    {
+        $profile = $this->resource;
+
+        if (! $profile->student_type instanceof StudentType
+            || ! $profile->student_type->isPayFirst()
+            || $profile->freshman_payment_confirmed_at === null) {
+            return false;
+        }
+
+        $held = $profile->getAttribute('held_advance_payment_sum')
+            ?? $profile->accountPayments()->whereNull('enrollment_id')->sum('amount');
+
+        return (float) $held >= (float) FreshmanPaymentRules::minimumAmount();
     }
 }

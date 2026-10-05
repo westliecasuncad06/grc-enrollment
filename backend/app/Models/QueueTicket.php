@@ -10,8 +10,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
+ * A ticket belongs to an enrollment (a student who claimed at the kiosk) or,
+ * for a freshman who has paid nothing yet and has no enrollment, to a student
+ * profile — never neither (a CHECK enforces it). `public_token_hash` is the
+ * SHA-256 of the token in the freshman's emailed "view my queue number" link.
+ *
  * @property int $id
- * @property int $enrollment_id
+ * @property ?int $enrollment_id
+ * @property ?int $student_profile_id
+ * @property ?string $public_token_hash
+ * @property ?CarbonImmutable $link_sent_at
+ * @property ?CarbonImmutable $link_failed_at
  * @property int $queue_cycle_id
  * @property int $ticket_sequence
  * @property string $ticket_number
@@ -24,7 +33,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $announce_count
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
- * @property-read Enrollment $enrollment
+ * @property-read ?Enrollment $enrollment
+ * @property-read ?StudentProfile $studentProfile
  * @property-read ?User $server
  */
 final class QueueTicket extends Model
@@ -37,6 +47,10 @@ final class QueueTicket extends Model
     /** @var list<string> */
     protected $fillable = [
         'enrollment_id',
+        'student_profile_id',
+        'public_token_hash',
+        'link_sent_at',
+        'link_failed_at',
         'queue_cycle_id',
         'ticket_number',
         'ticket_sequence',
@@ -60,6 +74,8 @@ final class QueueTicket extends Model
             'queue_date' => 'immutable_date',
             'served_at' => 'immutable_datetime',
             'requeued_at' => 'immutable_datetime',
+            'link_sent_at' => 'immutable_datetime',
+            'link_failed_at' => 'immutable_datetime',
             'announce_count' => 'integer',
         ];
     }
@@ -70,6 +86,44 @@ final class QueueTicket extends Model
     public function enrollment(): BelongsTo
     {
         return $this->belongsTo(Enrollment::class);
+    }
+
+    /**
+     * Set for a freshman's ticket (issued before any enrollment exists).
+     *
+     * @return BelongsTo<StudentProfile, $this>
+     */
+    public function studentProfile(): BelongsTo
+    {
+        return $this->belongsTo(StudentProfile::class);
+    }
+
+    /**
+     * Whose ticket this is, whichever owner it hangs off. Callers that list
+     * tickets should eager-load both `enrollment.student` and `studentProfile`.
+     */
+    public function student(): ?StudentProfile
+    {
+        // `??` already treats a missing enrollment as "not set", so no nullsafe call is needed.
+        return $this->enrollment->student ?? $this->studentProfile;
+    }
+
+    public static function hashPublicToken(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
+    /**
+     * The ticket a "view my queue number" link points at; `null` for an empty
+     * or unknown token. Only the hash is stored, so this compares hashes.
+     */
+    public static function findByPublicToken(string $token): ?self
+    {
+        if ($token === '') {
+            return null;
+        }
+
+        return self::query()->where('public_token_hash', self::hashPublicToken($token))->first();
     }
 
     /**

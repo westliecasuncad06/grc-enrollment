@@ -2,6 +2,7 @@
 
 namespace App\Actions\Scheduling;
 
+use App\Actions\Enrollment\NotifyAwaitingFreshmen;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
@@ -22,6 +23,7 @@ final class UpdateSection
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
         private readonly CanonicalScheduleDays $canonicalScheduleDays,
+        private readonly NotifyAwaitingFreshmen $notifyAwaitingFreshmen,
     ) {}
 
     /**
@@ -127,6 +129,15 @@ final class UpdateSection
                 $validatedData['override_reason'] ?? null,
                 $context,
             );
+
+            // ADR 0043: a freshman who paid while every section was full is told when this
+            // one opens — it has just been published, or a published one gained seats.
+            $nowPublished = $section->status === SectionStatus::Published;
+            $justOpened = $nowPublished
+                && ($beforeValues['status'] !== SectionStatus::Published->value || $capacity > $beforeValues['capacity']);
+            if ($justOpened) {
+                $this->notifyAwaitingFreshmen->forSections([$section->id]);
+            }
 
             return $section;
         });

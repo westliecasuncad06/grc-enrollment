@@ -88,6 +88,67 @@ class EvaluateCreditMappingStatusTest extends TestCase
         ]);
     }
 
+    public function test_transferee_with_only_saved_drafts_is_incomplete_and_told_to_submit(): void
+    {
+        $student = $this->createStudent(StudentType::Transferee);
+        $this->createCredit($student, $this->getOrCreateSubject(), TransfereeCreditStatus::Draft);
+
+        $result = $this->action->execute($student);
+
+        $this->assertFalse($result->isCompleted);
+        $this->assertTrue($result->requiresCreditMapping);
+        $this->assertSame(0, $result->totalCredits);
+        $this->assertStringContainsString('Submit your list', (string) $result->reason);
+    }
+
+    public function test_a_draft_does_not_count_as_a_credit_in_progress(): void
+    {
+        $student = $this->createStudent(StudentType::Transferee);
+        $subject = $this->getOrCreateSubject();
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Pending);
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Draft);
+
+        $result = $this->action->execute($student);
+
+        $this->assertFalse($result->isCompleted);
+        $this->assertSame(1, $result->totalCredits);
+        $this->assertSame(1, $result->pendingCredits);
+    }
+
+    public function test_drafts_do_not_hold_back_a_transferee_whose_sent_credits_are_all_decided(): void
+    {
+        $student = $this->createStudent(StudentType::Transferee);
+        $subject = $this->getOrCreateSubject();
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Approved);
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Draft);
+
+        $result = $this->action->execute($student);
+
+        $this->assertTrue($result->isCompleted);
+        $this->assertNull($result->reason);
+        $this->assertSame(1, $result->totalCredits);
+    }
+
+    public function test_returnee_with_only_saved_drafts_is_told_to_submit(): void
+    {
+        $student = $this->createStudent(StudentType::Returnee);
+        $this->createCredit($student, $this->getOrCreateSubject(), TransfereeCreditStatus::Draft);
+
+        $result = $this->action->execute($student);
+
+        $this->assertFalse($result->isCompleted);
+        $this->assertStringContainsString('Submit your list', (string) $result->reason);
+    }
+
+    public function test_the_reasons_name_the_registrar_head_not_just_the_registrar(): void
+    {
+        $transferee = $this->createStudent(StudentType::Transferee);
+        $returnee = $this->createStudent(StudentType::Returnee);
+
+        $this->assertStringContainsString('Registrar Head', (string) $this->action->execute($transferee)->reason);
+        $this->assertStringContainsString('Registrar Head', (string) $this->action->execute($returnee)->reason);
+    }
+
     public function test_freshman_requires_no_credit_mapping(): void
     {
         $student = $this->createStudent(StudentType::Freshman);

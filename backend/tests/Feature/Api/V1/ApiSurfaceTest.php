@@ -33,6 +33,7 @@ final class ApiSurfaceTest extends TestCase
             'DELETE api/v1/super-admin/users/{user}',
             'DELETE api/v1/super-admin/users/{user}/sessions',
             'DELETE api/v1/tor-documents/{torDocument}',
+            'DELETE api/v1/transferee-credits/{transfereeCredit}',
             'GET|HEAD api/v1/academic-grades',
             'GET|HEAD api/v1/academic-grades/approval-professors',
             'GET|HEAD api/v1/academic-grades/approval-sections',
@@ -83,6 +84,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/faculty-subject-preferences',
             'GET|HEAD api/v1/faculty-teaching-history',
             'GET|HEAD api/v1/fee-schedules',
+            'GET|HEAD api/v1/freshman-enrollees',
             'GET|HEAD api/v1/grade-slip',
             'GET|HEAD api/v1/graduates',
             'GET|HEAD api/v1/health',
@@ -98,6 +100,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/programs',
             'GET|HEAD api/v1/programs/{program}/current-curriculum-subjects',
             'GET|HEAD api/v1/prospectus',
+            'GET|HEAD api/v1/public/queue-view/{token}',
             'GET|HEAD api/v1/queue-cycle',
             'GET|HEAD api/v1/queue-kiosk-credential',
             'GET|HEAD api/v1/queue-status',
@@ -119,8 +122,11 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/student-profile',
             'GET|HEAD api/v1/student-profile-change-requests',
             'GET|HEAD api/v1/student-profiles',
+            'GET|HEAD api/v1/student-profiles/next-student-number',
             'GET|HEAD api/v1/student-profiles/{studentProfile}',
             'GET|HEAD api/v1/student-profiles/{studentProfile}/admission-requirements',
+            'GET|HEAD api/v1/student-profiles/{studentProfile}/freshman-payment-preview',
+            'GET|HEAD api/v1/student-profiles/{studentProfile}/transferee-credits/suggestions',
             'GET|HEAD api/v1/student-schedule-preferences',
             'GET|HEAD api/v1/students/{studentProfile}/registrar-profile',
             'GET|HEAD api/v1/students/{studentProfile}/subject-waivers',
@@ -214,6 +220,10 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/student-profile-change-requests',
             'POST api/v1/student-profiles',
             'POST api/v1/student-profiles/{studentProfile}/account-setup-invitations',
+            'POST api/v1/student-profiles/{studentProfile}/freshman-payment',
+            'POST api/v1/student-profiles/{studentProfile}/queue-link-resends',
+            'POST api/v1/student-profiles/{studentProfile}/transferee-credits/approve-all',
+            'POST api/v1/student-profiles/{studentProfile}/transferee-credits/submit-to-registrar-head',
             'POST api/v1/students/{studentProfile}/subject-waivers',
             'POST api/v1/students/{student}/account-payments',
             'POST api/v1/subject-offerings',
@@ -222,6 +232,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/super-admin/users/{user}/setup-invitation',
             'POST api/v1/tor-documents',
             'POST api/v1/transferee-credits',
+            'POST api/v1/transferee-credits/submit',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-limits/{employmentType}',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-overrides/{professor}',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-threshold',
@@ -283,6 +294,11 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.transferee-credits.store',
             'api.v1.transferee-credits.update',
             'api.v1.transferee-credits.suggestions',
+            'api.v1.transferee-credits.submit',
+            'api.v1.transferee-credits.destroy',
+            'api.v1.student-profiles.transferee-credits.suggestions',
+            'api.v1.student-profiles.transferee-credits.submit-to-registrar-head',
+            'api.v1.student-profiles.transferee-credits.approve-all',
             'api.v1.tor-documents.index',
             'api.v1.tor-documents.store',
             'api.v1.tor-documents.file',
@@ -356,6 +372,10 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.student-profiles.show',
             'api.v1.student-profiles.update',
             'api.v1.student-profiles.account-setup-invitations.store',
+            'api.v1.student-profiles.queue-link-resends.store',
+            'api.v1.student-profiles.freshman-payment-preview.show',
+            'api.v1.student-profiles.freshman-payment.store',
+            'api.v1.freshman-enrollees.index',
             'api.v1.student-profiles.admission-requirements.show',
             'api.v1.student-profiles.admission-requirements.update',
             'api.v1.admission-requirement-types.index',
@@ -550,12 +570,30 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.student-profiles.show',
             'api.v1.student-profiles.update',
             'api.v1.student-profiles.account-setup-invitations.store',
+            'api.v1.student-profiles.queue-link-resends.store',
         ] as $name) {
             $route = Route::getRoutes()->getByName($name);
 
             $this->assertNotNull($route, "Missing route {$name}.");
             $this->assertContains('role:admission_staff', $route->gatherMiddleware());
         }
+    }
+
+    public function test_freshman_payment_routes_are_for_accounting_and_the_enrollee_list_is_for_the_registrar(): void
+    {
+        foreach ([
+            'api.v1.student-profiles.freshman-payment-preview.show',
+            'api.v1.student-profiles.freshman-payment.store',
+        ] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains('role:accounting_staff', $route->gatherMiddleware());
+        }
+
+        $list = Route::getRoutes()->getByName('api.v1.freshman-enrollees.index');
+        $this->assertNotNull($list);
+        $this->assertContains('role:registrar_head,registrar_staff', $list->gatherMiddleware());
     }
 
     public function test_cross_cutting_read_routes_have_the_exact_role_boundaries(): void
@@ -761,9 +799,9 @@ final class ApiSurfaceTest extends TestCase
 
     /**
      * Who may do what depends on the action, and on the credit's college for
-     * a Program Chair (the Student asks, the Program Chair maps and
-     * endorses, Registrar Staff approve; ADR 0026), so, like the withdrawal
-     * routes, none of these carry `role:` middleware.
+     * a Program Chair (the Student saves and submits, the Program Chair maps
+     * and endorses, the Registrar Head decides; ADR 0026, amended), so, like
+     * the withdrawal routes, none of these carry `role:` middleware.
      * `TransfereeCreditPolicy` resolves each ability.
      */
     public function test_transferee_credit_routes_carry_no_role_middleware(): void
@@ -773,6 +811,11 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.transferee-credits.store',
             'api.v1.transferee-credits.update',
             'api.v1.transferee-credits.suggestions',
+            'api.v1.transferee-credits.submit',
+            'api.v1.transferee-credits.destroy',
+            'api.v1.student-profiles.transferee-credits.suggestions',
+            'api.v1.student-profiles.transferee-credits.submit-to-registrar-head',
+            'api.v1.student-profiles.transferee-credits.approve-all',
         ];
 
         foreach ($names as $name) {
@@ -841,6 +884,18 @@ final class ApiSurfaceTest extends TestCase
         $stuckEnrollments = Route::getRoutes()->getByName('api.v1.stuck-enrollments.index');
         $this->assertNotNull($stuckEnrollments);
         $this->assertContains('role:dean,registrar_head', $stuckEnrollments->gatherMiddleware());
+    }
+
+    public function test_the_public_queue_view_is_open_without_a_sign_in_but_throttled_per_link(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.public.queue-view.show');
+
+        $this->assertNotNull($route);
+        $middleware = $route->gatherMiddleware();
+        $this->assertNotContains('auth:sanctum', $middleware);
+        $this->assertContains('throttle:public-queue-view', $middleware);
+        // Only a 48-character alphanumeric token can reach the controller at all.
+        $this->assertSame('[A-Za-z0-9]{48}', $route->wheres['token']);
     }
 
     public function test_the_login_route_is_throttled(): void

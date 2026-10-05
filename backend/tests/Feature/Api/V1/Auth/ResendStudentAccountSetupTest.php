@@ -2,13 +2,14 @@
 
 namespace Tests\Feature\Api\V1\Auth;
 
+use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\ProgramStatus;
 use App\Mail\StudentAccountSetupMail;
-use App\Models\AcademicTerm;
 use App\Models\Curriculum;
 use App\Models\Program;
 use App\Models\StudentProfile;
@@ -26,7 +27,7 @@ final class ResendStudentAccountSetupTest extends TestCase
         $program = Program::create([
             'code' => 'BSCS_RESEND',
             'name' => 'BS Computer Science Resend',
-            'status' => \App\Domain\Organization\ProgramStatus::Active,
+            'status' => ProgramStatus::Active,
         ]);
         $curriculum = Curriculum::create([
             'program_id' => $program->id,
@@ -34,7 +35,7 @@ final class ResendStudentAccountSetupTest extends TestCase
             'effective_school_year' => '2026-2027',
             'effective_start_year' => 2026,
             'effective_end_year' => 2030,
-            'status' => \App\Domain\Curriculum\CurriculumStatus::Active,
+            'status' => CurriculumStatus::Active,
         ]);
 
         $user = User::create([
@@ -56,7 +57,7 @@ final class ResendStudentAccountSetupTest extends TestCase
             'entry_year' => 2026,
             'year_level' => 1,
             'enrollment_category' => EnrollmentCategory::Regular->value,
-            'student_type' => 'freshman',
+            'student_type' => 'transferee',
             'admission_status' => AdmissionStatus::Admitted,
             'academic_standing' => AcademicStanding::Good,
             'financial_status' => null,

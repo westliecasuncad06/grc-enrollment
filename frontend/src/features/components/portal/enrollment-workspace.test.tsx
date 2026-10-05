@@ -1592,7 +1592,7 @@ describe("EnrollmentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("shows only the chosen section and returns to all sections when changed", async () => {
+  it("offers only the first section with seats, opens it when chosen, and goes back to that one section when changed", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockRegularRoutes({ blocks: scoredBlocks }))
     renderWithSession(<EnrollmentWorkspace />, {
@@ -1602,18 +1602,19 @@ describe("EnrollmentWorkspace", () => {
     const section = await screen.findByRole("article", {
       name: "IT301 section",
     })
+    // The later sections stay hidden until IT301 is full.
     expect(
-      screen.getByRole("article", { name: "IT302 section" }),
-    ).toBeInTheDocument()
+      screen.queryByRole("article", { name: "IT302 section" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("article", { name: "IT303 section" }),
+    ).not.toBeInTheDocument()
     await user.click(
       within(section).getByRole("button", { name: "Choose IT301" }),
     )
     expect(
       screen.getByRole("article", { name: "IT301 section" }),
     ).toBeInTheDocument()
-    expect(
-      screen.queryByRole("article", { name: "IT302 section" }),
-    ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Change section" }))
 
@@ -1621,12 +1622,14 @@ describe("EnrollmentWorkspace", () => {
       screen.getByRole("article", { name: "IT301 section" }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("article", { name: "IT302 section" }),
-    ).toBeInTheDocument()
+      screen.queryByRole("article", { name: "IT302 section" }),
+    ).not.toBeInTheDocument()
   })
 
-  it("keeps a low-scoring section selectable", async () => {
-    fetchMock.mockImplementation(mockRegularRoutes({ blocks: scoredBlocks }))
+  it("keeps a section with no schedule-preference score selectable", async () => {
+    fetchMock.mockImplementation(
+      mockRegularRoutes({ blocks: [scoredBlocks[1]] }),
+    )
     renderWithSession(<EnrollmentWorkspace />, {
       session: regularStudentSession,
     })
@@ -2003,16 +2006,94 @@ describe("EnrollmentWorkspace", () => {
     const section = await screen.findByRole("article", { name: "IT201 section" })
     expect(within(section).getByText("7 of 40 seats left")).toBeInTheDocument()
 
-    // The last seats go (a student submits / registrar-held reservation); the
-    // block list is polled every 10s, so the badge follows without a reload.
-    seatsRemaining = 0
+    // Another student takes seats; the block list is polled every 3s, so the
+    // badge follows without a reload.
+    seatsRemaining = 3
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(3_000)
     })
 
     const refreshed = await screen.findByRole("article", { name: "IT201 section" })
-    expect(within(refreshed).getByText("Full")).toBeInTheDocument()
+    expect(within(refreshed).getByText("3 of 40 seats left")).toBeInTheDocument()
     expect(screen.queryByText("7 of 40 seats left")).not.toBeInTheDocument()
+  })
+
+  it("brings up the next section on its own when the first one fills up", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let firstIsFull = false
+    const first = () =>
+      firstIsFull
+        ? {
+            ...enrollmentBlock,
+            seats_remaining: 0,
+            is_selectable: false,
+            reasons: [
+              { code: "block_full", message: "No open seats in this section." },
+            ],
+          }
+        : enrollmentBlock
+    const second = {
+      ...enrollmentBlock,
+      block_code: "IT202",
+      subjects: enrollmentBlock.subjects.map((subject) => ({
+        ...subject,
+        section_id: subject.section_id + 100,
+        subject_id: subject.subject_id + 100,
+      })),
+    }
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/enrollment-blocks"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [first(), second] })),
+        )
+      return mockRegularRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await screen.findByRole("article", { name: "IT201 section" })
+    expect(
+      screen.queryByRole("article", { name: "IT202 section" }),
+    ).not.toBeInTheDocument()
+
+    // The last seat in IT201 goes; within one poll IT202 takes its place.
+    firstIsFull = true
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000)
+    })
+
+    expect(
+      await screen.findByRole("article", { name: "IT202 section" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("article", { name: "IT201 section" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("tells a regular student when every section is full", async () => {
+    const full = {
+      ...enrollmentBlock,
+      seats_remaining: 0,
+      is_selectable: false,
+      reasons: [
+        { code: "block_full", message: "No open seats in this section." },
+      ],
+    }
+    fetchMock.mockImplementation(mockRegularRoutes({ blocks: [full] }))
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: regularStudentSession,
+    })
+
+    expect(
+      await screen.findByText(/every section for your year level is full/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("article")).not.toBeInTheDocument()
   })
 
   it("keeps the confirm dialog honest when the chosen section disappears before submitting", async () => {
@@ -2059,6 +2140,83 @@ describe("EnrollmentWorkspace", () => {
     expect(posted).toBe(false)
   })
 
+  describe("a freshman whose payment is held", () => {
+    function renderFreshman(
+      freshmanStatus: string | null,
+      category: "regular" | "irregular" = "regular",
+      advancePaymentHeld = false,
+    ) {
+      fetchMock.mockImplementation((input, init) => {
+        if (url(input).endsWith("/student-profile"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: {
+                  ...ownProfile(30),
+                  enrollment_category: category,
+                  freshman_status: freshmanStatus,
+                  advance_payment_held: advancePaymentHeld,
+                  freshman_payment_confirmed_at: "2026-10-04T01:00:00Z",
+                },
+              }),
+            ),
+          )
+        return mockRegularRoutes()(input, init)
+      })
+      renderWithSession(<EnrollmentWorkspace />, {
+        session: regularStudentSession,
+      })
+    }
+
+    it("is told the payment was received and that a section will be announced", async () => {
+      renderFreshman("awaiting_section")
+
+      expect(
+        await screen.findByText("Payment received — waiting for a section"),
+      ).toBeInTheDocument()
+      expect(screen.getByText(/you do not pay again/i)).toBeInTheDocument()
+    })
+
+    it("after submitting is told the payment is on file, not to go and claim a queue number", async () => {
+      const user = userEvent.setup()
+      renderFreshman("awaiting_section", "regular", true)
+
+      const section = await screen.findByRole("article", { name: "IT201 section" })
+      await user.click(within(section).getByRole("button", { name: "Choose IT201" }))
+      await user.click(await screen.findByRole("button", { name: "Submit enrollment" }))
+      await user.click(await screen.findByRole("button", { name: "Confirm submission" }))
+
+      expect(
+        await screen.findByText(
+          /your payment is already on file, so once it is approved you are enrolled/i,
+        ),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/claim your queuing ticket/i)).not.toBeInTheDocument()
+    })
+
+    it("an irregular freshman is told to choose subjects, not that every section is full", async () => {
+      renderFreshman("awaiting_section", "irregular")
+
+      expect(
+        await screen.findByText("Payment received — choose your subjects"),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText("Payment received — waiting for a section"),
+      ).not.toBeInTheDocument()
+      expect(screen.queryByText(/every section for your year level/i)).not.toBeInTheDocument()
+      expect(screen.getByText(/you do not pay again/i)).toBeInTheDocument()
+    })
+
+    it("sees no such banner when enrolling normally or when not a freshman in that state", async () => {
+      renderFreshman(null)
+
+      await screen.findByRole("article", { name: "IT201 section" })
+      expect(
+        screen.queryByText("Payment received — waiting for a section"),
+      ).not.toBeInTheDocument()
+    })
+  })
+
   it("uses the student's own curriculum unit cap instead of a fixed 30", async () => {
     const user = userEvent.setup()
     let posted = false
@@ -2091,5 +2249,186 @@ describe("EnrollmentWorkspace", () => {
     expect(
       screen.queryByText(/exceeds the maximum allowed limit/),
     ).not.toBeInTheDocument()
+  })
+
+  // A transferee pays first too (ADR 0043, amended 2026-10-05): once their credit mapping closes
+  // they hold a queue number, choose their subjects, and the enrollment waits for the Cashier.
+  describe("a transferee who pays first", () => {
+    const approvedCredit = {
+      type: "transferee_credit",
+      id: 1,
+      student_id: 4,
+      student_number: "2026-0001",
+      student_name: "Maria Santos",
+      source_institution: "Other University",
+      source_subject_code: "MATH101",
+      source_subject_title: "Calculus 1",
+      source_grade: "1.75",
+      credited_units: 3,
+      source_school_year: "2023-2024",
+      source_semester: "1st",
+      subject_id: 10,
+      subject_code: "CS101",
+      subject_title: "Introduction to Computing",
+      requested_by_student: true,
+      status: "approved",
+      status_label: "Approved",
+      endorsed_at: "2026-10-02T00:00:00Z",
+      processed_at: "2026-10-03T00:00:00Z",
+      created_at: "2026-10-01T00:00:00Z",
+    }
+    const queueNumber = {
+      data: {
+        type: "student_queue_view",
+        stage: "no_active_enrollment",
+        can_claim: false,
+        ticket: {
+          ticket_number: "Q007",
+          status: "waiting",
+          status_label: "Waiting",
+          priority: "regular",
+          priority_label: "Regular",
+          position: 2,
+        },
+        now_serving_ticket_number: "Q005",
+        upcoming_ticket_numbers: ["Q006", "Q007"],
+        cut_off_today: false,
+      },
+    }
+    const holdEnrollment = {
+      ...createdEnrollment.data,
+      status: "awaiting_first_payment",
+      status_label: "Awaiting First Payment",
+      queue_ticket: null,
+    }
+
+    function renderTransferee({
+      enrollments = [],
+      queue = queueNumber,
+      paid = false,
+    }: { enrollments?: unknown[]; queue?: unknown; paid?: boolean } = {}) {
+      fetchMock.mockImplementation((input, init) => {
+        const target = url(input)
+        if (target.endsWith("/student-profile"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: {
+                  ...ownProfile(30),
+                  enrollment_category: "regular",
+                  student_type: "transferee",
+                  student_type_label: "Transferee",
+                  freshman_payment_confirmed_at: paid
+                    ? "2026-10-05T01:00:00Z"
+                    : null,
+                  // The held first payment, until the Registrar's approval applies it.
+                  advance_payment_held: paid,
+                },
+              }),
+            ),
+          )
+        if (target.includes("/transferee-credits"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: [approvedCredit],
+                links: paginationLinks,
+                meta: { ...paginationMeta, total: 1 },
+              }),
+            ),
+          )
+        if (target.includes("/queue-status"))
+          return Promise.resolve(new Response(JSON.stringify(queue)))
+        if (target.includes("/enrollments") && !init?.method)
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: enrollments,
+                links: paginationLinks,
+                meta: { ...paginationMeta, total: enrollments.length },
+              }),
+            ),
+          )
+        return mockRegularRoutes()(input, init)
+      })
+      return renderWithSession(<EnrollmentWorkspace />, {
+        session: regularStudentSession,
+      })
+    }
+
+    it("sees their queue number while they are still choosing their subjects", async () => {
+      renderTransferee()
+
+      await screen.findByRole("article", { name: "IT201 section" })
+      expect(
+        await screen.findByRole("heading", { name: "Your queue number" }),
+      ).toBeInTheDocument()
+      expect(screen.getAllByText("Q007").length).toBeGreaterThan(0)
+      expect(
+        screen.getByText(/choose your subjects below, then take this number to the Cashier/i),
+      ).toBeInTheDocument()
+    })
+
+    it("who paid before choosing is told the payment is on file and to choose their subjects", async () => {
+      renderTransferee({
+        paid: true,
+        queue: { data: { ...queueNumber.data, ticket: null } },
+      })
+
+      expect(
+        await screen.findByText("Payment received — choose your subjects"),
+      ).toBeInTheDocument()
+      expect(screen.getByText(/you do not pay again/i)).toBeInTheDocument()
+      // Paid already: no stepper step asks them to pay at the Cashier again.
+      expect(screen.queryByText("Payment at the Cashier")).not.toBeInTheDocument()
+    })
+
+    it("sees no queue number card before the Cashier has given them one", async () => {
+      renderTransferee({
+        queue: { data: { ...queueNumber.data, ticket: null } },
+      })
+
+      await screen.findByRole("article", { name: "IT201 section" })
+      expect(
+        screen.queryByRole("heading", { name: "Your queue number" }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("shows payment at the Cashier as the step they are on while their subjects wait at the hold", async () => {
+      renderTransferee({
+        enrollments: [holdEnrollment],
+        queue: { data: { ...queueNumber.data, stage: "awaiting_first_payment" } },
+      })
+
+      const label = await screen.findByText("Payment at the Cashier")
+      const stages = Array.from(
+        label.closest("ol")?.querySelectorAll("li") ?? [],
+      ).map((item) => item.textContent?.trim().replace(/^\d+/, ""))
+      expect(stages).toEqual([
+        "Select section",
+        "Submitted",
+        "Payment at the Cashier",
+        "Registrar approved",
+        "Enrolled",
+      ])
+      expect(screen.queryByText("Payment confirmed")).not.toBeInTheDocument()
+    })
+
+    it("after submitting is told to take their number to the Cashier, not to claim a ticket at the kiosk", async () => {
+      const user = userEvent.setup()
+      renderTransferee()
+
+      const section = await screen.findByRole("article", { name: "IT201 section" })
+      await user.click(within(section).getByRole("button", { name: "Choose IT201" }))
+      await user.click(await screen.findByRole("button", { name: "Submit enrollment" }))
+      await user.click(await screen.findByRole("button", { name: "Confirm submission" }))
+
+      expect(
+        await screen.findByText(
+          /take your queue number to the school Cashier and make your first payment/i,
+        ),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/claim your queuing ticket/i)).not.toBeInTheDocument()
+    })
   })
 })

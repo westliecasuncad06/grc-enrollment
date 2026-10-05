@@ -29,7 +29,9 @@ function PortalAuthBoundary({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/"
 
-  if (normalizedPathname === "/queue") {
+  // `/queue` is the Cashier kiosk; `/queue/live` is the public live-queue link a
+  // freshman is emailed (ADR 0044). Neither is a portal session.
+  if (normalizedPathname === "/queue" || normalizedPathname === "/queue/live") {
     return children
   }
 

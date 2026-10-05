@@ -3,10 +3,13 @@
 namespace App\Actions\Billing;
 
 use App\Domain\Billing\AssessmentComputation;
+use App\Domain\Billing\ComputedAssessment;
+use App\Models\AcademicTerm;
 use App\Models\Assessment;
 use App\Models\AssessmentItem;
 use App\Models\Enrollment;
 use App\Models\FeeSchedule;
+use App\Models\StudentProfile;
 use RuntimeException;
 
 /**
@@ -47,10 +50,11 @@ final readonly class AssessEnrollment
             return $existing;
         }
 
-        $totalUnits = number_format($enrollment->total_units, 1, '.', '');
-        $tuitionPerUnit = $this->resolveTuitionPerUnit();
-
-        $computed = AssessmentComputation::compute($totalUnits, $tuitionPerUnit, $this->miscellaneousFees($enrollment));
+        $computed = $this->compute(
+            $enrollment->student()->firstOrFail(),
+            $enrollment->academicTerm()->firstOrFail(),
+            $enrollment->total_units,
+        );
 
         $assessment = Assessment::create([
             'enrollment_id' => $enrollment->id,
@@ -70,6 +74,25 @@ final readonly class AssessEnrollment
         }
 
         return $assessment->load('items');
+    }
+
+    /**
+     * What an enrollment of `$totalUnits` units would be assessed to owe, without recording
+     * anything — the Cashier's preview of a freshman's first payment (ADR 0043). It is the
+     * same computation `execute()` stores, so the preview and the assessment never disagree.
+     */
+    public function estimateTotal(StudentProfile $student, AcademicTerm $term, float $totalUnits): string
+    {
+        return $this->compute($student, $term, $totalUnits)->totalAmount;
+    }
+
+    private function compute(StudentProfile $student, AcademicTerm $term, float $totalUnits): ComputedAssessment
+    {
+        return AssessmentComputation::compute(
+            number_format($totalUnits, 1, '.', ''),
+            $this->resolveTuitionPerUnit(),
+            $this->miscellaneousFees($student, $term),
+        );
     }
 
     /**
@@ -102,10 +125,10 @@ final readonly class AssessEnrollment
     /**
      * @return list<array{label: string, amount: numeric-string}>
      */
-    private function miscellaneousFees(Enrollment $enrollment): array
+    private function miscellaneousFees(StudentProfile $student, AcademicTerm $term): array
     {
-        $programCode = $enrollment->student()->with('program:id,code')->firstOrFail()->program->code;
-        $semester = $enrollment->academicTerm()->value('semester');
+        $programCode = $student->program()->value('code');
+        $semester = $term->semester;
         $fees = [];
 
         $dbFees = FeeSchedule::query()

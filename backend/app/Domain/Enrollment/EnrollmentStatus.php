@@ -29,6 +29,8 @@ enum EnrollmentStatus: string
     case Draft = 'draft';
     case PendingProgramHeadApproval = 'pending_program_head_approval';
     case PendingStudentReview = 'pending_student_review';
+    /** A transferee's chosen subjects wait here for the Cashier's first payment, before the Registrar sees them (ADR 0043, amended). */
+    case AwaitingFirstPayment = 'awaiting_first_payment';
     case PendingRegistrarApproval = 'pending_registrar_approval';
     case PendingPayment = 'pending_payment';
     case Enrolled = 'enrolled';
@@ -42,6 +44,7 @@ enum EnrollmentStatus: string
             self::Draft => 'Draft',
             self::PendingProgramHeadApproval => 'Pending Program Head Approval',
             self::PendingStudentReview => 'Awaiting Student Review',
+            self::AwaitingFirstPayment => 'Awaiting First Payment',
             self::PendingRegistrarApproval => 'Pending Registrar Approval',
             self::PendingPayment => 'Pending Payment',
             self::Enrolled => 'Enrolled',
@@ -63,6 +66,7 @@ enum EnrollmentStatus: string
             self::Draft,
             self::PendingProgramHeadApproval,
             self::PendingStudentReview,
+            self::AwaitingFirstPayment,
             self::PendingRegistrarApproval,
             self::PendingPayment,
             self::Enrolled => false,

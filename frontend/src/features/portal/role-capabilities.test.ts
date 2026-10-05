@@ -57,6 +57,8 @@ const expectedModuleIds = {
   registrar_head: [
     "academic-terms",
     "enrollment-approvals",
+    "freshman-enrollees",
+    "credit-mappings",
     "submitted-schedules",
     "section-change-requests",
     "grade-approvals",
@@ -75,6 +77,7 @@ const expectedModuleIds = {
   ],
   registrar_staff: [
     "enrollment-approvals",
+    "freshman-enrollees",
     "credit-mappings",
     "enrollment-requests",
     "cor-records",

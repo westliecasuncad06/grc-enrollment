@@ -23,6 +23,8 @@ final class NotificationTypeTest extends TestCase
                 'withdrawal_request_rejected',
                 'transferee_credit_approved',
                 'transferee_credit_rejected',
+                'transferee_credit_returned',
+                'transferee_queue_number_issued',
                 'schedule_submitted_for_dean',
                 'schedule_dean_approved',
                 'schedule_executive_approved',

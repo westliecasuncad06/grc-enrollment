@@ -51,6 +51,7 @@ describe("EnrollmentCancelPanel", () => {
 
   it.each([
     "pending_program_head_approval",
+    "awaiting_first_payment",
     "pending_registrar_approval",
   ] as const)("is offered while the enrollment is %s", (status) => {
     renderWithSession(

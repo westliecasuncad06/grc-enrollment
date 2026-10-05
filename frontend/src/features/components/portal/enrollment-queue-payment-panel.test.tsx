@@ -316,4 +316,58 @@ describe("EnrollmentQueuePaymentPanel", () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText("Enrolled")).toBeInTheDocument()
   })
+
+  describe("a freshman whose first payment is already held", () => {
+    it("is told the payment is on file instead of being sent to a queue", () => {
+      renderWithSession(
+        <EnrollmentQueuePaymentPanel
+          enrollment={baseEnrollment}
+          advancePaymentHeld
+        />,
+      )
+
+      expect(screen.getByText("Your payment is already on file")).toBeInTheDocument()
+      expect(screen.getByText(/no queue number to claim/i)).toBeInTheDocument()
+      expect(screen.getByText("On file — applied when approved")).toBeInTheDocument()
+      expect(screen.queryByText("Not yet")).not.toBeInTheDocument()
+      // The Cashier queue is not even read: there is no ticket for this enrollment.
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(
+        screen.queryByRole("region", { name: "Your Cashier queue" }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("sees nothing special once the enrollment is done", () => {
+      renderWithSession(
+        <EnrollmentQueuePaymentPanel
+          enrollment={{
+            ...baseEnrollment,
+            status: "enrolled",
+            status_label: "Enrolled",
+            payment_confirmed_at: "2026-08-01T00:00:00Z",
+            enrolled_at: "2026-08-01T00:00:00Z",
+          }}
+          advancePaymentHeld
+        />,
+      )
+
+      expect(
+        screen.queryByText("Your payment is already on file"),
+      ).not.toBeInTheDocument()
+    })
+
+    it("a student with nothing held still gets the usual queue guidance", async () => {
+      renderWithSession(
+        <EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />,
+      )
+
+      expect(
+        await screen.findByRole("region", { name: "Your Cashier queue" }),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText("Your payment is already on file"),
+      ).not.toBeInTheDocument()
+      expect(screen.getByText("Not yet")).toBeInTheDocument()
+    })
+  })
 })

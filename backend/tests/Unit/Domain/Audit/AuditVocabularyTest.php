@@ -93,6 +93,9 @@ final class AuditVocabularyTest extends TestCase
                 'queue_cycle.closed',
                 'queue_kiosk_credential.viewed',
                 'queue_kiosk.password_changed',
+                'transferee_credit.submitted',
+                'transferee_credit.returned',
+                'transferee_credit.deleted',
             ];
         $actual = AuditAction::values();
 

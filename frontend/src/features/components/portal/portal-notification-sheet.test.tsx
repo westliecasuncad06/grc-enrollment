@@ -713,7 +713,8 @@ describe("PortalNotificationSheet", () => {
 
   it.each([
     ["program_chair", "transferee_credit_requested", "Student 2026-0002 asked for a credit mapping: Intro to Computing from TIP.", "/portal/credit-mappings"],
-    ["registrar_staff", "transferee_credit_endorsed", "A transferee credit for student 2026-0002 (Intro to Computing) was endorsed by the Program Head and awaits your approval.", "/portal/credit-mappings"],
+    ["registrar_head", "transferee_credit_endorsed", "A transferee credit for student 2026-0002 (Intro to Computing) was endorsed by the Program Head and awaits your approval.", "/portal/credit-mappings"],
+    ["program_chair", "transferee_credit_returned", "The Registrar Head returned a credit for student 2026-0002 (Intro to Computing). Reason: Mapped to the wrong subject.", "/portal/credit-mappings"],
     ["student", "transferee_credit_approved", "Your transferee credit has been approved.", "/portal/grades"],
   ] as const)(
     "sends a %s who opens a %s notification to the module that handles it",

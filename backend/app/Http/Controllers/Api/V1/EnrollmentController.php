@@ -12,6 +12,7 @@ use App\Actions\Enrollment\SendEnrollmentConfirmationEmail;
 use App\Actions\Enrollment\SubmitEnrollment;
 use App\Actions\Enrollment\TransitionEnrollment;
 use App\Domain\Enrollment\EnrollmentDocumentType;
+use App\Domain\Enrollment\EnrollmentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Enrollment\AdjustEnrollmentAssessmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\ConfirmPaymentRequest;
@@ -110,6 +111,7 @@ final class EnrollmentController extends Controller
         Enrollment $enrollment,
         TransitionEnrollment $transitioner,
         AuditRequestContextFactory $contextFactory,
+        SendEnrollmentConfirmationEmail $sendConfirmationEmail,
     ): JsonResponse {
         $actor = $this->authenticatedUser($request);
 
@@ -123,15 +125,26 @@ final class EnrollmentController extends Controller
             in_array($ability, ['decideProgramHeadApproval', 'cancel', 'respondToRevision'], true) ? $enrollment : Enrollment::class,
         );
 
+        $context = $contextFactory->fromRequest($request);
         $enrollment = $transitioner->execute(
             $enrollment,
             $action,
             $actor,
             $request->validated('reason'),
-            $contextFactory->fromRequest($request),
+            $context,
             $request->boolean('requested_by_student'),
             $request->validated('program_head_comment'),
         );
+
+        // ADR 0043: approving a freshman's enrollment can finish it from the payment they already
+        // made (enrolled at once). Then the same confirmation email a Cashier payment sends goes out,
+        // after the transition has committed.
+        if ($action === 'registrar_approve' && $enrollment->status === EnrollmentStatus::Enrolled) {
+            $document = $enrollment->documents()->where('document_type', EnrollmentDocumentType::Cor)->first();
+            if ($document !== null) {
+                $sendConfirmationEmail->handle($enrollment, $document, $actor, $context);
+            }
+        }
 
         $response = EnrollmentResource::make($enrollment)->response($request);
 

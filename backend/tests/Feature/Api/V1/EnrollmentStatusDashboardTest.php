@@ -228,6 +228,26 @@ final class EnrollmentStatusDashboardTest extends TestCase
         self::assertSame(0, $departments['cbae']['total']);
     }
 
+    public function test_a_student_at_the_payment_hold_is_ongoing_has_their_own_step_and_is_waiting_on_the_cashier(): void
+    {
+        // A transferee's chosen subjects wait at `awaiting_first_payment` for the Cashier (ADR 0043, amended).
+        $this->enrollment($this->student('h1', $this->ccs), EnrollmentStatus::AwaitingFirstPayment, ['IT201' => 1]);
+        $this->enrollment($this->student('h2', $this->ccs), EnrollmentStatus::PendingRegistrarApproval, ['IT201' => 1]);
+
+        $this->actingAsUser($this->user(UserRole::RegistrarHead, 'registrar'));
+        $this->getJson('/api/v1/dashboards/enrollment-status')->assertOk()
+            ->assertJsonPath('data.groups.in_progress', 2)
+            ->assertJsonPath('data.steps.awaiting_first_payment', 1)
+            ->assertJsonPath('data.steps.pending_registrar_approval', 1);
+        self::assertSame(EnrollmentStatusGroup::InProgress, EnrollmentStatusGroup::forStatus(EnrollmentStatus::AwaitingFirstPayment));
+
+        // The Cashier sees only the students waiting on them: the one at the hold, not the Registrar's.
+        $this->actingAsUser($this->user(UserRole::AccountingStaff, 'cashier'));
+        $numbers = collect($this->getJson('/api/v1/dashboards/enrollment-status/students?department=ccs')->assertOk()->json('data'))
+            ->pluck('student_number')->all();
+        self::assertSame(['SN-h1'], $numbers);
+    }
+
     public function test_the_overview_carries_no_student_identity(): void
     {
         $this->scenario();

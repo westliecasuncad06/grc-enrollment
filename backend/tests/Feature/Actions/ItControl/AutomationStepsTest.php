@@ -369,10 +369,24 @@ final class AutomationStepsTest extends TestCase
             'status' => 'draft',
         ]);
         $this->assertSame(804, AcademicTermSectionPlan::query()->where('academic_term_id', $this->term->id)->where('college', 'ccs')->where('status', SectionPlanStatus::Submitted->value)->count());
-        $this->assertDatabaseHas('academic_term_section_plans', ['academic_term_id' => $this->term->id, 'curriculum_id' => 200, 'status' => SectionPlanStatus::Submitted->value]);
-        $this->assertDatabaseHas('academic_term_section_plans', ['academic_term_id' => $this->term->id, 'curriculum_id' => 201, 'status' => SectionPlanStatus::Submitted->value]);
-        $this->assertDatabaseHas('sections', ['academic_term_id' => $this->term->id, 'section_plan_id' => 800, 'status' => SectionStatus::Planned->value]);
-        $this->assertDatabaseHas('sections', ['academic_term_id' => $this->term->id, 'section_plan_id' => 804, 'status' => SectionStatus::Planned->value]);
+
+        // The last two curricula are the ones past the 200-per-batch boundary. Find them by name: their ids are
+        // whatever the database handed out, and every earlier test in the run advances the auto-increment
+        // counters (a rolled-back insert never gives its id back), so a literal id breaks as tests are added.
+        $lastTwo = Curriculum::query()->whereIn('name', ['Chunk 200 Curriculum', 'Chunk 201 Curriculum'])->pluck('id');
+        $this->assertCount(2, $lastTwo);
+
+        foreach ($lastTwo as $curriculumId) {
+            $this->assertDatabaseHas('academic_term_section_plans', ['academic_term_id' => $this->term->id, 'curriculum_id' => $curriculumId, 'status' => SectionPlanStatus::Submitted->value]);
+
+            $lastPlanId = AcademicTermSectionPlan::query()
+                ->where('academic_term_id', $this->term->id)
+                ->where('curriculum_id', $curriculumId)
+                ->where('year_level', 4)
+                ->value('id');
+            $this->assertNotNull($lastPlanId);
+            $this->assertDatabaseHas('sections', ['academic_term_id' => $this->term->id, 'section_plan_id' => $lastPlanId, 'status' => SectionStatus::Planned->value]);
+        }
     }
 
     private function openEnrollmentTerm(): void

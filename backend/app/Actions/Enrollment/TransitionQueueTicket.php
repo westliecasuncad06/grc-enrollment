@@ -153,7 +153,7 @@ final readonly class TransitionQueueTicket
                 $context,
             );
 
-            return $lockedTicket->refresh()->load(['enrollment.student']);
+            return $lockedTicket->refresh()->load(['enrollment.student', 'studentProfile']);
         });
     }
 
@@ -195,7 +195,7 @@ final readonly class TransitionQueueTicket
                 $context,
             );
 
-            return $lockedTicket->refresh()->load(['enrollment.student']);
+            return $lockedTicket->refresh()->load(['enrollment.student', 'studentProfile']);
         });
     }
 
@@ -225,7 +225,7 @@ final readonly class TransitionQueueTicket
 
             $lockedTicket->increment('announce_count');
 
-            return $lockedTicket->refresh()->load(['enrollment.student']);
+            return $lockedTicket->refresh()->load(['enrollment.student', 'studentProfile']);
         });
     }
 

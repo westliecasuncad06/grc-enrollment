@@ -286,6 +286,48 @@ describe("ProspectusDocument", () => {
     expect(screen.getByText("Credited")).toBeInTheDocument()
   })
 
+  it("shows the grade each previous school gave, for information only, and says it is not converted", async () => {
+    const credit = {
+      source_institution: "Technological Institute of the Philippines",
+      source_subject_code: "CS 101",
+      source_subject_title: "Intro to Computing",
+      source_grade: "1.50",
+      credited_units: 3,
+      source_school_year: "2023-2024",
+      source_semester: "1st",
+      target_code: "IT-NEW",
+      target_title: "Foundations of Programming",
+    }
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(
+          prospectusFixture({
+            transferee_credits: [
+              credit,
+              {
+                ...credit,
+                source_subject_code: "MAT 101",
+                source_subject_title: "College Algebra",
+                source_grade: null,
+                target_code: "MATH101",
+                target_title: "College Algebra",
+              },
+            ],
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    await screen.findByText("Credited from a previous school")
+    expect(screen.getAllByText(/Grade from previous school:/)).toHaveLength(1)
+    expect(
+      screen.getByText("Grade from previous school: 1.50"),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/not converted/i)).toBeInTheDocument()
+  })
+
   it("shows no previous-school table when nothing was credited from one", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify(prospectusFixture())),
@@ -438,9 +480,7 @@ describe("ProspectusDocument", () => {
         expect(buttons[1]).toHaveAttribute("aria-expanded", "true"),
       )
       const panel = (index: number) =>
-        document.getElementById(
-          buttons[index].getAttribute("aria-controls")!,
-        )!
+        document.getElementById(buttons[index].getAttribute("aria-controls")!)!
 
       expect(panel(0)).toHaveAttribute("inert")
       expect(panel(1)).not.toHaveAttribute("inert")

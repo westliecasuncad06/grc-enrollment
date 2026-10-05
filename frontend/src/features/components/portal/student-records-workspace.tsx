@@ -68,15 +68,20 @@ import {
 } from "@/features/components/ui/tabs"
 import { Textarea } from "@/features/components/ui/textarea"
 import { useAdmissionRequirementSelectionQuery } from "@/features/hooks/use-admission-requirements"
+import { useDraftForm } from "@/features/hooks/use-draft-form"
+import { usePersistedState } from "@/features/hooks/use-persisted-state"
 import {
   useDecideProfileChangeRequestMutation,
   useProfileChangeRequestsQuery,
+  useNextStudentNumberQuery,
   useProvisionStudentMutation,
   useResendAccountSetupInvitationMutation,
+  useResendQueueLinkMutation,
   useStudentDirectoryQuery,
   useUpdateStudentProfileMutation,
 } from "@/features/hooks/use-student-records"
 import { useProgramsQuery } from "@/features/hooks/use-reference-data"
+import { isApiClientError } from "@/features/services/api-client"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { focusFirstInvalidField } from "@/features/lib/focus-first-invalid"
 import { formatYearLevel } from "@/features/lib/format-year-level"
@@ -95,6 +100,10 @@ function InvitationStatus({ profile }: { profile: StudentProfile }) {
   if (profile.account_setup_status === "active") {
     return <Badge variant="success">Activated</Badge>
   }
+  // A freshman pays the Cashier first; the setup email follows the first payment.
+  if (profile.account_setup_status === "awaiting_payment") {
+    return <Badge variant="warning">Awaiting payment</Badge>
+  }
   if (profile.invitation_delivery_status === "failed") {
     return <Badge variant="destructive">Delivery failed</Badge>
   }
@@ -104,22 +113,85 @@ function InvitationStatus({ profile }: { profile: StudentProfile }) {
   return <Badge variant="outline">Pending delivery</Badge>
 }
 
+/**
+ * Sends a freshman's "view the live queue" link again — the old link stops
+ * working. Each button owns its own request, so a row in the directory only
+ * shows "Resending…" for itself.
+ */
+function ResendQueueLinkButton({
+  profile,
+  label = "Resend queue link",
+  size,
+  variant = "outline",
+  onResent,
+}: {
+  profile: StudentProfile
+  label?: string
+  size?: "sm"
+  variant?: "outline" | "secondary"
+  onResent?: (updated: StudentProfile) => void
+}) {
+  const resend = useResendQueueLinkMutation()
+
+  return (
+    <Button
+      type="button"
+      size={size}
+      variant={variant}
+      disabled={resend.isPending}
+      onClick={() =>
+        void resend
+          .mutateAsync(profile.id)
+          .then((updated) => {
+            onResent?.(updated)
+            toast.success(`Queue link resent to ${updated.email}.`)
+          })
+          .catch(() => {
+            toast.error("Failed to resend the queue link.")
+          })
+      }
+    >
+      {resend.isPending ? "Resending…" : label}
+    </Button>
+  )
+}
+
+/** The freshman's queue number and whether the emailed link reached them. */
+function QueueTicketSummary({ profile }: { profile: StudentProfile }) {
+  if (profile.queue_ticket_number === null) return null
+
+  return (
+    <div className="grid gap-2 rounded-lg border bg-muted/20 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Queue number
+      </p>
+      <p className="text-3xl font-bold tracking-wide">
+        {profile.queue_ticket_number}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        {profile.queue_link_delivery_status === "failed"
+          ? "The email could not be sent. Tell the student this number, then resend the link."
+          : `The live queue link was emailed to ${profile.email}.`}
+      </p>
+    </div>
+  )
+}
+
 function CreateAccountPanel() {
+  // The React Compiler skipped this component on its own while it called `useForm` directly (it
+  // also calls `watch`, which cannot be memoized safely). `useDraftForm` hides `useForm` from
+  // the compiler, so the opt-out has to be spelled out: compiled, the memoized `register()` props
+  // keep their old ref callbacks, and after a reset the text boxes keep what was typed.
+  "use no memo"
+
   const programsQuery = useProgramsQuery()
   const mutation = useProvisionStudentMutation()
   const resend = useResendAccountSetupInvitationMutation()
   const [created, setCreated] = useState<StudentProfile | null>(null)
-  const {
-    clearErrors,
-    control,
-    formState: { errors },
-    handleSubmit,
-    register,
-    reset,
-    setError,
-    setValue,
-    watch,
-  } = useForm<CreateValues>({
+  // What Admission has typed survives a tab switch, leaving the page and an accidental reload:
+  // a long form that is lost halfway is the thing staff complain about.
+  const { form, draft } = useDraftForm<CreateValues>({
+    formKey: "admission.create-account.v1",
     resolver: zodResolver(provisionStudentSchema),
     defaultValues: {
       first_name: "",
@@ -135,11 +207,31 @@ function CreateAccountPanel() {
       requirement_type_ids: [],
     },
   })
+  const {
+    clearErrors,
+    control,
+    formState: { errors },
+    handleSubmit,
+    register,
+    reset,
+    setError,
+    setValue,
+    watch,
+  } = form
   const formRef = useRef<HTMLFormElement>(null)
   const studentType = watch("student_type")
   const checkedIds = watch("requirement_type_ids")
   const hasExistingNumber = watch("has_existing_student_number")
   const canHaveExistingNumber = studentTypeCanHaveExistingNumber(studentType)
+  // The number the new account will get, shown before saving (only while a new number is asked for).
+  const nextNumberQuery = useNextStudentNumberQuery(!hasExistingNumber)
+  // A failure on the server (or reaching it), as opposed to the server rejecting what was typed.
+  const serverFault =
+    isApiClientError(mutation.error) &&
+    (mutation.error.kind === "connection" ||
+      (mutation.error.status ?? 0) >= 500)
+      ? mutation.error
+      : null
   const requirementsQuery = useAdmissionRequirementSelectionQuery(
     studentType ?? null,
   )
@@ -161,8 +253,8 @@ function CreateAccountPanel() {
     }
   }, [applicableIds, checkedIds, requirementsQuery.isSuccess, setValue])
 
-  // A Freshman or a Transferee gets a new number: drop the option, and any number typed for it,
-  // as soon as the type changes to one of those.
+  // A Freshman gets a new number: drop the option, and any number typed for it, as soon as the
+  // type changes to one that cannot have one (2026-10-04: a Transferee may enter theirs).
   useEffect(() => {
     if (hasExistingNumber && !canHaveExistingNumber) {
       setValue("has_existing_student_number", false)
@@ -175,7 +267,22 @@ function CreateAccountPanel() {
     try {
       const profile = await mutation.mutateAsync(values)
       setCreated(profile)
-      toast.success(`Account created and setup email sent to ${profile.email}.`)
+      if (profile.queue_ticket_number !== null) {
+        // A freshman: a queue number and a live-queue link, not the account setup email.
+        if (profile.queue_link_delivery_status === "failed") {
+          toast.warning(
+            `Student saved and queue number ${profile.queue_ticket_number} issued, but the email could not be sent. Tell the student the number, or resend the link.`,
+          )
+        } else {
+          toast.success(
+            `Student saved. Queue number ${profile.queue_ticket_number} was emailed to ${profile.email}.`,
+          )
+        }
+      } else {
+        toast.success(
+          `Account created and setup email sent to ${profile.email}.`,
+        )
+      }
       reset({
         ...values,
         first_name: "",
@@ -191,11 +298,21 @@ function CreateAccountPanel() {
         student_type: undefined,
         requirement_type_ids: [],
       })
+      // The account exists now: nothing typed is worth keeping. What the form still holds (the
+      // program and year, carried over to the next student) is its new starting point.
+      draft.clear()
+      draft.rebase()
     } catch (error) {
       applyApiFieldErrors(error, setError)
       // Take Admission to the field the server did not accept.
       focusFirstInvalidField(formRef.current)
-      toast.error("Failed to create the account.")
+      // A freshman has no account until they pay (ADR 0043): what Admission saves is the student
+      // and a queue number, so that is what failed.
+      toast.error(
+        values.student_type === "freshman"
+          ? "Failed to save the student."
+          : "Failed to create the account.",
+      )
     }
   }
 
@@ -292,6 +409,7 @@ function CreateAccountPanel() {
                   </FieldLabel>
                   {hasExistingNumber ? (
                     <Input
+                      key="typed-number"
                       id="record-number"
                       autoComplete="off"
                       placeholder="YYYY-MM-NNNNN"
@@ -299,17 +417,24 @@ function CreateAccountPanel() {
                       {...register("student_number")}
                     />
                   ) : (
+                    // A separate element from the typed one: React must not reuse the registered
+                    // input as a controlled, read-only field (that broke the number sent on save).
                     <Input
+                      key="previewed-number"
                       id="record-number"
                       readOnly
-                      value=""
-                      placeholder="Assigned automatically"
+                      value={nextNumberQuery.data ?? ""}
+                      placeholder={
+                        nextNumberQuery.isPending
+                          ? "Loading the next number…"
+                          : "Assigned automatically"
+                      }
                     />
                   )}
                   <FieldDescription>
                     {hasExistingNumber
                       ? "Enter it exactly as it appears on the student's records (YYYY-MM-NNNNN)."
-                      : "Assigned in order (Year-Month-Sequence) when the account is created."}
+                      : "The next number in order (Year-Month-Sequence). It is confirmed when the account is saved."}
                   </FieldDescription>
                   <FieldError>{errors.student_number?.message}</FieldError>
                   <div className="flex items-start gap-2 pt-1">
@@ -340,8 +465,8 @@ function CreateAccountPanel() {
                     </FieldLabel>
                   </div>
                   <FieldDescription>
-                    Only for a Returnee or an Existing Student. Everyone else
-                    gets a new number.
+                    Only for a Transferee, a Returnee or an Existing Student. A
+                    Freshman gets a new number.
                   </FieldDescription>
                   <FieldError>
                     {errors.has_existing_student_number?.message}
@@ -496,23 +621,64 @@ function CreateAccountPanel() {
                 </Field>
                 {mutation.isError && (
                   <Alert className="md:col-span-2" variant="destructive">
-                    <AlertTitle>Account not created</AlertTitle>
+                    <AlertTitle>
+                      {studentType === "freshman"
+                        ? "Student not saved"
+                        : "Account not created"}
+                    </AlertTitle>
                     <AlertDescription>
-                      Review the form details and try again. No duplicate
-                      account was created.
+                      {serverFault ? (
+                        // A fault on the server is not something to "review the form" for: show what
+                        // the server said (on a developer's machine it names the fix, such as a
+                        // migration that has not been run) and the request number to look it up by.
+                        <>
+                          {serverFault.message}
+                          {serverFault.requestId
+                            ? ` (Request ${serverFault.requestId})`
+                            : ""}{" "}
+                          {studentType === "freshman"
+                            ? "No student record or queue number was created, so the same details can be sent again."
+                            : "No account was created, so the same details can be sent again."}
+                        </>
+                      ) : studentType === "freshman" ? (
+                        "Review the form details and try again. No student record or queue number was created, so nothing is left to clean up."
+                      ) : (
+                        "Review the form details and try again. No duplicate account was created."
+                      )}
                     </AlertDescription>
                   </Alert>
                 )}
-                <div className="md:col-span-2">
+                <div className="flex flex-wrap items-center gap-3 md:col-span-2">
                   <Button
                     type="submit"
                     disabled={mutation.isPending || programsQuery.isPending}
                   >
                     <UserRoundPlus aria-hidden="true" />
                     {mutation.isPending
-                      ? "Creating account…"
-                      : "Create account and email setup"}
+                      ? "Saving…"
+                      : studentType === "freshman"
+                        ? "Save student and issue queue number"
+                        : "Create account and email setup"}
                   </Button>
+                  {draft.hasContent && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={mutation.isPending}
+                        onClick={() => {
+                          draft.discard()
+                          clearErrors()
+                        }}
+                      >
+                        Clear form
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Your unsaved details are kept in this browser until you
+                        create the account or sign out.
+                      </p>
+                    </>
+                  )}
                 </div>
               </FieldGroup>
             </form>
@@ -523,15 +689,17 @@ function CreateAccountPanel() {
           <CardHeader>
             <CardTitle level={2}>Account setup delivery</CardTitle>
             <CardDescription>
-              No temporary password is displayed. The student receives a
-              one-time code by email.
+              No temporary password is displayed. A freshman gets a queue number
+              first and the one-time setup code after paying the Cashier; any
+              other student receives the code by email now.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {created ? (
               <>
                 <div className="flex items-center gap-2">
-                  {created.invitation_delivery_status === "failed" ? (
+                  {created.invitation_delivery_status === "failed" ||
+                  created.queue_link_delivery_status === "failed" ? (
                     <MailWarning
                       aria-hidden="true"
                       className="text-destructive"
@@ -545,6 +713,14 @@ function CreateAccountPanel() {
                   {created.student_number}
                 </p>
                 <InvitationStatus profile={created} />
+                <QueueTicketSummary profile={created} />
+                {created.account_setup_status === "awaiting_payment" &&
+                  created.queue_ticket_number !== null && (
+                    <ResendQueueLinkButton
+                      profile={created}
+                      onResent={setCreated}
+                    />
+                  )}
                 {created.account_setup_status === "pending" && (
                   <Button
                     type="button"
@@ -905,6 +1081,10 @@ function StudentRecordDialog({
                   {resend.isPending ? "Resending…" : "Resend setup email"}
                 </Button>
               )}
+              {profile.account_setup_status === "awaiting_payment" &&
+                profile.queue_ticket_number !== null && (
+                  <ResendQueueLinkButton profile={profile} />
+                )}
             </div>
           </form>
         )}
@@ -929,8 +1109,15 @@ function StudentRecordDialog({
 }
 
 function StudentDirectoryPanel() {
-  const [draftSearch, setDraftSearch] = useState("")
-  const [search, setSearch] = useState("")
+  // Both the box and the search that was run: coming back shows the same list for the same words.
+  const [draftSearch, setDraftSearch] = usePersistedState<string>(
+    "admission.directory.search-box.v1",
+    "",
+  )
+  const [search, setSearch] = usePersistedState<string>(
+    "admission.directory.search.v1",
+    "",
+  )
   const [selected, setSelected] = useState<StudentProfile | null>(null)
   const [resendingId, setResendingId] = useState<number | null>(null)
   const query = useStudentDirectoryQuery({ search, page: 1, per_page: 50 })
@@ -1004,6 +1191,15 @@ function StudentDirectoryPanel() {
               {resendingId === profile.id ? "Resending…" : "Resend email"}
             </Button>
           )}
+          {profile.account_setup_status === "awaiting_payment" &&
+            profile.queue_ticket_number !== null && (
+              <ResendQueueLinkButton
+                profile={profile}
+                label="Resend link"
+                size="sm"
+                variant="secondary"
+              />
+            )}
         </div>
       ),
     },

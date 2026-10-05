@@ -16,12 +16,14 @@ import {
   cancelProfileChangeRequest,
   createProfileChangeRequest,
   decideProfileChangeRequest,
+  getNextStudentNumber,
   getRegistrarStudentProfile,
   getStudentProfile,
   listProfileChangeRequests,
   listStudentProfiles,
   provisionStudent,
   resendAccountSetupInvitation,
+  resendQueueLink,
   reviseProfileChangeRequest,
   updateStudentProfile,
 } from "@/features/services/admission-service"
@@ -48,6 +50,22 @@ export function useStudentDirectoryQuery(filters: StudentProfileFilters) {
     queryFn: ({ signal }) => listStudentProfiles(filters, signal),
     placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: session?.role === "admission_staff",
+  })
+}
+
+export const nextStudentNumberQueryKey = (userId: string | null) =>
+  ["next-student-number", userId] as const
+
+/**
+ * The number the next account would get, shown in the Admission form before saving. Only read
+ * while the form is asking for a new number (`enabled`), and refreshed after each save.
+ */
+export function useNextStudentNumberQuery(enabled: boolean) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: nextStudentNumberQueryKey(session?.userId ?? null),
+    queryFn: ({ signal }) => getNextStudentNumber(signal),
+    enabled: enabled && session?.role === "admission_staff",
   })
 }
 
@@ -99,6 +117,10 @@ function useInvalidateStudentRecords() {
       queryClient.invalidateQueries({
         queryKey: ["student-profile-change-requests", session?.userId ?? null],
       }),
+      // A save takes the number previewed for the form; the preview moves on to the next one.
+      queryClient.invalidateQueries({
+        queryKey: nextStudentNumberQueryKey(session?.userId ?? null),
+      }),
     ])
 }
 
@@ -125,6 +147,14 @@ export function useResendAccountSetupInvitationMutation() {
   const invalidate = useInvalidateStudentRecords()
   return useMutation({
     mutationFn: resendAccountSetupInvitation,
+    onSuccess: invalidate,
+  })
+}
+
+export function useResendQueueLinkMutation() {
+  const invalidate = useInvalidateStudentRecords()
+  return useMutation({
+    mutationFn: resendQueueLink,
     onSuccess: invalidate,
   })
 }

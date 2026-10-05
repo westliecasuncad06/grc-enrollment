@@ -210,6 +210,12 @@ final class AuditAction
 
     public const TRANSFEREE_CREDIT_REJECTED = 'transferee_credit.rejected';
 
+    public const TRANSFEREE_CREDIT_SUBMITTED = 'transferee_credit.submitted';
+
+    public const TRANSFEREE_CREDIT_RETURNED = 'transferee_credit.returned';
+
+    public const TRANSFEREE_CREDIT_DELETED = 'transferee_credit.deleted';
+
     public const TOR_DOCUMENT_UPLOADED = 'tor_document.uploaded';
 
     public const TOR_DOCUMENT_DELETED = 'tor_document.deleted';
@@ -247,6 +253,14 @@ final class AuditAction
     public const STUDENT_SCHEDULE_PREFERENCE_SAVED = 'student_schedule_preference.saved';
 
     public const QUEUE_TICKET_CLAIMED = 'queue_ticket.claimed';
+
+    public const FRESHMAN_PAYMENT_CONFIRMED = 'student_profile.freshman_payment_confirmed';
+
+    public const ENROLLMENT_FRESHMAN_AUTO_APPROVED = 'enrollment.freshman_auto_approved';
+
+    public const FRESHMAN_QUEUE_LINK_EMAIL_SENT = 'queue_ticket.freshman_link_email_sent';
+
+    public const FRESHMAN_QUEUE_LINK_EMAIL_SEND_FAILED = 'queue_ticket.freshman_link_email_send_failed';
 
     public const QUEUE_CYCLE_CUT_OFF = 'queue_cycle.cut_off';
 
@@ -399,6 +413,9 @@ final class AuditAction
             self::TRANSFEREE_CREDIT_ENDORSED,
             self::TRANSFEREE_CREDIT_APPROVED,
             self::TRANSFEREE_CREDIT_REJECTED,
+            self::TRANSFEREE_CREDIT_SUBMITTED,
+            self::TRANSFEREE_CREDIT_RETURNED,
+            self::TRANSFEREE_CREDIT_DELETED,
             self::TOR_DOCUMENT_UPLOADED,
             self::TOR_DOCUMENT_DELETED,
             self::ACADEMIC_TERM_CREATED,
@@ -418,6 +435,10 @@ final class AuditAction
             self::ENROLLMENT_CHANGE_REQUEST_REJECTED,
             self::STUDENT_SCHEDULE_PREFERENCE_SAVED,
             self::QUEUE_TICKET_CLAIMED,
+            self::FRESHMAN_PAYMENT_CONFIRMED,
+            self::ENROLLMENT_FRESHMAN_AUTO_APPROVED,
+            self::FRESHMAN_QUEUE_LINK_EMAIL_SENT,
+            self::FRESHMAN_QUEUE_LINK_EMAIL_SEND_FAILED,
             self::QUEUE_CYCLE_CUT_OFF,
             self::QUEUE_CYCLE_RESUMED,
             self::QUEUE_CYCLE_CLOSED,

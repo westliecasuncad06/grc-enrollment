@@ -6,6 +6,7 @@ use App\Actions\Billing\AssessEnrollment;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Enrollment\EnrollmentRouting;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Enrollment\QueueTicketStatus;
@@ -17,6 +18,7 @@ use App\Models\EnrollmentRevision;
 use App\Models\EnrollmentSubject;
 use App\Models\Notification;
 use App\Models\Section;
+use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use App\Support\Notifications\NotificationRecorder;
@@ -94,6 +96,7 @@ final class TransitionEnrollment
         'void' => [
             EnrollmentStatus::PendingProgramHeadApproval,
             EnrollmentStatus::PendingStudentReview,
+            EnrollmentStatus::AwaitingFirstPayment,
             EnrollmentStatus::PendingRegistrarApproval,
             EnrollmentStatus::PendingPayment,
         ],
@@ -101,6 +104,7 @@ final class TransitionEnrollment
         'student_cancel' => [
             EnrollmentStatus::PendingProgramHeadApproval,
             EnrollmentStatus::PendingStudentReview,
+            EnrollmentStatus::AwaitingFirstPayment,
             EnrollmentStatus::PendingRegistrarApproval,
         ],
         'student_accept_revision' => [EnrollmentStatus::PendingStudentReview],
@@ -141,6 +145,7 @@ final class TransitionEnrollment
         private readonly AuditRecorder $auditRecorder,
         private readonly AssessEnrollment $assessEnrollment,
         private readonly NotificationRecorder $notificationRecorder,
+        private readonly SettleEnrollmentFromAdvanceCredit $settleFromAdvanceCredit,
     ) {}
 
     public function execute(
@@ -166,6 +171,14 @@ final class TransitionEnrollment
         }
 
         return DB::transaction(function () use ($enrollment, $action, $actingUser, $reason, $context, $requestedByStudent, $programHeadComment): Enrollment {
+            // Lock order is PROFILE, then ENROLLMENT, then sections: the order `ConfirmFreshmanPayment` and
+            // `SubmitEnrollment` take. A review that routes by payment status therefore locks the student's
+            // profile before the enrollment, so it cannot deadlock with the Cashier confirming that very
+            // student's payment (the reverse order was a real InnoDB deadlock, found in review).
+            $lockedStudent = in_array($action, ['program_head_approve', 'student_accept_revision'], true)
+                ? StudentProfile::query()->whereKey($enrollment->student_id)->lockForUpdate()->firstOrFail()
+                : null;
+
             $lockedEnrollment = Enrollment::query()
                 ->whereKey($enrollment->id)
                 ->lockForUpdate()
@@ -189,7 +202,7 @@ final class TransitionEnrollment
             // stamps neither. A student accepting the Program Chair's changes
             // completes the Program Head stage (the Chair proposed them), so that
             // moment is stamped; declining leaves the stage open.
-            $attributes = ['status' => self::TARGET_STATUS[$action]];
+            $attributes = ['status' => $this->targetStatus($action, $lockedStudent)];
             if (str_starts_with($action, 'program_head_') || $action === 'student_accept_revision') {
                 $attributes['program_head_decided_at'] = now();
             } elseif (! in_array($action, ['student_cancel', 'student_decline_revision'], true)) {
@@ -227,6 +240,15 @@ final class TransitionEnrollment
                 ? $this->assessEnrollment->execute($lockedEnrollment)
                 : null;
 
+            // ADR 0043: a freshman who paid while every section was full holds that payment as
+            // credit. When Registrar Staff approve the enrollment they made in the section that
+            // opened, the held payment completes it — enrolled at once, no queue, no second payment.
+            $settledFromCredit = $action === 'registrar_approve'
+                && $this->settleFromAdvanceCredit->execute($lockedEnrollment, $actingUser, $context);
+            if ($settledFromCredit) {
+                $lockedEnrollment->refresh();
+            }
+
             $this->auditRecorder->record(
                 $actingUser,
                 self::AUDIT_ACTION[$action],
@@ -246,25 +268,36 @@ final class TransitionEnrollment
                 Notification::create([
                     'user_id' => $lockedEnrollment->student->user_id,
                     'type' => self::NOTIFICATION_TYPE[$action],
-                    'message' => self::notificationMessage($action, $lockedEnrollment, $reason),
+                    'message' => $settledFromCredit
+                        ? 'Your enrollment has been approved by the Registrar and your earlier payment was applied. You are now enrolled; there is no queue ticket or second payment to make.'
+                        : self::notificationMessage($action, $lockedEnrollment, $reason),
                 ]);
             }
+
+            // A transferee who has not paid is at the payment hold: the Registrar is not told
+            // until the Cashier has taken the first payment.
+            $atPaymentHold = $lockedEnrollment->status === EnrollmentStatus::AwaitingFirstPayment;
 
             if ($action === 'student_accept_revision') {
                 $student = $lockedEnrollment->student;
                 $this->notificationRecorder->recordMany(
                     ProgramChairRecipients::forStudent($student),
                     NotificationType::EnrollmentRevisionAccepted,
-                    sprintf('Student %s accepted your changes to their subjects. The enrollment now goes to the Registrar.', $student->student_number),
+                    $atPaymentHold
+                        ? sprintf('Student %s accepted your changes to their subjects. The enrollment now waits for their first payment at the Cashier.', $student->student_number)
+                        : sprintf('Student %s accepted your changes to their subjects. The enrollment now goes to the Registrar.', $student->student_number),
                 );
-                $this->notificationRecorder->recordManyForRoles(
-                    [UserRole::RegistrarStaff, UserRole::RegistrarHead],
-                    NotificationType::EnrollmentProgramHeadApproved,
-                    sprintf(
-                        "Student %s accepted the Program Chair's changes to their subjects; the enrollment now awaits Registrar approval.",
-                        $student->student_number,
-                    ),
-                );
+
+                if (! $atPaymentHold) {
+                    $this->notificationRecorder->recordManyForRoles(
+                        [UserRole::RegistrarStaff, UserRole::RegistrarHead],
+                        NotificationType::EnrollmentProgramHeadApproved,
+                        sprintf(
+                            "Student %s accepted the Program Chair's changes to their subjects; the enrollment now awaits Registrar approval.",
+                            $student->student_number,
+                        ),
+                    );
+                }
             }
 
             if ($action === 'student_decline_revision') {
@@ -276,8 +309,9 @@ final class TransitionEnrollment
                 );
             }
 
-            // The Program Head stage is done, so the enrollment now waits on the Registrar.
-            if ($action === 'program_head_approve') {
+            // The Program Head stage is done, so the enrollment now waits on the Registrar
+            // (or, for a transferee who has not paid, on the Cashier first).
+            if ($action === 'program_head_approve' && ! $atPaymentHold) {
                 $this->notificationRecorder->recordManyForRoles(
                     [UserRole::RegistrarStaff, UserRole::RegistrarHead],
                     NotificationType::EnrollmentProgramHeadApproved,
@@ -292,6 +326,22 @@ final class TransitionEnrollment
                 'student', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items', 'revisions',
             ]);
         });
+    }
+
+    /**
+     * Where an action sends the enrollment. Passing review (`program_head_approve`, or the student
+     * accepting the Chair's changes) goes to the Registrar, except for a transferee who has not paid:
+     * `EnrollmentRouting` sends them to the payment hold. `$lockedStudent` is the profile row, locked by
+     * the caller BEFORE the enrollment (the same lock `ConfirmFreshmanPayment` takes first), so a payment
+     * confirmed at this very moment is seen either way; it is null for every other action.
+     */
+    private function targetStatus(string $action, ?StudentProfile $lockedStudent): EnrollmentStatus
+    {
+        if ($lockedStudent === null) {
+            return self::TARGET_STATUS[$action];
+        }
+
+        return EnrollmentRouting::statusAfterReview($lockedStudent);
     }
 
     /**
@@ -365,7 +415,9 @@ final class TransitionEnrollment
         $commentSuffix = $comment !== null ? " Program Head note: {$comment}" : '';
 
         return match ($action) {
-            'program_head_approve' => "Your Program Head approved your enrollment schedule. It now waits for Registrar approval.{$commentSuffix}",
+            'program_head_approve' => $enrollment->status === EnrollmentStatus::AwaitingFirstPayment
+                ? "Your Program Head approved your enrollment schedule. Take your queue number to the Cashier and make your first payment; the Registrar approves once you have paid.{$commentSuffix}"
+                : "Your Program Head approved your enrollment schedule. It now waits for Registrar approval.{$commentSuffix}",
             'program_head_reject' => "Your enrollment was not approved by your Program Head. Reason: {$reason}{$commentSuffix}",
             'registrar_approve' => 'Your enrollment has been approved by the Registrar and is now pending payment. Visit the Cashier to claim your queue ticket.',
             'registrar_reject' => "Your enrollment was rejected by the Registrar. Reason: {$reason}",

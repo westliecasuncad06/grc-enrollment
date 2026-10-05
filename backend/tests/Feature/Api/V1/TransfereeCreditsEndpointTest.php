@@ -149,7 +149,7 @@ final class TransfereeCreditsEndpointTest extends TestCase
             ->postJson('/api/v1/transferee-credits', $this->studentRequestPayload());
 
         $response->assertCreated()
-            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.status', 'draft')
             ->assertJsonPath('data.student_number', $student->student_number)
             ->assertJsonPath('data.subject_id', null)
             ->assertJsonPath('data.credited_units', 1.5)
@@ -158,6 +158,7 @@ final class TransfereeCreditsEndpointTest extends TestCase
         self::assertSame($student->id, $credit->student_id);
         self::assertSame($student->user_id, $credit->requested_by);
         self::assertNull($credit->subject_id);
+        self::assertNull($credit->submitted_at);
         self::assertSame(AuditAction::TRANSFEREE_CREDIT_CREATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
@@ -209,7 +210,7 @@ final class TransfereeCreditsEndpointTest extends TestCase
             ->assertJsonPath('data.source_subject_code', '');
     }
 
-    public function test_submitting_the_same_request_twice_returns_the_open_one_instead_of_a_duplicate(): void
+    public function test_saving_the_same_subject_twice_returns_the_open_one_instead_of_a_duplicate(): void
     {
         $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
         $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
@@ -223,19 +224,21 @@ final class TransfereeCreditsEndpointTest extends TestCase
 
         self::assertSame($first->json('data.id'), $second->json('data.id'));
         $this->assertDatabaseCount('transferee_credits', 1);
-        self::assertSame(1, Notification::query()->where('user_id', $chair->id)->count());
+        // Nothing is sent to the Program Chair until the student submits the list.
+        self::assertSame(0, Notification::query()->where('user_id', $chair->id)->count());
     }
 
-    public function test_a_request_notifies_only_the_program_chairs_of_the_students_college(): void
+    public function test_a_submission_notifies_only_the_program_chairs_of_the_students_college(): void
     {
         $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
         $ownChair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
         $otherChair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Coe);
         $registrar = $this->makeUser(UserRole::RegistrarStaff);
 
         $this->withToken($this->tokenFor($student->user))
-            ->postJson('/api/v1/transferee-credits', $this->studentRequestPayload())
-            ->assertCreated();
+            ->postJson('/api/v1/transferee-credits/submit')
+            ->assertOk();
 
         $notification = Notification::query()->where('user_id', $ownChair->id)->sole();
         self::assertSame(NotificationType::TransfereeCreditRequested, $notification->type);
@@ -378,7 +381,7 @@ final class TransfereeCreditsEndpointTest extends TestCase
         self::assertSame(TransfereeCreditStatus::Pending, $credit->refresh()->status);
     }
 
-    public function test_a_program_chair_endorses_a_mapped_credit_and_registrar_staff_are_told(): void
+    public function test_a_program_chair_endorses_a_mapped_credit_and_the_registrar_head_is_told(): void
     {
         $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
         $subject = $this->makeSubject('CS101', 'Introduction to Computing');
@@ -400,8 +403,8 @@ final class TransfereeCreditsEndpointTest extends TestCase
             AuditAction::TRANSFEREE_CREDIT_ENDORSED,
             AuditLog::query()->where('auditable_type', 'transferee_credit')->sole()->action,
         );
-        self::assertSame(NotificationType::TransfereeCreditEndorsed, Notification::query()->where('user_id', $staff->id)->sole()->type);
-        self::assertSame(0, Notification::query()->where('user_id', $head->id)->count());
+        self::assertSame(NotificationType::TransfereeCreditEndorsed, Notification::query()->where('user_id', $head->id)->sole()->type);
+        self::assertSame(0, Notification::query()->where('user_id', $staff->id)->count());
     }
 
     public function test_a_program_chair_can_map_and_endorse_in_one_request(): void
@@ -452,6 +455,8 @@ final class TransfereeCreditsEndpointTest extends TestCase
             ->assertForbidden();
         $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'reject', 'reason' => 'x'])
             ->assertForbidden();
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'return', 'reason' => 'x'])
+            ->assertForbidden();
 
         self::assertSame(TransfereeCreditStatus::Endorsed, $credit->refresh()->status);
     }
@@ -484,23 +489,25 @@ final class TransfereeCreditsEndpointTest extends TestCase
         ])->assertUnprocessable();
     }
 
-    // -------------------------------------------------------- registrar decision
+    // ------------------------------------------------------ registrar head decision
 
-    public function test_registrar_staff_approves_an_endorsed_credit(): void
+    public function test_the_registrar_head_approves_an_endorsed_credit(): void
     {
+        // This also covers a credit the Program Chair endorsed before the approver moved from
+        // Registrar Staff to the Registrar Head: an `endorsed` row simply becomes the Head's.
         $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
         $subject = $this->makeSubject('CS101', 'Introduction to Computing');
         $credit = $this->makeCredit($student, $subject->id, TransfereeCreditStatus::Endorsed);
-        $staff = $this->makeUser(UserRole::RegistrarStaff);
+        $head = $this->makeUser(UserRole::RegistrarHead);
 
-        $response = $this->withToken($this->tokenFor($staff))->patchJson("/api/v1/transferee-credits/{$credit->id}", [
+        $response = $this->withToken($this->tokenFor($head))->patchJson("/api/v1/transferee-credits/{$credit->id}", [
             'action' => 'approve',
         ]);
 
         $response->assertOk()->assertJsonPath('data.status', 'approved');
         $credit->refresh();
         self::assertSame(TransfereeCreditStatus::Approved, $credit->status);
-        self::assertSame($staff->id, $credit->processed_by);
+        self::assertSame($head->id, $credit->processed_by);
         self::assertNotNull($credit->processed_at);
         self::assertSame(
             AuditAction::TRANSFEREE_CREDIT_APPROVED,
@@ -509,13 +516,13 @@ final class TransfereeCreditsEndpointTest extends TestCase
         self::assertSame(NotificationType::TransfereeCreditApproved, Notification::query()->where('user_id', $student->user_id)->sole()->type);
     }
 
-    public function test_registrar_staff_cannot_approve_a_credit_the_chair_has_not_endorsed(): void
+    public function test_the_registrar_head_cannot_approve_a_credit_the_chair_has_not_endorsed(): void
     {
         $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
         $credit = $this->makeCredit($student);
-        $staff = $this->makeUser(UserRole::RegistrarStaff);
+        $head = $this->makeUser(UserRole::RegistrarHead);
 
-        $this->withToken($this->tokenFor($staff))->patchJson("/api/v1/transferee-credits/{$credit->id}", [
+        $this->withToken($this->tokenFor($head))->patchJson("/api/v1/transferee-credits/{$credit->id}", [
             'action' => 'approve',
         ])->assertUnprocessable();
 
@@ -527,8 +534,8 @@ final class TransfereeCreditsEndpointTest extends TestCase
         $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
         $subject = $this->makeSubject('CS101', 'Introduction to Computing');
         $credit = $this->makeCredit($student, $subject->id, TransfereeCreditStatus::Endorsed);
-        $staff = $this->makeUser(UserRole::RegistrarStaff);
-        $token = $this->tokenFor($staff);
+        $head = $this->makeUser(UserRole::RegistrarHead);
+        $token = $this->tokenFor($head);
 
         $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'approve'])->assertOk();
         $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'approve'])->assertUnprocessable();
@@ -537,13 +544,13 @@ final class TransfereeCreditsEndpointTest extends TestCase
         self::assertSame(1, AuditLog::query()->where('action', AuditAction::TRANSFEREE_CREDIT_APPROVED)->count());
     }
 
-    public function test_registrar_staff_rejects_an_endorsed_credit_requiring_a_reason(): void
+    public function test_the_registrar_head_rejects_an_endorsed_credit_requiring_a_reason(): void
     {
         $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
         $subject = $this->makeSubject('CS101', 'Introduction to Computing');
         $credit = $this->makeCredit($student, $subject->id, TransfereeCreditStatus::Endorsed);
-        $staff = $this->makeUser(UserRole::RegistrarStaff);
-        $token = $this->tokenFor($staff);
+        $head = $this->makeUser(UserRole::RegistrarHead);
+        $token = $this->tokenFor($head);
 
         $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'reject'])
             ->assertUnprocessable();
@@ -551,6 +558,83 @@ final class TransfereeCreditsEndpointTest extends TestCase
         $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", [
             'action' => 'reject', 'reason' => 'Transcript does not match the record.',
         ])->assertOk()->assertJsonPath('data.status', 'rejected');
+    }
+
+    public function test_the_registrar_head_returns_an_endorsed_credit_to_the_program_chair_with_a_reason(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $subject = $this->makeSubject('CS101', 'Introduction to Computing');
+        $credit = $this->makeCredit($student, $subject->id, TransfereeCreditStatus::Endorsed);
+        $credit->forceFill([
+            'endorsed_by' => $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs)->id,
+            'endorsed_at' => now(),
+        ])->save();
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+        $otherChair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Coe);
+        $head = $this->makeUser(UserRole::RegistrarHead);
+        $token = $this->tokenFor($head);
+
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'return'])
+            ->assertUnprocessable();
+
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", [
+            'action' => 'return', 'reason' => 'Mapped to the wrong subject.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.return_reason', 'Mapped to the wrong subject.');
+
+        $credit->refresh();
+        self::assertSame(TransfereeCreditStatus::Pending, $credit->status);
+        self::assertSame($head->id, $credit->returned_by);
+        self::assertNotNull($credit->returned_at);
+        self::assertSame('Mapped to the wrong subject.', $credit->return_reason);
+        self::assertNull($credit->endorsed_by);
+        self::assertNull($credit->endorsed_at);
+        self::assertSame(
+            'Mapped to the wrong subject.',
+            AuditLog::query()->where('action', AuditAction::TRANSFEREE_CREDIT_RETURNED)->sole()->reason,
+        );
+        self::assertSame(NotificationType::TransfereeCreditReturned, Notification::query()->where('user_id', $chair->id)->sole()->type);
+        self::assertSame(0, Notification::query()->where('user_id', $otherChair->id)->count());
+        self::assertSame(0, Notification::query()->where('user_id', $student->user_id)->count());
+    }
+
+    public function test_a_pending_credit_cannot_be_returned(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $credit = $this->makeCredit($student);
+        $head = $this->makeUser(UserRole::RegistrarHead);
+
+        $this->withToken($this->tokenFor($head))->patchJson("/api/v1/transferee-credits/{$credit->id}", [
+            'action' => 'return', 'reason' => 'Not endorsed yet.',
+        ])->assertUnprocessable();
+
+        self::assertNull($credit->refresh()->returned_at);
+    }
+
+    public function test_a_returned_credit_can_be_remapped_and_endorsed_again_and_the_return_is_cleared(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $subject = $this->makeSubject('CS101', 'Introduction to Computing');
+        $head = $this->makeUser(UserRole::RegistrarHead);
+        $credit = $this->makeCredit($student);
+        $credit->forceFill([
+            'returned_by' => $head->id,
+            'returned_at' => now(),
+            'return_reason' => 'Mapped to the wrong subject.',
+        ])->save();
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($chair))->patchJson("/api/v1/transferee-credits/{$credit->id}", [
+            'action' => 'endorse', 'subject_id' => $subject->id,
+        ])->assertOk()->assertJsonPath('data.status', 'endorsed')->assertJsonPath('data.return_reason', null);
+
+        $credit->refresh();
+        self::assertSame($subject->id, $credit->subject_id);
+        self::assertNull($credit->returned_by);
+        self::assertNull($credit->returned_at);
+        self::assertNull($credit->return_reason);
     }
 
     public function test_registrar_staff_can_neither_edit_nor_endorse(): void
@@ -569,16 +653,22 @@ final class TransfereeCreditsEndpointTest extends TestCase
         self::assertSame(TransfereeCreditStatus::Pending, $credit->refresh()->status);
     }
 
-    public function test_a_registrar_head_cannot_decide_a_transferee_credit(): void
+    public function test_registrar_staff_can_no_longer_decide_a_transferee_credit(): void
     {
         $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
         $subject = $this->makeSubject('CS101', 'Introduction to Computing');
         $credit = $this->makeCredit($student, $subject->id, TransfereeCreditStatus::Endorsed);
-        $head = $this->makeUser(UserRole::RegistrarHead);
+        $staff = $this->makeUser(UserRole::RegistrarStaff);
+        $token = $this->tokenFor($staff);
 
-        $this->withToken($this->tokenFor($head))->patchJson("/api/v1/transferee-credits/{$credit->id}", [
-            'action' => 'approve',
-        ])->assertForbidden();
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'approve'])
+            ->assertForbidden();
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'reject', 'reason' => 'x'])
+            ->assertForbidden();
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'return', 'reason' => 'x'])
+            ->assertForbidden();
+
+        self::assertSame(TransfereeCreditStatus::Endorsed, $credit->refresh()->status);
     }
 
     // ---------------------------------------------------------------- visibility
@@ -729,5 +819,281 @@ final class TransfereeCreditsEndpointTest extends TestCase
         $this->withToken($this->tokenFor($student->user))
             ->getJson("/api/v1/transferee-credits/{$credit->id}/suggestions")
             ->assertForbidden();
+    }
+
+    // ------------------------------------------------------- drafts and submission
+
+    public function test_saving_a_draft_notifies_nobody(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+        $this->makeUser(UserRole::RegistrarHead);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->postJson('/api/v1/transferee-credits', $this->studentRequestPayload())
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'draft');
+
+        self::assertSame(0, Notification::query()->count());
+    }
+
+    public function test_a_student_sees_their_own_drafts(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+
+        $this->withToken($this->tokenFor($student->user))->getJson('/api/v1/transferee-credits')
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.status', 'draft');
+    }
+
+    public function test_a_program_chair_never_sees_a_students_draft(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($chair))->getJson('/api/v1/transferee-credits')
+            ->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_registrar_staff_never_see_a_students_draft(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $staff = $this->makeUser(UserRole::RegistrarStaff);
+
+        $this->withToken($this->tokenFor($staff))->getJson('/api/v1/transferee-credits')
+            ->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_the_registrar_head_never_sees_a_students_draft(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $head = $this->makeUser(UserRole::RegistrarHead);
+
+        $this->withToken($this->tokenFor($head))->getJson('/api/v1/transferee-credits')
+            ->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_a_student_sends_every_saved_draft_to_the_program_chair_in_one_call(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $first = $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $second = $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+
+        $response = $this->withToken($this->tokenFor($student->user))
+            ->postJson('/api/v1/transferee-credits/submit');
+
+        $response->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('data.0.status', 'pending');
+        foreach ([$first, $second] as $credit) {
+            $credit->refresh();
+            self::assertSame(TransfereeCreditStatus::Pending, $credit->status);
+            self::assertNotNull($credit->submitted_at);
+        }
+        $notification = Notification::query()->where('user_id', $chair->id)->sole();
+        self::assertSame(NotificationType::TransfereeCreditRequested, $notification->type);
+        self::assertStringContainsString('2 subjects', $notification->message);
+        self::assertSame(2, AuditLog::query()->where('action', AuditAction::TRANSFEREE_CREDIT_SUBMITTED)->count());
+    }
+
+    public function test_submitting_twice_changes_nothing_the_second_time(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+        $token = $this->tokenFor($student->user);
+
+        $this->withToken($token)->postJson('/api/v1/transferee-credits/submit')
+            ->assertOk()->assertJsonCount(1, 'data');
+        $this->withToken($token)->postJson('/api/v1/transferee-credits/submit')
+            ->assertOk()->assertJsonCount(0, 'data');
+
+        self::assertSame(1, Notification::query()->where('user_id', $chair->id)->count());
+        self::assertSame(1, AuditLog::query()->where('action', AuditAction::TRANSFEREE_CREDIT_SUBMITTED)->count());
+    }
+
+    public function test_submitting_with_nothing_saved_is_an_empty_success(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($student->user))->postJson('/api/v1/transferee-credits/submit')
+            ->assertOk()->assertJsonCount(0, 'data');
+
+        self::assertSame(0, Notification::query()->where('user_id', $chair->id)->count());
+    }
+
+    public function test_submit_leaves_other_students_drafts_and_the_students_own_sent_rows_alone(): void
+    {
+        $curriculum = $this->makeCurriculum(CollegeCode::Ccs);
+        $student = $this->makeStudent($curriculum);
+        $other = $this->makeStudent($curriculum);
+        $mine = $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $sent = $this->makeCredit($student, null, TransfereeCreditStatus::Endorsed);
+        $theirs = $this->makeCredit($other, null, TransfereeCreditStatus::Draft);
+
+        $this->withToken($this->tokenFor($student->user))->postJson('/api/v1/transferee-credits/submit')
+            ->assertOk()->assertJsonCount(1, 'data');
+
+        self::assertSame(TransfereeCreditStatus::Pending, $mine->refresh()->status);
+        self::assertSame(TransfereeCreditStatus::Endorsed, $sent->refresh()->status);
+        self::assertSame(TransfereeCreditStatus::Draft, $theirs->refresh()->status);
+    }
+
+    public function test_only_a_student_can_submit_a_list(): void
+    {
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($chair))->postJson('/api/v1/transferee-credits/submit')
+            ->assertForbidden();
+    }
+
+    public function test_a_program_chair_recorded_credit_is_pending_at_once_not_a_draft(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($chair))->postJson('/api/v1/transferee-credits', $this->studentRequestPayload([
+            'student_id' => $student->id,
+        ]))->assertCreated()->assertJsonPath('data.status', 'pending');
+    }
+
+    // ------------------------------------------------------ editing and removing drafts
+
+    public function test_a_student_edits_their_own_draft(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $credit = $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->patchJson("/api/v1/transferee-credits/{$credit->id}", [
+                'source_subject_title' => 'Edited Title',
+                'credited_units' => 2.5,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'draft')
+            ->assertJsonPath('data.source_subject_title', 'Edited Title')
+            ->assertJsonPath('data.credited_units', 2.5);
+
+        self::assertSame(
+            1,
+            AuditLog::query()->where('action', AuditAction::TRANSFEREE_CREDIT_UPDATED)->count(),
+        );
+    }
+
+    public function test_a_student_cannot_edit_a_credit_that_has_already_been_sent(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $credit = $this->makeCredit($student);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->patchJson("/api/v1/transferee-credits/{$credit->id}", ['source_subject_title' => 'Changed'])
+            ->assertUnprocessable();
+
+        self::assertSame('Introduction to Programming', $credit->refresh()->source_subject_title);
+    }
+
+    public function test_a_student_cannot_edit_another_students_draft(): void
+    {
+        $curriculum = $this->makeCurriculum(CollegeCode::Ccs);
+        $student = $this->makeStudent($curriculum);
+        $other = $this->makeStudent($curriculum);
+        $credit = $this->makeCredit($other, null, TransfereeCreditStatus::Draft);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->patchJson("/api/v1/transferee-credits/{$credit->id}", ['source_subject_title' => 'Changed'])
+            ->assertForbidden();
+    }
+
+    public function test_a_student_can_neither_map_a_draft_nor_take_a_workflow_step(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $subject = $this->makeSubject('CS101', 'Introduction to Computing');
+        $credit = $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $token = $this->tokenFor($student->user);
+
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['subject_id' => $subject->id])
+            ->assertUnprocessable();
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'endorse'])
+            ->assertUnprocessable();
+
+        $credit->refresh();
+        self::assertNull($credit->subject_id);
+        self::assertSame(TransfereeCreditStatus::Draft, $credit->status);
+    }
+
+    public function test_a_program_chair_cannot_touch_a_students_draft(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $subject = $this->makeSubject('CS101', 'Introduction to Computing');
+        $credit = $this->makeCredit($student, $subject->id, TransfereeCreditStatus::Draft);
+        $chair = $this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs);
+        $token = $this->tokenFor($chair);
+
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['credited_units' => 5])
+            ->assertForbidden();
+        $this->withToken($token)->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'endorse'])
+            ->assertForbidden();
+        $this->withToken($token)->getJson("/api/v1/transferee-credits/{$credit->id}/suggestions")
+            ->assertForbidden();
+
+        self::assertSame(TransfereeCreditStatus::Draft, $credit->refresh()->status);
+    }
+
+    public function test_a_student_removes_their_own_draft(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $credit = $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->deleteJson("/api/v1/transferee-credits/{$credit->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('transferee_credits', ['id' => $credit->id]);
+        self::assertSame(
+            1,
+            AuditLog::query()->where('action', AuditAction::TRANSFEREE_CREDIT_DELETED)->count(),
+        );
+    }
+
+    public function test_a_student_cannot_remove_a_credit_that_has_already_been_sent(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $credit = $this->makeCredit($student);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->deleteJson("/api/v1/transferee-credits/{$credit->id}")
+            ->assertUnprocessable();
+
+        $this->assertDatabaseHas('transferee_credits', ['id' => $credit->id]);
+    }
+
+    public function test_a_student_cannot_remove_another_students_draft(): void
+    {
+        $curriculum = $this->makeCurriculum(CollegeCode::Ccs);
+        $student = $this->makeStudent($curriculum);
+        $other = $this->makeStudent($curriculum);
+        $credit = $this->makeCredit($other, null, TransfereeCreditStatus::Draft);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->deleteJson("/api/v1/transferee-credits/{$credit->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('transferee_credits', ['id' => $credit->id]);
+    }
+
+    public function test_staff_roles_cannot_remove_a_draft(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        $credit = $this->makeCredit($student, null, TransfereeCreditStatus::Draft);
+        $head = $this->makeUser(UserRole::RegistrarHead);
+
+        $this->withToken($this->tokenFor($head))
+            ->deleteJson("/api/v1/transferee-credits/{$credit->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('transferee_credits', ['id' => $credit->id]);
     }
 }

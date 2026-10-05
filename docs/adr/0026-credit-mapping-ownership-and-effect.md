@@ -110,3 +110,25 @@ went fractional). The status column is a plain string, so `endorsed` needs no en
   `ResolveCreditedSubjectIdsTest`, and the effect tests in `EligibleSubjectsEndpointTest`,
   `ClassifyEnrollmentStandingTest` and `ProspectusEndpointTest`; frontend workspace, dialog
   and role tests.
+
+## Amendment 2026-10-04 — drafts, the Registrar Head decides, and returns
+
+**Status:** Accepted. Slice 1 of the transferee flow (`docs/superpowers/specs/2026-10-04-transferee-credit-mapping-pay-first-design.md`).
+
+- **A Student saves a private list and sends it.** A Student's credit is created as `draft`: it is visible only to them, grants nothing and notifies nobody. `POST /api/v1/transferee-credits/submit` turns every draft into `pending` (`submitted_at`) and sends the Program Chairs of the student's college one notice with the count; a repeat changes nothing. A Student may edit or remove their own draft (`PATCH`, `DELETE`); a sent credit can no longer be removed. A Program Chair's own recorded credit is still `pending` at once.
+- **The Registrar Head, not Registrar Staff, decides.** `decide` (`approve`, `reject`) moves from Registrar Staff to the Registrar Head. Registrar Staff keep read-only visibility of credits that have been sent. Credits already `endorsed` when this ships become the Registrar Head's queue; no data migration is needed.
+- **`return`.** The Registrar Head may send an `endorsed` credit back to the Program Chair with a reason (`endorsed` → `pending`; `returned_by`, `returned_at`, `return_reason` recorded; the endorsement is cleared; the Program Chairs are notified). The Head does not edit a mapping. Endorsing again clears the return details.
+- **Unchanged:** the Program Chair maps and endorses; suggestions are advice and are never stored; an approved, mapped credit counts as credited without a GRC grade; PRD §17 stays open.
+- **Superseded wording:** "Registrar Staff approve or reject an endorsed credit" in Decisions 1 and 3 and in the Consequences about the Registrar Staff workspace now reads Registrar Head; that workspace stays a read-only view for Registrar Staff.
+- **Migration:** `2026_10_04_000004_add_submission_and_return_to_transferee_credits_table` (four nullable columns). The owner runs it on the dev database and on Hostinger; it is not applied by the code change.
+- **Not in this slice:** the Program Chair's side-by-side mapping screen and bulk "submit to Registrar Head" (Slice 2), the queue number and pay-first enrollment (Slice 3), reading an uploaded TOR (Slice 4).
+
+## Amendment 2026-10-04 (second) — side-by-side screens and the student-level steps
+
+**Status:** Accepted. Slice 2 of the transferee flow (`docs/superpowers/plans/2026-10-04-transferee-credit-side-by-side-mapping-and-head-review.md`).
+
+- **One student at a time.** The Program Chair's workspace lists the students with credits waiting for a mapping and opens one student on a side-by-side screen: the student's entry on the left (code, title, school, school year, semester, grade, units, and a button to read the uploaded TOR) and the matching subject of the student's own curriculum on the right, in a searchable dropdown. The per-credit review dialog is gone; its abilities (suggestions, a manual subject, credited units, declining with a reason, the API's own error text) are in the new screen ("No equivalent" is the decline).
+- **The screen pre-selects, it never saves.** The best suggestion is pre-selected on each row and marked "Suggested", and two rows never pre-select the same subject. Nothing is written until the Chair clicks Confirm on a row (or Confirm all suggested, a Chair action over the pre-selected rows). `subject_id` is still only ever the Chair's decision; a reload shows the rows unconfirmed again. Decision 2 above is unchanged: the API does not write a guess into `subject_id`.
+- **Three student-level endpoints** (policy-gated, no `role:` middleware), next to the per-credit ones, which stay for single steps: `GET /api/v1/student-profiles/{id}/transferee-credits/suggestions` (the Chair, own college: suggestions for every `pending` credit and the curriculum's subjects, computed together by `SuggestCreditSubjects::forCredits`), `POST .../submit-to-registrar-head` (the Chair: every `pending` credit becomes `endorsed`, all or nothing, 422 naming the credits still unmapped, idempotent, one notice to the Registrar Head), and `POST .../approve-all` (the Registrar Head: every `endorsed` credit becomes `approved`, idempotent, one notice to the student). Drafts and decided credits are never touched by them.
+- **The Registrar Head has his own workspace**: students with endorsed credits, the same side-by-side layout read-only, Return and Reject per row (a reason is required) and Approve all for the student. Registrar Staff keep the read-only table.
+- **No migration.** Nothing in this slice changes the schema.

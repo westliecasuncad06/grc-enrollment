@@ -12,9 +12,11 @@ namespace App\Domain\Academic;
  */
 enum TransfereeCreditStatus: string
 {
-    /** Asked for (by the Student, or recorded by the Program Chair); awaiting the Program Chair's mapping. */
+    /** The student's own saved list, not yet sent: private to them, grants and notifies nothing. */
+    case Draft = 'draft';
+    /** Sent by the Student (or recorded by the Program Chair); awaiting the Program Chair's mapping. */
     case Pending = 'pending';
-    /** Mapped to a subject and endorsed by the Program Chair; awaiting Registrar Staff. */
+    /** Mapped to a subject and endorsed by the Program Chair; awaiting the Registrar Head. */
     case Endorsed = 'endorsed';
     case Approved = 'approved';
     case Rejected = 'rejected';
@@ -22,6 +24,7 @@ enum TransfereeCreditStatus: string
     public function label(): string
     {
         return match ($this) {
+            self::Draft => 'Draft',
             self::Pending => 'Pending',
             self::Endorsed => 'Endorsed',
             self::Approved => 'Approved',
@@ -29,7 +32,7 @@ enum TransfereeCreditStatus: string
         };
     }
 
-    /** Still moving through the workflow: not yet approved or rejected. */
+    /** Still moving through the workflow: not yet approved or rejected. A draft is not in it yet. */
     public function isOpen(): bool
     {
         return $this === self::Pending || $this === self::Endorsed;

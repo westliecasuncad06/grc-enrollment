@@ -133,6 +133,11 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
                             ? ` (${credit.source_semester})`
                             : ""}
                         </span>
+                        {credit.source_grade && (
+                          <span className="block text-xs text-muted-foreground">
+                            Grade from previous school: {credit.source_grade}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {credit.target_code} — {credit.target_title}
@@ -144,6 +149,10 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
                   ))}
                 </TableBody>
               </Table>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Grades are shown as the previous school gave them, for
+                information only. They are not converted and carry no GRC grade.
+              </p>
             </div>
           )}
 
@@ -263,8 +272,7 @@ function ProspectusYears({
 
   return years.map(([yearLevel, semesters]) => {
     const yearUnits = semesters.reduce(
-      (sum, s) =>
-        sum + s.entries.reduce((eSum, e) => eSum + (e.units ?? 0), 0),
+      (sum, s) => sum + s.entries.reduce((eSum, e) => eSum + (e.units ?? 0), 0),
       0,
     )
     const completedEntries = semesters.reduce(

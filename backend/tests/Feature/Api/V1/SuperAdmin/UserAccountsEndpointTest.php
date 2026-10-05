@@ -660,7 +660,7 @@ final class UserAccountsEndpointTest extends TestCase
             'curriculum_id' => $curriculum->id,
             'entry_year' => 2026,
             'year_level' => 1,
-            'student_type' => StudentType::Freshman,
+            'student_type' => StudentType::Transferee,
             'admission_status' => AdmissionStatus::Pending,
             'academic_standing' => AcademicStanding::Good,
             'financial_status' => FinancialStatus::Payee,
@@ -842,7 +842,6 @@ final class UserAccountsEndpointTest extends TestCase
             ->deleteJson("/api/v1/super-admin/users/{$otherAdmin->id}/sessions")
             ->assertForbidden();
     }
-
 
     public function test_super_admin_can_permanently_delete_never_activated_unused_account(): void
     {

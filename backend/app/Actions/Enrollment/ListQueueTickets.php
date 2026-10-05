@@ -53,7 +53,7 @@ final readonly class ListQueueTickets
         $openCycleId = $cycle === 'open' ? QueueCycle::query()->whereNull('closed_at')->value('id') : null;
 
         return QueueTicket::query()
-            ->with(['enrollment.student'])
+            ->with(['enrollment.student', 'studentProfile'])
             // `queue_date` is a DATE column: compare it directly (after normalising a
             // looser `date` input such as "2026-08-01 10:00" to Y-m-d) instead of
             // `whereDate()`, whose `DATE(queue_date)` wrapper defeats the index (ADR 0029).

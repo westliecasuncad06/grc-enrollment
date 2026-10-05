@@ -7,7 +7,9 @@ use App\Domain\Academic\GradeStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Models\AcademicGrade;
 use App\Models\CurriculumSubject;
+use App\Models\StudentProfile;
 use App\Models\TransfereeCredit;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Which subjects of the student's own curriculum a subject taken elsewhere
@@ -27,6 +29,12 @@ use App\Models\TransfereeCredit;
  * Only subjects on the student's own curriculum are candidates, and a subject
  * the student already has (passed with a locked grade, credited, or already
  * mapped by another open or approved credit of theirs) is left out.
+ *
+ * `forCredits` does the same for several credits of one student at once and
+ * shares what does not depend on the credit (the curriculum, the subjects the
+ * student already has, the student's mapped credits), so the Program Chair's
+ * per-student screen costs a handful of queries however many subjects the
+ * student listed. `execute` is the one-credit case of it.
  */
 final readonly class SuggestCreditSubjects
 {
@@ -48,17 +56,59 @@ final readonly class SuggestCreditSubjects
     public function execute(TransfereeCredit $credit): array
     {
         $credit->loadMissing('student');
-        $student = $credit->student;
-        $excluded = $this->excludedSubjectIds($credit);
 
-        $sourceCode = self::normalizeCode($credit->source_subject_code);
-        $sourceTokens = self::titleTokens($credit->source_subject_title);
+        return $this->forCredits($credit->student, new Collection([$credit]))[$credit->id];
+    }
 
-        $suggestions = [];
+    /**
+     * @param  Collection<int, TransfereeCredit>  $credits  every one of them belongs to `$student`
+     * @return array<int, list<CreditSubjectSuggestion>> keyed by credit id
+     */
+    public function forCredits(StudentProfile $student, Collection $credits): array
+    {
         $placements = CurriculumSubject::query()
             ->where('curriculum_id', $student->curriculum_id)
             ->with('subject')
             ->get();
+        $alreadyHave = $this->subjectsTheStudentAlreadyHas($student);
+
+        // Mapped by a credit that is still in the workflow or approved: crediting
+        // one subject twice helps nobody. A credit's own mapping never counts
+        // against itself, so each credit is compared with the OTHER mapped ones.
+        $mapped = TransfereeCredit::query()
+            ->where('student_id', $student->id)
+            ->whereNotNull('subject_id')
+            ->whereIn('status', ['pending', 'endorsed', 'approved'])
+            ->get(['id', 'subject_id']);
+
+        $result = [];
+
+        foreach ($credits as $credit) {
+            $excluded = $alreadyHave;
+
+            foreach ($mapped as $other) {
+                if ($other->id !== $credit->id) {
+                    $excluded[(int) $other->subject_id] = true;
+                }
+            }
+
+            $result[$credit->id] = $this->rank($credit, $placements, $excluded);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  Collection<int, CurriculumSubject>  $placements
+     * @param  array<int, true>  $excluded
+     * @return list<CreditSubjectSuggestion>
+     */
+    private function rank(TransfereeCredit $credit, Collection $placements, array $excluded): array
+    {
+        $sourceCode = self::normalizeCode($credit->source_subject_code);
+        $sourceTokens = self::titleTokens($credit->source_subject_title);
+
+        $suggestions = [];
 
         foreach ($placements as $placement) {
             $subject = $placement->subject;
@@ -110,24 +160,15 @@ final readonly class SuggestCreditSubjects
     }
 
     /**
+     * Credited (curriculum migration or approved transferee credit) or passed
+     * with a locked grade.
+     *
      * @return array<int, true>
      */
-    private function excludedSubjectIds(TransfereeCredit $credit): array
+    private function subjectsTheStudentAlreadyHas(StudentProfile $student): array
     {
-        $studentId = $credit->student_id;
-        $excluded = $this->creditedSubjects->forStudents([$studentId], $credit->student->curriculum_id)[$studentId] ?? [];
-
-        // Already mapped by another credit of this student that is still in
-        // the workflow or approved: crediting one subject twice helps nobody.
-        $otherMapped = TransfereeCredit::query()
-            ->where('student_id', $studentId)
-            ->whereKeyNot($credit->id)
-            ->whereNotNull('subject_id')
-            ->whereIn('status', ['pending', 'endorsed', 'approved'])
-            ->pluck('subject_id');
-        foreach ($otherMapped as $subjectId) {
-            $excluded[(int) $subjectId] = true;
-        }
+        $studentId = $student->id;
+        $excluded = $this->creditedSubjects->forStudents([$studentId], $student->curriculum_id)[$studentId] ?? [];
 
         $passingGrade = (float) config('enrollment.grading.passing_grade');
         $grades = AcademicGrade::query()

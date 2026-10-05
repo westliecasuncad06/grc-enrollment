@@ -256,18 +256,29 @@ export function StudentTorUpload({ enabled = true }: { enabled?: boolean }) {
   )
 }
 
-/** One student's uploaded TOR files, read-only (the Program Head's view). */
-export function StudentTorFiles({ studentId }: { studentId: number }) {
+/**
+ * One student's uploaded TOR files, read-only (the Program Head's view).
+ * `headingLevel` is the level of its "Uploaded TOR" heading: 4 under a form card's
+ * own subheading, 3 when it sits directly under a card title (no skipped level).
+ */
+export function StudentTorFiles({
+  studentId,
+  headingLevel = 4,
+}: {
+  studentId: number
+  headingLevel?: 3 | 4
+}) {
   const [error, setError] = useState("")
   const filesQuery = useTorDocumentsQuery({
     student_id: studentId,
     page: 1,
     per_page: 20,
   })
+  const Heading = headingLevel === 3 ? "h3" : "h4"
 
   return (
     <div className="grid gap-2">
-      <h4 className="text-sm font-semibold">Uploaded TOR</h4>
+      <Heading className="text-sm font-semibold">Uploaded TOR</Heading>
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>

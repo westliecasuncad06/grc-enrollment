@@ -32,10 +32,7 @@ import { Textarea } from "@/features/components/ui/textarea"
 import { useAcademicGradesQuery } from "@/features/hooks/use-academic-grades"
 import { useDebouncedValue } from "@/features/hooks/use-debounced-value"
 import { useEnrollmentDocumentsQuery } from "@/features/hooks/use-enrollment-documents"
-import {
-  useDecideTransfereeCreditMutation,
-  useTransfereeCreditsQuery,
-} from "@/features/hooks/use-transferee-credits"
+import { useTransfereeCreditsQuery } from "@/features/hooks/use-transferee-credits"
 import {
   useDecideWithdrawalRequestMutation,
   useWithdrawalRequestsQuery,
@@ -60,7 +57,6 @@ function pendingBadgeVariant(
 }
 
 interface DecisionTarget {
-  kind: "credit" | "withdrawal"
   id: number
   action: "approve" | "reject"
 }
@@ -79,11 +75,10 @@ export function RegistrarRecordsWorkspace({
   initialModuleId?: string
 }) {
   const { session } = useAuth()
-  // Credit mapping is the Program Chair's work (`ProgramChairCreditMappingsWorkspace`);
-  // Registrar Staff only approve or reject a credit the Chair has endorsed
-  // (ADR 0026), so this is the Registrar Staff's workspace alone.
-  const isRegistrarStaff = session?.role === "registrar_staff"
-  const authorized = isRegistrarStaff
+  // Credit mapping is the Program Chair's work (`ProgramChairCreditMappingsWorkspace`)
+  // and the Registrar Head approves it in `RegistrarHeadCreditReviewWorkspace`
+  // (ADR 0026, amended); Registrar Staff only follow the credits here, read-only.
+  const authorized = session?.role === "registrar_staff"
   const heading =
     workspaceHeadings[initialModuleId] ?? workspaceHeadings["credit-mappings"]
 
@@ -106,7 +101,6 @@ export function RegistrarRecordsWorkspace({
     { page: creditsPage, per_page: 20 },
     { enabled: showCredits },
   )
-  const decideCreditMutation = useDecideTransfereeCreditMutation()
 
   const withdrawalsQuery = useWithdrawalRequestsQuery(
     { page: withdrawalsPage, per_page: 20 },
@@ -130,8 +124,7 @@ export function RegistrarRecordsWorkspace({
     { enabled: showDocuments },
   )
 
-  const deciding =
-    decideCreditMutation.isPending || decideWithdrawalMutation.isPending
+  const deciding = decideWithdrawalMutation.isPending
   const reasonRequired = decision?.action === "reject" && !reason.trim()
 
   const confirmDecision = async () => {
@@ -139,23 +132,13 @@ export function RegistrarRecordsWorkspace({
     if (reasonRequired) return
     setError("")
     try {
-      if (decision.kind === "credit") {
-        await decideCreditMutation.mutateAsync({
-          id: decision.id,
-          input:
-            decision.action === "approve"
-              ? { action: "approve" }
-              : { action: "reject", reason: reason.trim() },
-        })
-      } else {
-        await decideWithdrawalMutation.mutateAsync({
-          id: decision.id,
-          input: {
-            action: decision.action,
-            reason: reason.trim() || undefined,
-          },
-        })
-      }
+      await decideWithdrawalMutation.mutateAsync({
+        id: decision.id,
+        input: {
+          action: decision.action,
+          reason: reason.trim() || undefined,
+        },
+      })
       setDecision(null)
       setReason("")
     } catch {
@@ -189,8 +172,8 @@ export function RegistrarRecordsWorkspace({
             <CardHeader>
               <CardTitle level={2}>Transferee credits</CardTitle>
               <CardDescription>
-                A credit reaches you once the Program Head has mapped it to a
-                subject and endorsed it. Approve or reject each one.
+                Credits the Program Head has endorsed. The Registrar Head
+                decides them; you can follow their progress here.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -200,7 +183,7 @@ export function RegistrarRecordsWorkspace({
                   data: creditsQuery.data?.data,
                 }}
                 isEmpty={(rows) => rows.length === 0}
-                emptyMessage="No credit requests have reached the Registrar yet."
+                emptyMessage="No credit requests have reached the Registrar Head yet."
                 loadingLabel="Loading transferee credits…"
               >
                 {(credits) => (
@@ -248,49 +231,6 @@ export function RegistrarRecordsWorkspace({
                             {credit.status_label}
                           </Badge>
                         ),
-                      },
-                      {
-                        key: "actions",
-                        header: "Actions",
-                        render: (credit) =>
-                          isRegistrarStaff &&
-                          credit.status === "endorsed" && (
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={deciding}
-                                onClick={() => {
-                                  setDecision({
-                                    kind: "credit",
-                                    id: credit.id,
-                                    action: "approve",
-                                  })
-                                  setReason("")
-                                  setError("")
-                                }}
-                              >
-                                Approve
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="destructive"
-                                disabled={deciding}
-                                onClick={() => {
-                                  setDecision({
-                                    kind: "credit",
-                                    id: credit.id,
-                                    action: "reject",
-                                  })
-                                  setReason("")
-                                  setError("")
-                                }}
-                              >
-                                Reject
-                              </Button>
-                            </div>
-                          ),
                       },
                     ]}
                   />
@@ -365,7 +305,6 @@ export function RegistrarRecordsWorkspace({
                               disabled={deciding}
                               onClick={() => {
                                 setDecision({
-                                  kind: "withdrawal",
                                   id: request.id,
                                   action: "approve",
                                 })
@@ -382,7 +321,6 @@ export function RegistrarRecordsWorkspace({
                               disabled={deciding}
                               onClick={() => {
                                 setDecision({
-                                  kind: "withdrawal",
                                   id: request.id,
                                   action: "reject",
                                 })
@@ -578,7 +516,7 @@ export function RegistrarRecordsWorkspace({
                   id="registrar-record-decision-reason-error"
                   className="text-sm text-destructive"
                 >
-                  Reason is required to reject.
+                  Reason is required to {decision?.action}.
                 </p>
               )}
             </Field>

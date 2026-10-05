@@ -137,7 +137,7 @@ describe("RegistrarRecordsWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("lists endorsed transferee credits with what they will be credited as, and Approve/Reject actions", async () => {
+  it("lists endorsed transferee credits with what they will be credited as", async () => {
     fetchMock.mockImplementation((input) => {
       const url = requestUrl(input)
       if (url.includes("/transferee-credits")) {
@@ -159,12 +159,6 @@ describe("RegistrarRecordsWorkspace", () => {
       within(table).getByText(/Test Student \(2026-0002\)/),
     ).toBeInTheDocument()
     expect(within(table).getByText("MATH101G — Calculus 1")).toBeInTheDocument()
-    expect(
-      within(table).getByRole("button", { name: "Approve" }),
-    ).toBeInTheDocument()
-    expect(
-      within(table).getByRole("button", { name: "Reject" }),
-    ).toBeInTheDocument()
   })
 
   it("offers no decision on a credit the Program Chair has not endorsed", async () => {
@@ -194,51 +188,7 @@ describe("RegistrarRecordsWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("approves an endorsed credit with a single-step decision", async () => {
-    let decisionBody: unknown = null
-    fetchMock.mockImplementation((input, init) => {
-      const url = requestUrl(input)
-      if (url.includes("/transferee-credits/3") && init?.method === "PATCH") {
-        decisionBody = JSON.parse(init.body as string)
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              data: {
-                ...endorsedCredit,
-                status: "approved",
-                status_label: "Approved",
-              },
-            }),
-          ),
-        )
-      }
-      if (url.includes("/transferee-credits")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(paginated([endorsedCredit]))),
-        )
-      }
-      return Promise.resolve(new Response(JSON.stringify(paginated([]))))
-    })
-    const user = userEvent.setup()
-    renderWithSession(
-      <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />,
-      { session: registrarSession },
-    )
-
-    const table = await screen.findByRole("table", {
-      name: "Transferee credits",
-    })
-    await user.click(within(table).getByRole("button", { name: "Approve" }))
-    await user.click(
-      within(screen.getByRole("alertdialog")).getByRole("button", {
-        name: "Confirm decision",
-      }),
-    )
-
-    await vi.waitFor(() => expect(decisionBody).toEqual({ action: "approve" }))
-  })
-
-  it("requires a reason before confirming a rejection, with a visible message", async () => {
+  it("lets Registrar Staff follow credits but not decide them", async () => {
     fetchMock.mockImplementation((input) => {
       const url = requestUrl(input)
       if (url.includes("/transferee-credits")) {
@@ -248,7 +198,6 @@ describe("RegistrarRecordsWorkspace", () => {
       }
       return Promise.resolve(new Response(JSON.stringify(paginated([]))))
     })
-    const user = userEvent.setup()
     renderWithSession(
       <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />,
       { session: registrarSession },
@@ -257,20 +206,37 @@ describe("RegistrarRecordsWorkspace", () => {
     const table = await screen.findByRole("table", {
       name: "Transferee credits",
     })
-    await user.click(within(table).getByRole("button", { name: "Reject" }))
-
-    const dialog = screen.getByRole("alertdialog")
-    const confirmButton = within(dialog).getByRole("button", {
-      name: "Confirm decision",
-    })
-    expect(confirmButton).toBeDisabled()
+    expect(within(table).getByText("MATH101G — Calculus 1")).toBeInTheDocument()
     expect(
-      within(dialog).getByText("Reason is required to reject."),
-    ).toBeInTheDocument()
-
-    await user.type(within(dialog).getByLabelText("Reason"), "Not eligible")
-    expect(confirmButton).toBeEnabled()
+      within(table).queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(table).queryByRole("button", { name: "Return" }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(table).queryByRole("button", { name: "Reject" }),
+    ).not.toBeInTheDocument()
   })
+
+  it.each([
+    "credit-mappings",
+    "drops-withdrawals",
+    "academic-records",
+    "enrollment-documents",
+  ])(
+    "is closed to the Registrar Head for %s: the Head decides credits in the Registrar Head review workspace",
+    (moduleId) => {
+      renderWithSession(
+        <RegistrarRecordsWorkspace initialModuleId={moduleId} />,
+        { session: { ...registrarSession, role: "registrar_head" } },
+      )
+
+      expect(
+        screen.getByText("This workspace is not available for your role."),
+      ).toBeInTheDocument()
+      expect(fetchMock).not.toHaveBeenCalled()
+    },
+  )
 
   it("lists pending withdrawal requests", async () => {
     fetchMock.mockImplementation((input) => {
@@ -292,6 +258,84 @@ describe("RegistrarRecordsWorkspace", () => {
     })
     expect(within(table).getByText("2026-0003")).toBeInTheDocument()
     expect(within(table).getByText("Personal reasons")).toBeInTheDocument()
+  })
+
+  it("approves a pending withdrawal request with a single-step decision", async () => {
+    let decisionBody: unknown = null
+    fetchMock.mockImplementation((input, init) => {
+      const url = requestUrl(input)
+      if (url.includes("/withdrawal-requests/2") && init?.method === "PATCH") {
+        decisionBody = JSON.parse(init.body as string)
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...pendingWithdrawal,
+                status: "approved",
+                status_label: "Approved",
+              },
+            }),
+          ),
+        )
+      }
+      if (url.includes("/withdrawal-requests")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(paginated([pendingWithdrawal]))),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify(paginated([]))))
+    })
+    const user = userEvent.setup()
+    renderWithSession(
+      <RegistrarRecordsWorkspace initialModuleId="drops-withdrawals" />,
+      { session: registrarSession },
+    )
+
+    const table = await screen.findByRole("table", {
+      name: "Withdrawal requests",
+    })
+    await user.click(within(table).getByRole("button", { name: "Approve" }))
+    await user.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Confirm decision",
+      }),
+    )
+
+    await vi.waitFor(() => expect(decisionBody).toEqual({ action: "approve" }))
+  })
+
+  it("requires a reason before confirming a withdrawal rejection, with a visible message", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (url.includes("/withdrawal-requests")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(paginated([pendingWithdrawal]))),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify(paginated([]))))
+    })
+    const user = userEvent.setup()
+    renderWithSession(
+      <RegistrarRecordsWorkspace initialModuleId="drops-withdrawals" />,
+      { session: registrarSession },
+    )
+
+    const table = await screen.findByRole("table", {
+      name: "Withdrawal requests",
+    })
+    await user.click(within(table).getByRole("button", { name: "Reject" }))
+
+    const dialog = screen.getByRole("alertdialog")
+    const confirmButton = within(dialog).getByRole("button", {
+      name: "Confirm decision",
+    })
+    expect(confirmButton).toBeDisabled()
+    expect(
+      within(dialog).getByText("Reason is required to reject."),
+    ).toBeInTheDocument()
+
+    await user.type(within(dialog).getByLabelText("Reason"), "Not eligible")
+    expect(confirmButton).toBeEnabled()
   })
 
   it("shows the academic records module read-only", async () => {
@@ -384,7 +428,7 @@ describe("RegistrarRecordsWorkspace", () => {
 
     expect(
       await screen.findByText(
-        "No credit requests have reached the Registrar yet.",
+        "No credit requests have reached the Registrar Head yet.",
       ),
     ).toBeInTheDocument()
   })

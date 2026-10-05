@@ -36,6 +36,7 @@ const statusColors: Record<string, string> = {
   pending_payment: "var(--chart-3, #3b82f6)",
   pending_program_head_approval: "var(--chart-2, #a855f7)",
   pending_student_review: "var(--chart-3, #d946ef)",
+  awaiting_first_payment: "var(--chart-3, #0ea5e9)",
   pending_registrar_approval: "var(--chart-4, #8b5cf6)",
   draft: "var(--chart-5, #f59e0b)",
   withdrawn: "var(--chart-2, #ef4444)",

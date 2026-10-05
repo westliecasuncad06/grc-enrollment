@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property int $id
@@ -30,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?string $address
  * @property ?CarbonImmutable $requirements_verified_at
  * @property ?int $requirements_verified_by
+ * @property ?CarbonImmutable $freshman_payment_confirmed_at
  * @property bool $is_demo_account
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -60,6 +62,7 @@ final class StudentProfile extends Model
         'address',
         'requirements_verified_at',
         'requirements_verified_by',
+        'freshman_payment_confirmed_at',
         'is_demo_account',
     ];
 
@@ -77,8 +80,42 @@ final class StudentProfile extends Model
             'academic_standing' => AcademicStanding::class,
             'financial_status' => FinancialStatus::class,
             'requirements_verified_at' => 'immutable_datetime',
+            'freshman_payment_confirmed_at' => 'immutable_datetime',
             'is_demo_account' => 'boolean',
         ];
+    }
+
+    /**
+     * A freshman who has been admitted but whose first payment the Cashier has
+     * not confirmed yet: no enrollment, and no usable account (the setup email
+     * is sent only after that payment).
+     */
+    public function isFreshmanAwaitingPayment(): bool
+    {
+        return $this->student_type === StudentType::Freshman
+            && $this->freshman_payment_confirmed_at === null;
+    }
+
+    /**
+     * A pay-first student (a Freshman or a Transferee, `StudentType::isPayFirst`)
+     * whose first payment the Cashier has not confirmed yet. Unlike a freshman in
+     * that state, a transferee already has a working account: they sign in to
+     * list their subjects and to choose their enrollment before paying. The first
+     * payment is `freshman_payment_confirmed_at` for both types (no migration).
+     */
+    public function isAwaitingFirstPayment(): bool
+    {
+        return $this->student_type instanceof StudentType
+            && $this->student_type->isPayFirst()
+            && $this->freshman_payment_confirmed_at === null;
+    }
+
+    /**
+     * @return HasOne<QueueTicket, $this>
+     */
+    public function queueTicket(): HasOne
+    {
+        return $this->hasOne(QueueTicket::class);
     }
 
     /**

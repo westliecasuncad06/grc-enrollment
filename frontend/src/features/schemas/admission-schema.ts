@@ -41,17 +41,29 @@ export const STUDENT_NUMBER_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-\d{5}$/
 const STUDENT_NUMBER_FORMAT_MESSAGE =
   "Student number must be in YYYY-MM-NNNNN format (e.g. 2026-08-07107)."
 const EXISTING_NUMBER_TYPE_MESSAGE =
-  "Only a Returnee or an Existing Student can already have a student number."
+  "Only a Transferee, a Returnee or an Existing Student can already have a student number."
 
 /**
- * Only these types can already hold a GRC student number (ADR 0042): a Freshman
- * has none yet and a Transferee's number belongs to the school they came from.
+ * Every type except a Freshman can enter a student number it already has (ADR 0042, amended
+ * 2026-10-04): a Freshman has none yet and always gets a new one.
  */
 export function studentTypeCanHaveExistingNumber(
   studentType: string | null | undefined,
 ): boolean {
-  return studentType === "returnee" || studentType === "existing_student"
+  return (
+    studentType === "transferee" ||
+    studentType === "returnee" ||
+    studentType === "existing_student"
+  )
 }
+
+/** The number the next new account would get, read before saving (not reserved). */
+export const nextStudentNumberEnvelopeSchema = z.object({
+  data: z.object({
+    type: z.literal("next_student_number"),
+    student_number: z.string().nullable(),
+  }),
+})
 
 export const provisionStudentSchema = z
   .object({
@@ -149,8 +161,28 @@ export const studentProfileSchema = z
     financial_status_label: z.string().min(1).nullable(),
     requirements_verified_at: z.iso.datetime().nullable(),
     academic_setup_editable: z.boolean(),
-    account_setup_status: z.enum(["pending", "active"]),
+    // `awaiting_payment`: a freshman who has taken a queue number but whose first payment the
+    // Cashier has not confirmed — the account setup email is sent only after that.
+    account_setup_status: z.enum(["awaiting_payment", "pending", "active"]),
     invitation_delivery_status: z.enum(["not_sent", "sent", "failed"]),
+    // Set when the Cashier confirms the freshman's first payment; null for everyone else.
+    freshman_payment_confirmed_at: z.iso.datetime().nullable().default(null),
+    // Where a freshman is in the pay-first flow; null for every other student. `awaiting_section`:
+    // the payment is held because every section was full and no enrollment exists yet.
+    freshman_status: z
+      .enum(["awaiting_payment", "awaiting_section", "enrolling"])
+      .nullable()
+      .default(null),
+    // True while a freshman's payment is held as credit and not yet applied to an enrollment: the
+    // Registrar's approval then completes it, so there is no queue number to claim and nothing to pay.
+    advance_payment_held: z.boolean().default(false),
+    // A freshman's queue number and the delivery of the emailed "view the live queue" link; both
+    // null for a student who was not given a queue number.
+    queue_ticket_number: z.string().min(1).nullable().default(null),
+    queue_link_delivery_status: z
+      .enum(["not_sent", "sent", "failed"])
+      .nullable()
+      .default(null),
   })
   .strict()
 

@@ -106,6 +106,7 @@ const workspaceHeadings: Record<string, string> = {
   "academic-transcripts": "Academic transcripts",
   "enrollment-change-requests": "Add/Drop requests",
   "enrollment-requests": "Enrollment requests",
+  "freshman-enrollees": "Freshmen enrollees",
   "it-control-students": "IT Control student accounts",
   "it-control-faculty": "IT Control faculty accounts",
   "it-control-enrollment-override": "Enrollment overrides",

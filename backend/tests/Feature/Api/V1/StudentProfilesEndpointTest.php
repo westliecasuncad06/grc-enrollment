@@ -98,7 +98,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'year_level' => 1,
             'requirements_verified' => true,
             'enrollment_category' => 'regular',
-            'student_type' => 'freshman',
+            'student_type' => 'transferee',
         ]);
 
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
@@ -106,7 +106,7 @@ final class StudentProfilesEndpointTest extends TestCase
         $response->assertJsonPath('data.address', '123 Test Street, Caloocan City');
         $response->assertJsonPath('data.entry_year', 2027);
         $response->assertJsonPath('data.enrollment_category', 'regular');
-        $response->assertJsonPath('data.student_type', 'freshman');
+        $response->assertJsonPath('data.student_type', 'transferee');
         $response->assertJsonPath('data.admission_status', 'admitted');
         $response->assertJsonPath('data.account_setup_status', 'pending');
         $response->assertJsonPath('data.invitation_delivery_status', 'sent');
@@ -387,7 +387,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'year_level' => 1,
             'requirements_verified' => true,
             'enrollment_category' => 'regular',
-            'student_type' => 'freshman',
+            'student_type' => 'transferee',
         ])->assertCreated();
 
         $setupCode = null;
@@ -452,7 +452,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'year_level' => 1,
             'requirements_verified' => true,
             'enrollment_category' => 'regular',
-            'student_type' => 'freshman',
+            'student_type' => 'transferee',
         ])->assertCreated();
 
         $setupCode = null;
@@ -499,7 +499,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'year_level' => 1,
             'requirements_verified' => true,
             'enrollment_category' => 'regular',
-            'student_type' => 'freshman',
+            'student_type' => 'transferee',
         ]);
 
         $response->assertCreated()
@@ -688,7 +688,7 @@ final class StudentProfilesEndpointTest extends TestCase
         $this->assertDatabaseCount('student_number_sequences', 0);
     }
 
-    public function test_a_returnee_or_an_existing_student_can_keep_the_number_they_already_have(): void
+    public function test_a_returnee_an_existing_student_or_a_transferee_can_keep_the_number_they_already_have(): void
     {
         $this->travelTo(Carbon::parse('2027-08-15 10:00:00', 'Asia/Manila'));
         [$program] = $this->makeProgramAndCurriculum();
@@ -696,7 +696,9 @@ final class StudentProfilesEndpointTest extends TestCase
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.existingnumber@grc.test');
         Mail::fake();
 
-        foreach ([['returnee', '2026-06-00123'], ['existing_student', '2026-06-00124']] as $index => [$type, $number]) {
+        // A transferee's number from the school they came from is entered too (2026-10-04).
+        $existing = [['returnee', '2026-06-00123'], ['existing_student', '2026-06-00124'], ['transferee', '2026-06-00125']];
+        foreach ($existing as $index => [$type, $number]) {
             $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
                 ...$this->provisionPayload($program, "existing-number-{$index}@grc.test", [], 1, $type),
                 'has_existing_student_number' => true,
@@ -713,16 +715,39 @@ final class StudentProfilesEndpointTest extends TestCase
             ->get()
             ->map(fn (AuditLog $audit): mixed => $audit->after_values['student_number_source'])
             ->all();
-        self::assertSame(['existing', 'existing'], $sources);
+        self::assertSame(['existing', 'existing', 'existing'], $sources);
     }
 
-    public function test_an_existing_student_number_is_refused_for_a_freshman_or_a_transferee(): void
+    public function test_the_next_student_number_is_previewed_without_being_reserved(): void
+    {
+        $this->travelTo(Carbon::parse('2027-08-15 10:00:00', 'Asia/Manila'));
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.preview@grc.test');
+        Mail::fake();
+
+        $this->withToken($token)->getJson('/api/v1/student-profiles/next-student-number')
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonPath('data.student_number', '2027-08-00001');
+        // Looking is not taking: the running counter was not written.
+        $this->assertDatabaseCount('student_number_sequences', 0);
+
+        $this->withToken($token)->postJson('/api/v1/student-profiles', $this->provisionPayload($program, 'preview-first@grc.test', [], 1, 'transferee'))
+            ->assertCreated()
+            ->assertJsonPath('data.student_number', '2027-08-00001');
+
+        $this->withToken($token)->getJson('/api/v1/student-profiles/next-student-number')
+            ->assertJsonPath('data.student_number', '2027-08-00002');
+    }
+
+    public function test_an_existing_student_number_is_refused_for_a_freshman(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
         $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.existingrefused@grc.test');
 
-        foreach (['freshman', 'transferee'] as $type) {
+        foreach (['freshman'] as $type) {
             $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
                 ...$this->provisionPayload($program, "refused-{$type}@grc.test", [], 1, $type),
                 'has_existing_student_number' => true,
@@ -731,7 +756,7 @@ final class StudentProfilesEndpointTest extends TestCase
 
             $response->assertUnprocessable()->assertJsonPath(
                 'error.errors.has_existing_student_number.0',
-                'Only a Returnee or an Existing Student can already have a student number.',
+                'Only a Transferee, a Returnee or an Existing Student can already have a student number.',
             );
             $this->assertDatabaseMissing('users', ['email' => "refused-{$type}@grc.test"]);
         }

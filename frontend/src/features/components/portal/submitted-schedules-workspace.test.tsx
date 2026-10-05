@@ -111,7 +111,7 @@ describe("SubmittedSchedulesWorkspace", () => {
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("lists submitted plans read-only, without decision buttons or unsubmitted drafts", async () => {
+  it("lists only the current published plan, read-only, without decision buttons", async () => {
     fetchMock.mockImplementation((input) =>
       Promise.resolve(new Response(JSON.stringify(routeFixtures(input)))),
     )
@@ -122,7 +122,10 @@ describe("SubmittedSchedulesWorkspace", () => {
     expect(
       await screen.findByText("College of Accountancy"),
     ).toBeInTheDocument()
-    expect(screen.getByText("College of Computer Studies")).toBeInTheDocument()
+    // Dean-approved but not published yet, and an unsubmitted draft: neither is a current publish.
+    expect(
+      screen.queryByText("College of Computer Studies"),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText("College of Business")).not.toBeInTheDocument()
     // A published plan would normally offer the Registrar Head "Close".
     expect(
@@ -130,7 +133,7 @@ describe("SubmittedSchedulesWorkspace", () => {
     ).not.toBeInTheDocument()
     expect(
       screen.getAllByRole("button", { name: "View schedule" }),
-    ).toHaveLength(2)
+    ).toHaveLength(1)
   })
 
   it("opens a submitted plan without decision actions in the dialog", async () => {
@@ -170,8 +173,68 @@ describe("SubmittedSchedulesWorkspace", () => {
       session: registrarHead,
     })
     expect(
-      await screen.findByText("No Program Head has submitted a schedule yet."),
+      await screen.findByText("No plan is published for the current term yet."),
     ).toBeInTheDocument()
+  })
+
+  it("keeps an earlier term's published plan out of Submitted plans but in History", async () => {
+    const user = userEvent.setup()
+    const earlierTerm = proposal(12, {
+      academic_term_id: 1,
+      academic_term_label: "2025-2026 · 2nd",
+      college: "ccs",
+      college_label: "College of Nursing",
+      decision_history: [
+        {
+          action: "dean_approve",
+          action_label: "Approved by Dean",
+          actor_name: "Seed Dean",
+          actor_role: "dean",
+          decided_at: "2026-01-14T09:00:00Z",
+          notes: null,
+        },
+      ],
+    })
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).includes("academic-terms")
+              ? terms
+              : { data: [...proposals.data, earlierTerm] },
+          ),
+        ),
+      ),
+    )
+    renderWithSession(<SubmittedSchedulesWorkspace />, {
+      session: registrarHead,
+    })
+
+    expect(
+      await screen.findByText("College of Accountancy"),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("College of Nursing")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("tab", { name: "History" }))
+    const table = await screen.findByRole("table", {
+      name: "Schedule decision history",
+    })
+    expect(within(table).getByText("2025-2026 · 2nd")).toBeInTheDocument()
+  })
+
+  it("has no Published sections tab; the decision history stays", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(new Response(JSON.stringify(routeFixtures(input)))),
+    )
+    renderWithSession(<SubmittedSchedulesWorkspace />, {
+      session: registrarHead,
+    })
+    await screen.findByText("College of Accountancy")
+
+    expect(
+      screen.queryByRole("tab", { name: "Published sections" }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: "History" })).toBeInTheDocument()
   })
 
   it("lists every proposal's decisions in one chronological history table", async () => {

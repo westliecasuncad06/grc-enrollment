@@ -77,12 +77,14 @@ final readonly class TransitionQueueCycle
                 $context,
             );
 
+            // A waiting ticket may belong to a freshman who has no enrollment yet.
             $waitingStudentUserIds = array_values(QueueTicket::query()
                 ->where('queue_cycle_id', $cycle->id)
                 ->where('status', QueueTicketStatus::Waiting)
-                ->with('enrollment.student')
+                ->with(['enrollment.student', 'studentProfile'])
                 ->get()
-                ->map(fn (QueueTicket $ticket): int => $ticket->enrollment->student->user_id)
+                ->map(fn (QueueTicket $ticket): ?int => $ticket->student()?->user_id)
+                ->filter()
                 ->all());
 
             $this->notificationRecorder->recordMany(

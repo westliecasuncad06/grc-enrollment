@@ -145,7 +145,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 - Claim a queue ticket only at the authorized Cashier kiosk; the normal portal
   does not expose a claim action.
 - View grades and approved academic history.
-- Request credit mapping for subjects completed at another school, and follow its status.
+- Save the subjects completed at another school as a list, submit it for credit mapping, and follow its status.
 - Download or print the Digital COM after payment confirmation.
 - Manage permitted profile fields and password.
 - View notifications and enrollment history.
@@ -154,7 +154,10 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 
 - Create new student accounts and initial profiles.
 - Record and view admission status.
-- Issue a temporary credential or approved invitation flow.
+- Issue a temporary credential or approved invitation flow. For a **freshman** the invitation
+  is not sent at intake: Admission issues a Cashier **queue number** instead and emails it with a
+  link to a live view of the queue (ADR 0044); the account setup invitation is sent only after the
+  Cashier confirms the freshman's first payment (ADR 0043).
 - View only the admission information required for the role.
 - Cannot edit grades, curriculum rules, payments, or Registrar approvals.
 
@@ -174,7 +177,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 - Compare forecasted and actual demand.
 - Submit proposed schedules for approval.
 - Approve or reject the irregular and overload enrollments of their own college before they reach the Registrar (ADR 0030).
-- Map students' transferee credit requests to subjects of their curriculum, using the system's suggestions or a manual choice, and endorse them to the Registrar (ADR 0026).
+- Map students' transferee credit requests to subjects of their curriculum, using the system's suggestions or a manual choice, and endorse them to the Registrar Head (ADR 0026, amended).
 
 ### 3.5 Dean
 
@@ -194,6 +197,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 ### 3.7 Registrar Head
 
 - Review and approve enrollment submissions, and open a student's profile from the approvals queue.
+- Approve, reject or return transferee credit mappings that the Program Chair has endorsed (ADR 0026, amended).
 - Perform logged override or void actions for authorized edge cases.
 - View predictive attrition analytics.
 - Generate government compliance reports.
@@ -203,7 +207,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 ### 3.8 Registrar Staff
 
 - Approve or reject enrollment submissions (regular, and irregular once the Program Head has approved them).
-- Approve or reject transferee credit mappings that the Program Chair has endorsed (ADR 0026).
+- View transferee credit mappings that have been sent (read-only; the Registrar Head decides them, ADR 0026 amended).
 - Process dropping and withdrawal requests.
 - View permitted academic records and enrollment documents.
 - Cannot execute Registrar Head overrides.
@@ -276,6 +280,11 @@ If the Program Head changes the subjects of that submission, it goes back to the
 
 or `pending_student_review → pending_program_head_approval` (the student does not accept, giving a reason) (ADR 0040).
 
+A transferee who has not paid yet waits at a payment hold instead of joining the Registrar's queue
+(ADR 0043, amended 2026-10-05): wherever the flow above would reach `pending_registrar_approval`, they
+reach `awaiting_first_payment` first, and the Cashier's confirmed first payment moves them on to
+`pending_registrar_approval`. Every other student follows the flow above.
+
 Alternative terminal or exception states:
 
 - `rejected`
@@ -306,6 +315,46 @@ For a Student, a pending-payment ticket is claimed at the Cashier kiosk, using
 the Student's own bearer token plus authenticated kiosk proof. Accounting
 Staff may continue to issue a ticket on a Student's behalf as part of the
 front-desk workflow.
+
+**Freshmen pay first (ADR 0043).** A freshman has no enrollment and cannot sign in when they
+reach the Cashier, so the steps above do not apply to them. Admission issues the freshman's queue
+ticket at intake — it belongs to the student profile, not to an enrollment, and draws from the
+same open queue cycle and `Q%03d` sequence — and emails the number with a link to the live queue.
+The Cashier sees that the person being served is a freshman. The Cashier confirms the freshman's
+first payment with `POST /api/v1/student-profiles/{id}/freshman-payment` (the dialog first reads
+`GET .../freshman-payment-preview`, which names the section the freshman will get and the estimated
+assessment and writes nothing). The payment is at least PHP 1,000 (`enrollment.freshman_payment.minimum_amount`)
+and never needs a promissory note; the unpaid balance stays on the student's account.
+
+- **A section has open seats** (the first block, in block-number order, whose every subject has a
+  seat; only for the Regular enrollment category): the payment is held as credit and the freshman is
+  submitted to it as `pending_registrar_approval`; the queue ticket is served. The payment does not
+  enroll them: Registrar Staff approval does, which makes the COR and sends the one enrollment
+  confirmation (ADR 0043, amended 2026-10-04). After the commit the account setup invitation is emailed.
+- **Every section is full:** the payment is still accepted and held as advance credit, the ticket is
+  served and the account setup invitation is emailed. When a section is published or gains seats the
+  freshman is notified (in-app and email); they enroll in it on the Enrollment page, and when Registrar
+  Staff approve it the held credit completes the enrollment without a second payment.
+- Confirming again is a 200 that changes and sends nothing (`student_profiles.freshman_payment_confirmed_at`
+  is the check-first idempotency key).
+
+**Transferees pay first too (ADR 0043, amended 2026-10-05).** A transferee lists the subjects they took at
+another school (saved as drafts, then sent to the Program Chair), the Program Chair maps each one on a
+side-by-side screen, and the Registrar Head approves (ADR 0026, amended). When the last open credit closes
+(approved, rejected or declined) the transferee is given a queue number — the same kind of profile-linked
+ticket, issued once, emailed after commit with the live-queue link — and signs in, as they already have an
+account, to choose their subjects. A regular submission, or an Irregular one once the Program Chair has
+approved it, waits at `awaiting_first_payment`: it reserves its seats and the Registrar does not see it.
+The Cashier confirms the first payment through the same endpoints as a freshman's (the preview shows the
+subjects the transferee chose; same PHP 1,000 minimum, no promissory note): the money is held as credit, the
+enrollment moves to `pending_registrar_approval` and the ticket is served; Registrar approval then enrolls
+them from the held credit, makes the COR and sends the one confirmation. A transferee who pays before choosing
+has the payment held and, once they submit, goes straight to the Registrar. Approving credits re-derives
+Regular or Irregular. `student_profiles.freshman_payment_confirmed_at` is the idempotency key for both types.
+
+Registrar Staff and the Registrar Head have a read-only list of freshmen enrollees
+(`GET /api/v1/freshman-enrollees`: enrolled, awaiting approval, awaiting a section, awaiting payment).
+The full decision record is ADR 0043.
 
 ### 4.3 Grade Lifecycle
 
@@ -388,7 +437,8 @@ The system validates the student's academic history against curriculum and prere
 - **FR-ENR-006:** Preserve a student's valid selections when validation errors occur.
 - **FR-ENR-007:** Submit enrollment atomically and prevent duplicate active enrollments.
 - **FR-ENR-008:** Allow exactly one unique queue ticket to be claimed for an
-  eligible pending-payment enrollment.
+  eligible pending-payment enrollment, or issued by Admission to a freshman who has no enrollment
+  yet (one per student profile, ADR 0043).
 - **FR-ENR-009:** Show a Digital PEF or equivalent enrollment summary before final submission.
 - **FR-ENR-010:** Provide real-time or refreshed status updates without a full application reload.
 - **FR-ENR-011:** Enforce approved block-section eligibility rules, including preventing irregular students from reserving slots designated exclusively for regular block students.
@@ -419,7 +469,7 @@ This process handles grade encoding, Registrar decisions, transferee credits, dr
 
 - **FR-FIN-001:** Provide a Registrar approval queue with filters and pagination.
 - **FR-FIN-002:** Require authorization and a reason for rejection, override, void, or forced status change.
-- **FR-FIN-003:** Map transferee credits without bypassing audit and academic-record controls. A Student requests, the Program Chair maps and endorses, and Registrar Staff approve; an approved credit counts as credited without a GRC grade (ADR 0026).
+- **FR-FIN-003:** Map transferee credits without bypassing audit and academic-record controls. A Student requests, the Program Chair maps and endorses, and the Registrar Head approves, rejects or returns; an approved credit counts as credited without a GRC grade (ADR 0026, amended).
 - **FR-FIN-004:** Process dropping or withdrawal exactly once and release seats when policy requires.
 - **FR-FIN-005:** Show Accounting only approved `pending_payment` enrollments.
 - **FR-FIN-006:** Maintain the active serving number and queue order.
@@ -880,6 +930,10 @@ active kiosk token in `X-Queue-Kiosk-Token`; Accounting's on-behalf claim does
 not use that header.
 
 Public self-registration is out of scope. Admission Staff provisions student accounts through an authorized endpoint. If an account-creation endpoint returns a first-login token, it must follow the same `AuthResource` and token service controls.
+
+The one unauthenticated read of queue data is `GET /api/v1/public/queue-view/{token}` (ADR 0044): the
+live queue behind the link a freshman is emailed, scoped to one ticket by an unguessable token (only its
+hash is stored), returning ticket numbers only and rate limited per link.
 
 `super_admin` accounts are provisioned exclusively via `php artisan super-admin:provision` on the server, driven by `SUPER_ADMIN_EMAIL` — never through any web endpoint or default seeder. The provisioning command requires prior Google 2-Step Verification to be enabled on the owner's Google account before Google Sign-In is relied upon for access. See `docs/runbooks/super-admin.md`.
 

@@ -9,9 +9,11 @@ use App\Domain\Identity\Exceptions\InvalidGoogleCredentialException;
 use App\Domain\Identity\Exceptions\LoginOtpDeliveryFailedException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use PDOException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -129,9 +131,33 @@ final class ApiExceptionRenderer
         return ApiErrorResponse::make(
             $request,
             ApiErrorCode::ServerError,
-            'An unexpected server error occurred.',
+            self::databaseBehindCodeHint($exception) ?? 'An unexpected server error occurred.',
             500,
         );
+    }
+
+    /**
+     * On a developer's own machine, a query that names a column or table the database does not have
+     * almost always means a migration has not been run yet. Say so, with the command, instead of the
+     * generic message, so the cause is read at the first error rather than traced from the log. Only
+     * in the `local` environment: elsewhere the message stays generic and nothing about the schema
+     * leaves the server (the query and the column stay in the log).
+     */
+    private static function databaseBehindCodeHint(Throwable $exception): ?string
+    {
+        if (! app()->environment('local') || ! $exception instanceof QueryException) {
+            return null;
+        }
+
+        $driverError = $exception->getPrevious();
+        $sqlState = $driverError instanceof PDOException ? ($driverError->errorInfo[0] ?? null) : null;
+
+        // 42S22: unknown column. 42S02: unknown table.
+        if (! in_array($sqlState, ['42S22', '42S02'], true)) {
+            return null;
+        }
+
+        return 'The database is behind this version of the app. Open a terminal in the backend folder, run "php artisan migrate", then try again. Nothing was saved.';
     }
 
     private static function renderHttpException(

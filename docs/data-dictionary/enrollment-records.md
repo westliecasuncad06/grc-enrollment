@@ -49,7 +49,7 @@ the year's row, adds one, and builds `YYYY-MM-NNNNN`. Migration
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
 | `student_id` | `BIGINT UNSIGNED` | not null, FK → `student_profiles.id`, `CASCADE` on delete | |
 | `academic_term_id` | `BIGINT UNSIGNED` | not null, FK → `academic_terms.id`, `RESTRICT` on delete | |
-| `status` | `VARCHAR(255)` | not null | **Authoritative** PRD §4.2 lifecycle — see `App\Domain\Enrollment\EnrollmentStatus` |
+| `status` | `VARCHAR(255)` | not null | **Authoritative** PRD §4.2 lifecycle — see `App\Domain\Enrollment\EnrollmentStatus`. `awaiting_first_payment` (2026-10-05) is a non-terminal value: a transferee's submitted enrollment waits there until the Cashier confirms their first payment, and then moves to `pending_registrar_approval`; it needs no schema change because `active_academic_term_id` is `NULL` only for the three terminal values |
 | `total_units` | `SMALLINT UNSIGNED` | not null, default `0` | |
 | `requires_overload_approval` | `BOOLEAN` | not null, default `false` | FR-ENR-004. Set by `SubmitEnrollment` via `App\Domain\Enrollment\OverloadEvaluator` — see `config('enrollment.max_regular_units')`/`overload_max_units`, both default `null` (no cap enforced, this column always `false`) |
 | `submitted_at`, `registrar_decided_at`, `payment_confirmed_at`, `enrolled_at` | `TIMESTAMP` | nullable | |
@@ -115,7 +115,10 @@ Faculty-only; `PATCH` serves a plain content edit (draft only) or
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
-| `enrollment_id` | `BIGINT UNSIGNED` | not null, **unique**, FK → `enrollments.id`, `CASCADE` on delete | One ticket per enrollment |
+| `enrollment_id` | `BIGINT UNSIGNED` | **nullable** (ADR 0043), **unique**, FK → `enrollments.id`, `CASCADE` on delete | One ticket per enrollment; null for a freshman's ticket (below) |
+| `student_profile_id` | `BIGINT UNSIGNED` | nullable, **unique**, FK → `student_profiles.id`, `CASCADE` on delete | Set for a freshman who took a queue number at Admission before any enrollment exists. A `CHECK` (`queue_tickets_has_an_owner`) requires `enrollment_id` or `student_profile_id` |
+| `public_token_hash` | `VARCHAR(64)` | nullable, **unique** | SHA-256 of the secret in the freshman's emailed live-queue link (ADR 0044). The plain token is never stored |
+| `link_sent_at`, `link_failed_at` | `DATETIME` | nullable | Delivery of that email, shown to Admission (`dateTime` so MariaDB adds no implicit `ON UPDATE`) |
 | `ticket_number` | `VARCHAR(255)` | not null, **unique with `queue_date`** (not alone — see below) | Resets daily (`Q001`, `Q002`, …), not derived from the enrollment id |
 | `queue_date` | `DATE` | not null | |
 | `status` | `VARCHAR(255)` | not null | **Provisional** — see `App\Domain\Enrollment\QueueTicketStatus`. `skip` now returns the ticket to `waiting` rather than moving it to `cancelled` |
@@ -227,6 +230,24 @@ would have handed Accounting visibility into every historical enrollment,
 not just its own payment records. Idempotent on `enrollment_id`'s unique
 constraint (FR-FIN-009). OpenAPI tag `Payments`.
 
+**Freshman first payment (ADR 0043):** also written by
+`POST /api/v1/student-profiles/{id}/freshman-payment` (Accounting Staff),
+through `ConfirmPayment(freshmanFirstPayment: true)`, which lifts only the
+promissory-note rule. When the freshman was enrolled by that payment,
+`amount` is what the Cashier took (at least PHP 1,000). When the payment was
+held because every section was full, the money is a null-enrollment
+`account_payments` row; when Registrar Staff later approve the freshman's own
+enrollment, `SettleEnrollmentFromAdvanceCredit` re-points those rows to the
+enrollment and writes the `payments` row with `amount = 0.00`, so the money
+is counted once (in `account_payments`) and `enrollment_id`'s unique
+constraint still makes a repeat a no-op. The enrollment of a freshman paid
+this way goes from `pending_registrar_approval` to `pending_payment` by the
+`freshman_auto_approve` transition (it is assessed there; no Registrar actor,
+`registrar_decided_at` left null) and is audited as
+`enrollment.freshman_auto_approved`; `ConfirmPayment` then moves it to
+`enrolled` in the same transaction. The confirmation itself is audited as
+`student_profile.freshman_payment_confirmed`.
+
 ## `enrollment_documents`
 
 | Column | Type | Constraints | Notes |
@@ -264,7 +285,11 @@ module to render as a print-stylesheet page (FR-FIN-010). OpenAPI tag
 | `requested_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | Who asked: the Student, or the Program Chair who recorded it. Never exposed (the resource says only `requested_by_student`) |
 | `endorsed_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | The Program Chair who endorsed it |
 | `endorsed_at` | `TIMESTAMP` | nullable | |
-| `status` | `VARCHAR(255)` | not null | `pending` → `endorsed` → `approved` \| `rejected`. **Provisional** — see `App\Domain\Academic\TransfereeCreditStatus` |
+| `submitted_at` | `TIMESTAMP` | nullable | When the Student sent their saved list to the Program Chair (`draft` → `pending`) |
+| `returned_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | The Registrar Head who last returned the credit to the Program Chair; cleared when it is endorsed again |
+| `returned_at` | `TIMESTAMP` | nullable | |
+| `return_reason` | `TEXT` | nullable | Why it was returned |
+| `status` | `VARCHAR(255)` | not null | `draft` (the Student's unsent list) → `pending` → `endorsed` → `approved` \| `rejected`; the Registrar Head may return an `endorsed` credit to `pending`. **Provisional** — see `App\Domain\Academic\TransfereeCreditStatus` |
 | `processed_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | |
 | `processed_at` | `TIMESTAMP` | nullable | |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
@@ -272,10 +297,19 @@ module to render as a print-stylesheet page (FR-FIN-010). OpenAPI tag
 **API (ADR 0026):** `GET`/`POST`/`PATCH /api/v1/transferee-credits` and
 `GET /api/v1/transferee-credits/{id}/suggestions`. Role-scoped read (Student own,
 Program Chair their college's students, Registrar Staff and Registrar Head all).
-`POST`: a Student asks for themselves, a Program Chair records one for a student in
-their college; Registrar Staff and Registrar Head cannot. `PATCH` serves a Program
-Chair's content edit / mapping (`pending` only), `action: endorse` or `decline`
-(`pending` only), and Registrar Staff's `action: approve` or `reject` (`endorsed` only).
+`POST`: a Student saves one for themselves as a private `draft`, a Program Chair
+records one (`pending`) for a student in their college; Registrar Staff and Registrar
+Head cannot. `POST /transferee-credits/submit` sends a Student's drafts and
+`DELETE /transferee-credits/{id}` removes a draft. `PATCH` serves a Student's edit of
+their own draft, a Program Chair's content edit / mapping (`pending` only), `action:
+endorse` or `decline` (`pending` only), and the Registrar Head's `action: approve`,
+`reject` or `return` (`endorsed` only). Registrar Staff read credits that have been
+sent but cannot decide them; nobody but the owning Student sees a draft. Three
+student-level endpoints serve the side-by-side screens: `GET /student-profiles/{id}/transferee-credits/suggestions`
+(Program Chair, own college: suggestions for every `pending` credit and the student's
+curriculum subjects), `POST .../submit-to-registrar-head` (Program Chair: all of the student's
+`pending` credits become `endorsed`, all or nothing) and `POST .../approve-all` (Registrar Head:
+all of the student's `endorsed` credits become `approved`); the last two are idempotent.
 `suggestions` is Program Chair only and computed on demand — nothing is stored. Every
 write is audited (FR-FIN-003). An approved credit that is mapped to a subject counts as
 credited (see `ResolveCreditedSubjectIds`: eligible-subject pool, standing, promotion,

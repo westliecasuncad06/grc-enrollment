@@ -84,6 +84,25 @@ final class StudentProfilePolicy
     }
 
     /**
+     * The Cashier confirms a freshman's first payment, and previews what it will do
+     * (ADR 0043). Accounting Staff only.
+     */
+    public function confirmFreshmanPayment(User $user, StudentProfile $profile): bool
+    {
+        return $user->role === UserRole::AccountingStaff;
+    }
+
+    /**
+     * The read-only list of freshmen who pay first (ADR 0043): Registrar Staff and the
+     * Registrar Head, who no longer approve a freshman's enrollment but still see it.
+     * A class-level ability: it lists many profiles.
+     */
+    public function viewFreshmanEnrollees(User $user): bool
+    {
+        return in_array($user->role, [UserRole::RegistrarStaff, UserRole::RegistrarHead], true);
+    }
+
+    /**
      * The Cashier's general student search (Advance Payment). A class-level
      * ability: there is no single profile to authorize against yet.
      */

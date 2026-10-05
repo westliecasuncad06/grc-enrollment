@@ -31,20 +31,15 @@ final class AssignStudentNumber
 
             $this->ensureCounterRow($year);
 
-            $next = (int) DB::table('student_number_sequences')
+            $last = (int) DB::table('student_number_sequences')
                 ->where('year', $year)
                 ->lockForUpdate()
                 ->value('last_value');
 
-            do {
-                $next++;
-
-                if ($next > self::MAX_SUFFIX) {
-                    throw ValidationException::withMessages([
-                        'student_number' => "All student numbers for {$year} are already in use.",
-                    ]);
-                }
-            } while ($this->suffixIsUsed($year, $next));
+            $next = $this->nextFreeSuffix($year, $last)
+                ?? throw ValidationException::withMessages([
+                    'student_number' => "All student numbers for {$year} are already in use.",
+                ]);
 
             DB::table('student_number_sequences')
                 ->where('year', $year)
@@ -52,6 +47,38 @@ final class AssignStudentNumber
 
             return sprintf('%04d-%02d-%05d', $year, $now->month, $next);
         });
+    }
+
+    /**
+     * The number the next account would get, read without taking it: nothing is written, so
+     * a number shown here is not reserved and an account created first will take it. Null
+     * when every suffix this year is in use.
+     */
+    public function preview(): ?string
+    {
+        $now = now(self::TIMEZONE);
+        $year = $now->year;
+
+        $last = DB::table('student_number_sequences')->where('year', $year)->value('last_value');
+        $next = $this->nextFreeSuffix($year, $last === null ? $this->highestSuffixInUse($year) : (int) $last);
+
+        return $next === null ? null : sprintf('%04d-%02d-%05d', $year, $now->month, $next);
+    }
+
+    /** The first suffix after `$last` that no student of the year uses; null when they run out. */
+    private function nextFreeSuffix(int $year, int $last): ?int
+    {
+        $next = $last;
+
+        do {
+            $next++;
+
+            if ($next > self::MAX_SUFFIX) {
+                return null;
+            }
+        } while ($this->suffixIsUsed($year, $next));
+
+        return $next;
     }
 
     private function ensureCounterRow(int $year): void
