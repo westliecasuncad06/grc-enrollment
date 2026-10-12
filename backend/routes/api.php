@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\Auth\StaffAccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\VerifyLoginOtpController;
 use App\Http\Controllers\Api\V1\Billing\FeeScheduleController;
+use App\Http\Controllers\Api\V1\Billing\PaymentDiscountSettingController;
 use App\Http\Controllers\Api\V1\CashierPaymentCandidateController;
 use App\Http\Controllers\Api\V1\CashierStudentLookupController;
 use App\Http\Controllers\Api\V1\CashierTransactionController;
@@ -43,6 +44,7 @@ use App\Http\Controllers\Api\V1\EnrollmentChangeRequestController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\EnrollmentDocumentController;
 use App\Http\Controllers\Api\V1\EnrollmentMovementController;
+use App\Http\Controllers\Api\V1\EnrollmentPaymentQuoteController;
 use App\Http\Controllers\Api\V1\EnrollmentScholarshipDiscountController;
 use App\Http\Controllers\Api\V1\EnrollmentWindowController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
@@ -214,6 +216,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/room-occupancy-summary', RoomOccupancySummaryController::class)->name('room-occupancy-summary.index');
         Route::get('/fee-schedules', [FeeScheduleController::class, 'index'])->name('fee-schedules.index');
         Route::put('/fee-schedules', [FeeScheduleController::class, 'update'])->name('fee-schedules.update');
+        // ADR 0046: the full-payment discount's percentage and validity. The Registrar Head edits it
+        // (PaymentDiscountSettingPolicy); Accounting Staff may read it. No `role:` middleware.
+        Route::get('/payment-discount-settings', [PaymentDiscountSettingController::class, 'show'])->name('payment-discount-settings.show');
+        Route::put('/payment-discount-settings', [PaymentDiscountSettingController::class, 'update'])->name('payment-discount-settings.update');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
         Route::get('/sections/grade-submission', [SectionGradeController::class, 'index'])->name('sections.grade-submission.index');
         Route::get('/sections/{section}/grades', [SectionGradeController::class, 'show'])->name('sections.grades.show');
@@ -295,6 +301,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // resolves `confirmPayment` the same way it resolves the other two
         // Registrar Head checkpoints.
         Route::post('/enrollments/{enrollment}/payment', [EnrollmentController::class, 'confirmPayment'])->name('enrollments.payment');
+        // ADR 0046: what the Cashier's modal quotes before confirming (amount due and what paying in full collects).
+        Route::get('/enrollments/{enrollment}/payment-quote', EnrollmentPaymentQuoteController::class)->name('enrollments.payment-quote.show');
         Route::get('/enrollments/{enrollment}/cor-preview', [EnrollmentController::class, 'corPreview'])->name('enrollments.cor-preview');
 
         // Accounting may correct financial assessment lines while payment is

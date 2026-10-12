@@ -192,6 +192,10 @@ final class AuditAction
 
     public const ASSESSMENT_SCHOLARSHIP_REMOVED = 'assessment.scholarship_removed';
 
+    public const ASSESSMENT_FULL_PAYMENT_DISCOUNT_APPLIED = 'assessment.full_payment_discount_applied';
+
+    public const PAYMENT_DISCOUNT_SETTING_UPDATED = 'payment_discount.updated';
+
     public const ACCOUNT_PAYMENT_RECORDED = 'account_payment.recorded';
 
     public const WITHDRAWAL_REQUEST_CREATED = 'withdrawal_request.created';
@@ -404,6 +408,8 @@ final class AuditAction
             self::ASSESSMENT_ADJUSTED,
             self::ASSESSMENT_SCHOLARSHIP_APPLIED,
             self::ASSESSMENT_SCHOLARSHIP_REMOVED,
+            self::ASSESSMENT_FULL_PAYMENT_DISCOUNT_APPLIED,
+            self::PAYMENT_DISCOUNT_SETTING_UPDATED,
             self::ACCOUNT_PAYMENT_RECORDED,
             self::WITHDRAWAL_REQUEST_CREATED,
             self::WITHDRAWAL_REQUEST_APPROVED,

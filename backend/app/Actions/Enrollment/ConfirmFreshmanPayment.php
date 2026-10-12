@@ -50,11 +50,15 @@ use Illuminate\Validation\ValidationException;
  * The rule is at least the configured minimum and no promissory note (`FreshmanPaymentRules`).
  * The enrollment window is deliberately not consulted: the Cashier is the gate. The account
  * setup email and the enrollment confirmation email are sent by the caller after commit.
+ *
+ * ADR 0046: `payment_type` `full` collects the discounted estimate and freezes the quoted
+ * percentage on the profile.
  */
 final readonly class ConfirmFreshmanPayment
 {
     public function __construct(
         private BuildEnrollmentBlockPool $blockPool,
+        private PreviewFreshmanPayment $previewFreshmanPayment,
         private SubmitEnrollment $submitEnrollment,
         private RecordAccountPayment $recordAccountPayment,
         private AuditRecorder $auditRecorder,
@@ -66,9 +70,12 @@ final readonly class ConfirmFreshmanPayment
      */
     public function execute(StudentProfile $profile, array $validated, User $cashier, AuditRequestContext $context): FreshmanPaymentResult
     {
-        $amount = FreshmanPaymentRules::normalizeAmount($validated['amount'] ?? null);
+        $isFullPayment = ($validated['payment_type'] ?? null) === 'full';
+        $amount = $isFullPayment
+            ? FreshmanPaymentRules::normalizeFullAmount($validated['amount'] ?? null)
+            : FreshmanPaymentRules::normalizeAmount($validated['amount'] ?? null);
 
-        return DB::transaction(function () use ($profile, $validated, $cashier, $context, $amount): FreshmanPaymentResult {
+        return DB::transaction(function () use ($profile, $validated, $cashier, $context, $amount, $isFullPayment): FreshmanPaymentResult {
             $locked = StudentProfile::query()->whereKey($profile->id)->lockForUpdate()->with('user')->firstOrFail();
 
             if (! $locked->student_type instanceof StudentType || ! $locked->student_type->isPayFirst()) {
@@ -79,6 +86,33 @@ final readonly class ConfirmFreshmanPayment
 
             if ($locked->freshman_payment_confirmed_at !== null) {
                 return $this->existingResult($locked, $amount);
+            }
+
+            // ADR 0046: a full payment is re-quoted under the profile lock. The amount the Cashier was
+            // shown must still be what a full payment collects, and the percentage that applied is
+            // frozen on the profile for the Registrar's approval to use.
+            $frozenPercentage = null;
+
+            if ($isFullPayment) {
+                $quote = $this->previewFreshmanPayment->execute($locked)->fullPayment;
+
+                if ($quote === null || $quote->netTotal === null) {
+                    throw ValidationException::withMessages([
+                        'payment_type' => 'A full payment cannot be quoted yet. Take an installment instead.',
+                    ]);
+                }
+
+                // The quote's amounts are built from bcmath results, so they are numeric strings.
+                /** @var numeric-string $netTotal */
+                $netTotal = $quote->netTotal;
+
+                if (bccomp($amount, $netTotal, 2) !== 0) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'The amount due changed. Review the new amount and confirm again.',
+                    ]);
+                }
+
+                $frozenPercentage = $quote->applies() ? $quote->percentage : null;
             }
 
             // The money is recorded before the enrollment exists, so it cannot be allocated to it.
@@ -99,7 +133,10 @@ final readonly class ConfirmFreshmanPayment
                 $enrollment->update(['payment_confirmed_at' => now()]);
             }
 
-            $locked->forceFill(['freshman_payment_confirmed_at' => now()])->save();
+            $locked->forceFill([
+                'freshman_payment_confirmed_at' => now(),
+                'full_payment_discount_percentage' => $frozenPercentage,
+            ])->save();
             $this->serveTicket($locked);
 
             $outcome = $enrollment !== null ? FreshmanPaymentResult::AWAITING_REGISTRAR : FreshmanPaymentResult::AWAITING_SECTION;
@@ -117,6 +154,8 @@ final readonly class ConfirmFreshmanPayment
                     'student_type' => $locked->student_type?->value,
                     'block_code' => $blockCode,
                     'enrollment_id' => $enrollment?->id,
+                    'payment_type' => $isFullPayment ? 'full' : 'installment',
+                    'full_payment_discount_percentage' => $frozenPercentage,
                 ],
                 null,
                 $context,

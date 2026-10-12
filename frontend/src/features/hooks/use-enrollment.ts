@@ -16,6 +16,7 @@ import {
   getEligibleSubjects,
   getEnrollmentBlocks,
   getEnrollments,
+  getPaymentQuote,
   listEnrollments,
   removeScholarshipDiscount,
   reviseEnrollmentSubjects,
@@ -202,6 +203,7 @@ function useInvalidateEnrollmentQueries() {
       queryClient.invalidateQueries({
         queryKey: ["cashier-payment-candidate", session?.userId ?? null],
       }),
+      queryClient.invalidateQueries({ queryKey: ["payment-quote"] }),
     ])
 }
 
@@ -280,16 +282,22 @@ export function useConfirmPaymentMutation() {
       externalReference,
       amount,
       promissoryNoteOnFile,
+      paymentType,
+      quotedAmount,
     }: {
       id: number
       externalReference?: string
       amount?: number
       promissoryNoteOnFile?: boolean
+      paymentType?: "full" | "installment"
+      quotedAmount?: string
     }) =>
       confirmPayment(id, {
         external_reference: externalReference,
         amount,
         promissory_note_on_file: promissoryNoteOnFile,
+        payment_type: paymentType,
+        quoted_amount: quotedAmount,
       }),
     onSuccess: () => invalidate(),
   })
@@ -348,5 +356,25 @@ export function useCorPreviewQuery(enrollmentId: number | null) {
     queryKey: ["cor-preview", session?.userId ?? null, enrollmentId],
     queryFn: ({ signal }) => getCorPreview(enrollmentId!, signal),
     enabled: session !== null && enrollmentId !== null,
+  })
+}
+
+/**
+ * The Cashier's quote for the serving enrollment (ADR 0046). Read while the payment steps are
+ * open and kept fresh, because the Registrar Head can change the discount at any moment.
+ */
+export function usePaymentQuoteQuery(
+  enrollmentId: number | null,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: ["payment-quote", session?.userId ?? null, enrollmentId],
+    queryFn: ({ signal }) => getPaymentQuote(enrollmentId!, signal),
+    enabled:
+      enabled && session?.role === "accounting_staff" && enrollmentId !== null,
+    staleTime: 0,
+    refetchInterval: 15_000,
   })
 }

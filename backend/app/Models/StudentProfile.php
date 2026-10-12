@@ -32,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property ?CarbonImmutable $requirements_verified_at
  * @property ?int $requirements_verified_by
  * @property ?CarbonImmutable $freshman_payment_confirmed_at
+ * @property ?numeric-string $full_payment_discount_percentage
  * @property bool $is_demo_account
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -81,6 +82,7 @@ final class StudentProfile extends Model
             'financial_status' => FinancialStatus::class,
             'requirements_verified_at' => 'immutable_datetime',
             'freshman_payment_confirmed_at' => 'immutable_datetime',
+            'full_payment_discount_percentage' => 'decimal:1',
             'is_demo_account' => 'boolean',
         ];
     }

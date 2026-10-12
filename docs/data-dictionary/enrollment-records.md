@@ -186,9 +186,9 @@ all (Student own, Registrar Head/Staff all, Accounting Staff
 |---|---|---|---|
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
 | `assessment_id` | `BIGINT UNSIGNED` | not null, FK → `assessments.id`, `CASCADE` on delete | |
-| `category` | `VARCHAR(255)` | not null | `tuition` or `miscellaneous` — see `App\Domain\Billing\AssessmentItemCategory` |
+| `category` | `VARCHAR(255)` | not null | `tuition`, `miscellaneous`, `scholarship_discount` (ADR 0025) or `full_payment_discount` (ADR 0046) — see `App\Domain\Billing\AssessmentItemCategory` |
 | `label` | `VARCHAR(255)` | not null | |
-| `quantity` | `DECIMAL(6,1)` | nullable | Units, tuition line only — matches `subjects.units`/`enrollments.total_units` precision; **deliberately not an integer**, since Leadership subjects are genuinely 1.5 units |
+| `quantity` | `DECIMAL(6,1)` | nullable | Units on the tuition line — matches `subjects.units`/`enrollments.total_units` precision; **deliberately not an integer**, since Leadership subjects are genuinely 1.5 units. On a discount line it holds the percentage instead (for example `10.0`) |
 | `unit_amount` | `DECIMAL(10,2)` | nullable | Per-unit rate, tuition line only |
 | `amount` | `DECIMAL(10,2)` | not null | **Not cast to float on the model** |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
@@ -197,6 +197,19 @@ One printed line of an `assessments` row. See
 `App\Domain\Billing\AssessmentComputation` for how these are computed
 (half-up rounding at two decimal places via `bcmath` — also provisional,
 GRC has never confirmed a rounding policy).
+
+**`full_payment_discount` (ADR 0046):** a negative `amount` (the discount,
+rounded half-up to the cent), the percentage in `quantity`, a label such as
+`Full-payment discount (10%)`, and a null `unit_amount`. It is written only
+when money is collected, never while the assessment is still being corrected:
+by `ConfirmPayment` for the Cashier's Pay in full, inside the confirmation
+transaction, or by `SettleEnrollmentFromAdvanceCredit` when the Registrar
+approves a pay-first student (freshman or transferee) whose held credit covers
+the discounted net. Each write sets `assessments.total_amount` to the net and
+is audited as `assessment.full_payment_discount_applied`. An assessment with a
+`scholarship_discount` line never gets one, and the line is never edited by
+hand. `BuildCorSnapshot` lists it as `fees.full_payment_discount`, with
+`fees.total_full_payment_discount`.
 
 **API:** embedded only, as `assessment.items` on `EnrollmentResource`. No
 dedicated route. OpenAPI tag `Enrollment`.
@@ -345,6 +358,34 @@ attempt (`withdrawal_requests` carries no unique constraint on
 `enrollment_id`, so idempotency is enforced under a row lock in
 `App\Actions\Enrollment\TransitionWithdrawalRequest`, not the schema).
 OpenAPI tag `Withdrawals`.
+
+## `payment_discount_settings`
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
+| `percentage` | `DECIMAL(4,1)` | not null | The full-payment discount, 0 to 100 with one decimal (the request enforces the range). **Not cast to float on the model** (cast `decimal:1`, so it reads as `10.0`). `0` turns the discount off |
+| `valid_from` | `DATE` | nullable | First day the discount is on offer, inclusive; `NULL` means no start limit |
+| `valid_until` | `DATE` | nullable | Last day the discount is on offer, inclusive; `NULL` means no end limit. Never before `valid_from` (the request enforces it) |
+| `updated_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | The Registrar Head who last saved it; `NULL` until someone does |
+| `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
+
+The configuration of the full-payment discount (ADR 0046, PRD FR-FIN-011 and
+FR-FIN-012). **One row.** It is not created by the migration or a seeder:
+`PaymentDiscountSetting::current()` creates it on first read from
+`config('fees.full_payment_discount_percentage')` (`10.0`), so a restored older
+dump cannot leave payment confirmation without a setting. There is no unique
+constraint; two requests racing on the very first read could create two rows,
+and every reader then uses the lowest `id`. `valid_from` and `valid_until` are
+dates in the school's calendar (`Asia/Manila`), not UTC. The status (`off`,
+`scheduled`, `active`, `expired`) is derived from today's date, never stored.
+Editing the row never changes an assessment, payment or COR that already exists.
+
+**API:** `GET /api/v1/payment-discount-settings` (Registrar Head and
+Accounting Staff) and `PUT /api/v1/payment-discount-settings` (Registrar Head
+only), authorized by `PaymentDiscountSettingPolicy` with no `role:` middleware.
+A save is audited as `payment_discount.updated`; a save that changes nothing
+writes no audit row. OpenAPI tag `Payments`.
 
 ## Seeded data
 

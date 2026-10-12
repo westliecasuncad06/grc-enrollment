@@ -2,6 +2,7 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Actions\Billing\ApplyFullPaymentDiscount;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
@@ -46,6 +47,9 @@ use Illuminate\Validation\ValidationException;
  * `selected` → `enrolled` — the class roster (and grade submission's roster
  * filter) only ever surfaces `enrolled` rows, so a student stays invisible
  * to their professor until this step runs.
+ *
+ * ADR 0046: `payment_type` `full` (with the `quoted_amount` the Cashier was shown) takes the
+ * full-payment discount, when one applies, before the payment row and the COR are written.
  */
 final readonly class ConfirmPayment
 {
@@ -71,6 +75,7 @@ final readonly class ConfirmPayment
     public function __construct(
         private AuditRecorder $auditRecorder,
         private BuildCorSnapshot $buildCorSnapshot,
+        private ApplyFullPaymentDiscount $applyFullPaymentDiscount,
     ) {}
 
     /**
@@ -118,8 +123,21 @@ final readonly class ConfirmPayment
             // only an omitted amount falls back to what was assessed. An
             // enrollment with no assessment (created directly by legacy test
             // fixtures) keeps the established behavior of staying null.
-            $assessment = Assessment::query()->where('enrollment_id', $lockedEnrollment->id)->first();
+            $assessment = Assessment::query()->where('enrollment_id', $lockedEnrollment->id)->lockForUpdate()->first();
             $amount = $validated['amount'] ?? $assessment?->total_amount;
+
+            // ADR 0046: Pay in full. Any discount is written here, in the same transaction, so the
+            // payment, the assessment and the COR snapshot below all agree on the net. A stale
+            // `quoted_amount` throws before anything is written. An installment, and a request with
+            // no `payment_type`, are not touched: no discount and no extra fee.
+            if (($validated['payment_type'] ?? null) === 'full' && ! $freshmanFirstPayment && $assessment instanceof Assessment) {
+                // ConfirmPaymentRequest only lets a plain decimal through.
+                /** @var numeric-string $quotedAmount */
+                $quotedAmount = (string) $validated['quoted_amount'];
+
+                $amount = $this->applyFullPaymentDiscount->forCashierPayment($assessment, $quotedAmount, $actor, $context);
+            }
+
             $promissoryNoteOnFile = (bool) ($validated['promissory_note_on_file'] ?? false);
 
             if (! $freshmanFirstPayment && $amount !== null && $assessment?->total_amount !== null && bccomp((string) $amount, (string) $assessment->total_amount, 2) === -1 && ! $promissoryNoteOnFile) {

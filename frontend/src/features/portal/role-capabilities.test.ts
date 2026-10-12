@@ -70,6 +70,7 @@ const expectedModuleIds = {
     "registrar-analytics",
     "compliance-reports",
     "enrollment-dashboard",
+    "payment-discount",
     "audit-logs",
     "rooms",
     "faculty-workforce",

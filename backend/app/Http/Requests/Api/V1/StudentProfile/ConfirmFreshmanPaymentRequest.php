@@ -4,6 +4,7 @@ namespace App\Http\Requests\Api\V1\StudentProfile;
 
 use App\Actions\Enrollment\FreshmanPaymentRules;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * A freshman's first payment (ADR 0043): an amount of at least the configured minimum
@@ -27,6 +28,9 @@ final class ConfirmFreshmanPaymentRequest extends FormRequest
         return [
             'amount' => ['required', 'numeric', 'min:'.FreshmanPaymentRules::minimumAmount(), 'max:99999999.99'],
             'external_reference' => ['sometimes', 'nullable', 'string', 'max:255'],
+            // ADR 0046. `full` pays the discounted estimate; `amount` must equal the quote the
+            // Cashier was shown. Absent or `installment` is the existing minimum-payment rule.
+            'payment_type' => ['sometimes', 'string', Rule::in(['full', 'installment'])],
         ];
     }
 

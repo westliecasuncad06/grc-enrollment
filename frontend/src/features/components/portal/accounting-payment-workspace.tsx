@@ -13,6 +13,7 @@ import {
   ScholarshipTierDialog,
   type PaymentClassification,
 } from "@/features/components/portal/payment-classification-dialogs"
+import { PaymentTypeChoice } from "@/features/components/portal/payment-type-choice"
 import {
   DownloadPdfButton,
   PrintButton,
@@ -60,6 +61,7 @@ import {
   useConfirmPaymentMutation,
   useCorPreviewQuery,
   useEnrollmentsListQuery,
+  usePaymentQuoteQuery,
   useRemoveScholarshipDiscountMutation,
 } from "@/features/hooks/use-enrollment"
 import { useStudentAccountQuery } from "@/features/hooks/use-student-account"
@@ -392,6 +394,8 @@ export function AccountingPaymentWorkspace() {
   const [amountOverride, setAmountOverride] = useState<string | null>(null)
   const [stepError, setStepError] = useState("")
   const [promissoryNoteOnFile, setPromissoryNoteOnFile] = useState(false)
+  // ADR 0046: with a discount on offer, the Cashier chooses Pay in full (the default) or Installment.
+  const [paymentMode, setPaymentMode] = useState<"full" | "installment">("full")
   const [lastConfirmation, setLastConfirmation] =
     useState<PaymentConfirmation | null>(null)
   const [viewingCorDocumentId, setViewingCorDocumentId] = useState<
@@ -460,6 +464,12 @@ export function AccountingPaymentWorkspace() {
   const nowServingEnrollment = nowServing
     ? enrollmentFor(nowServing)
     : undefined
+  // Read as soon as the payment steps open, so the quote is already there when the payment modal
+  // appears; the Registrar Head can change the discount at any moment, so it is kept fresh.
+  const paymentQuoteQuery = usePaymentQuoteQuery(
+    nowServing?.enrollment_id ?? null,
+    { enabled: authorized && step !== "closed" },
+  )
   const accountQuery = useStudentAccountQuery(
     nowServingEnrollment?.student_id ?? null,
     { enabled: authorized && nowServingEnrollment !== undefined },
@@ -481,16 +491,29 @@ export function AccountingPaymentWorkspace() {
     assessment?.total_amount != null ? Number(assessment.total_amount) : null
   const baseAmount =
     netTotal !== null ? Math.round((netTotal + discountAmount) * 100) / 100 : 0
+  // ADR 0046: the discount is on offer only when the API's quote says it applies. Pay in full then
+  // collects the quoted net (never typed, never partial); Installment is today's flow unchanged.
+  const fullQuote = paymentQuoteQuery.data?.full_payment ?? null
+  const discountOffered = fullQuote?.applies === true
+  const payInFull = discountOffered && paymentMode === "full"
+  // The quote has been asked for but has not arrived yet: do not let a payment go through
+  // without the discount the student may be owed.
+  const quotePending =
+    paymentQuoteQuery.isFetching && paymentQuoteQuery.data === undefined
   // Below the minimum (a 100% scholarship's zero included) the assessment is
   // collected in full, so no amount is typed or sent; the API falls back to it.
   const fixedAmount = netTotal !== null && netTotal < MIN_FIRST_PAYMENT
   const amount =
-    amountOverride ?? (netTotal !== null ? netTotal.toFixed(2) : "")
+    payInFull && fullQuote
+      ? fullQuote.net_total
+      : (amountOverride ?? (netTotal !== null ? netTotal.toFixed(2) : ""))
   const amountBelowMinimum =
+    !payInFull &&
     !fixedAmount &&
     amount.trim() !== "" &&
     !(Number(amount) >= MIN_FIRST_PAYMENT)
   const isPartialPayment =
+    !payInFull &&
     !amountBelowMinimum &&
     netTotal !== null &&
     Number(amount) > 0 &&
@@ -533,6 +556,7 @@ export function AccountingPaymentWorkspace() {
     if (confirmDisabled) return
     setAmountOverride(null)
     setPromissoryNoteOnFile(false)
+    setPaymentMode("full")
     setError("")
     setStepError("")
     setStep("classification")
@@ -594,11 +618,20 @@ export function AccountingPaymentWorkspace() {
       return
     setError("")
     try {
-      const result = await paymentMutation.mutateAsync({
-        id: servingEnrollmentId,
-        amount: fixedAmount || !amount.trim() ? undefined : Number(amount),
-        promissoryNoteOnFile,
-      })
+      const result = await paymentMutation.mutateAsync(
+        payInFull && fullQuote
+          ? {
+              id: servingEnrollmentId,
+              paymentType: "full",
+              quotedAmount: fullQuote.net_total,
+            }
+          : {
+              id: servingEnrollmentId,
+              amount:
+                fixedAmount || !amount.trim() ? undefined : Number(amount),
+              promissoryNoteOnFile,
+            },
+      )
       setLastConfirmation(result)
       setProcessedEnrollmentId(result.enrollment.id)
       setStep("closed")
@@ -608,10 +641,15 @@ export function AccountingPaymentWorkspace() {
       // /students/null/account).
       // No ticket call here: the payment confirmation already marks the ticket served on the
       // server, and the payment mutation's invalidation refreshes the queue.
-    } catch {
+    } catch (confirmError) {
       setError(
-        "The payment could not be confirmed. Check the connection and try again.",
+        apiMessage(
+          confirmError,
+          "The payment could not be confirmed. Check the connection and try again.",
+        ),
       )
+      // A refused quote means the amount due changed: read the new one so the Cashier can review it.
+      void paymentQuoteQuery.refetch()
     }
   }
 
@@ -671,7 +709,7 @@ export function AccountingPaymentWorkspace() {
         cycleQuery.dataUpdatedAt,
       )}
     >
-      {error && (
+      {error && !confirming && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -1284,18 +1322,45 @@ export function AccountingPaymentWorkspace() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <FieldGroup>
+            {discountOffered && fullQuote && (
+              <PaymentTypeChoice
+                percentage={fullQuote.percentage}
+                payInFull={payInFull}
+                disabled={paymentMutation.isPending}
+                onChange={setPaymentMode}
+              />
+            )}
+            {!discountOffered && paymentQuoteQuery.isError && (
+              <p className="text-xs text-muted-foreground">
+                The full-payment discount could not be checked. The payment can
+                still be confirmed without it.
+              </p>
+            )}
+            {!discountOffered &&
+              fullQuote !== null &&
+              fullQuote.reason !== null &&
+              fullQuote.reason !== "scholar" && (
+                <p className="text-xs text-muted-foreground">
+                  No full-payment discount is active.
+                </p>
+              )}
             <Field data-invalid={amountBelowMinimum}>
               <FieldLabel htmlFor="payment-amount">Amount</FieldLabel>
               <Input
                 id="payment-amount"
                 inputMode="decimal"
                 value={amount}
-                readOnly={fixedAmount}
+                readOnly={fixedAmount || payInFull}
                 aria-invalid={amountBelowMinimum}
                 onChange={(event) => setAmountOverride(event.target.value)}
                 disabled={paymentMutation.isPending}
               />
-              {fixedAmount ? (
+              {payInFull ? (
+                <FieldDescription>
+                  Pay in full collects the net amount after the full-payment
+                  discount.
+                </FieldDescription>
+              ) : fixedAmount ? (
                 <FieldDescription>
                   {netTotal === 0
                     ? "No payment is due: the scholarship covers the whole assessment. Confirming still generates the Certificate of Registration."
@@ -1336,6 +1401,24 @@ export function AccountingPaymentWorkspace() {
                     {formatPhp(nowServingEnrollment.assessment.total_amount)}
                   </span>
                 </div>
+                {payInFull && fullQuote?.discount_amount && (
+                  <>
+                    <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
+                      <span>
+                        Full-payment discount ({Number(fullQuote.percentage)}%):
+                      </span>
+                      <span className="font-semibold">
+                        -{formatPhp(fullQuote.discount_amount)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Net payable:</span>
+                      <span className="font-semibold text-foreground">
+                        {formatPhp(fullQuote.net_total)}
+                      </span>
+                    </div>
+                  </>
+                )}
                 {accountQuery.data &&
                   Number(accountQuery.data.prior_balance) > 0 && (
                     <div className="flex justify-between text-amber-700 dark:text-amber-400">
@@ -1360,17 +1443,20 @@ export function AccountingPaymentWorkspace() {
                   </span>
                 </div>
                 {(() => {
-                  const assessed = Number(
-                    nowServingEnrollment.assessment.total_amount,
-                  )
+                  const assessed =
+                    payInFull && fullQuote
+                      ? Number(fullQuote.net_total)
+                      : Number(nowServingEnrollment.assessment.total_amount)
                   const entered = Number(amount) || 0
                   const remaining = Math.max(0, assessed - entered)
                   const isPartial = entered > 0 && entered < assessed
                   const priorBalance = accountQuery.data
                     ? Number(accountQuery.data.prior_balance)
                     : 0
+                  // The discount is not on the account balance until the payment is confirmed.
                   const overallOutstanding = accountQuery.data
-                    ? Number(accountQuery.data.outstanding_balance)
+                    ? Number(accountQuery.data.outstanding_balance) -
+                      (payInFull ? Number(fullQuote?.discount_amount ?? 0) : 0)
                     : assessed
                   const remainingOverall = Math.max(
                     0,
@@ -1421,7 +1507,9 @@ export function AccountingPaymentWorkspace() {
                           balance from prior terms. This payment clears the
                           current term assessment (
                           {formatPhp(
-                            nowServingEnrollment.assessment.total_amount,
+                            payInFull && fullQuote
+                              ? assessed.toFixed(2)
+                              : nowServingEnrollment.assessment.total_amount,
                           )}
                           ). Prior balances must be settled separately via
                           &quot;Record Payment&quot; in the Student Account
@@ -1433,27 +1521,34 @@ export function AccountingPaymentWorkspace() {
                 })()}
               </div>
             )}
-            <Field data-invalid={isPartialPayment && !promissoryNoteOnFile}>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="promissory-note-on-file"
-                  checked={promissoryNoteOnFile}
-                  onCheckedChange={(checked) =>
-                    setPromissoryNoteOnFile(checked === true)
-                  }
-                  disabled={paymentMutation.isPending}
-                />
-                <FieldLabel htmlFor="promissory-note-on-file">
-                  Promissory note on file
-                </FieldLabel>
-              </div>
-              {isPartialPayment && !promissoryNoteOnFile && (
-                <FieldError className="mt-1">
-                  A promissory note on file is required for partial payments.
-                </FieldError>
-              )}
-            </Field>
+            {!payInFull && (
+              <Field data-invalid={isPartialPayment && !promissoryNoteOnFile}>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="promissory-note-on-file"
+                    checked={promissoryNoteOnFile}
+                    onCheckedChange={(checked) =>
+                      setPromissoryNoteOnFile(checked === true)
+                    }
+                    disabled={paymentMutation.isPending}
+                  />
+                  <FieldLabel htmlFor="promissory-note-on-file">
+                    Promissory note on file
+                  </FieldLabel>
+                </div>
+                {isPartialPayment && !promissoryNoteOnFile && (
+                  <FieldError className="mt-1">
+                    A promissory note on file is required for partial payments.
+                  </FieldError>
+                )}
+              </Field>
+            )}
           </FieldGroup>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={paymentMutation.isPending}>
               Cancel
@@ -1470,7 +1565,7 @@ export function AccountingPaymentWorkspace() {
             </Button>
             <Button
               type="button"
-              disabled={confirmDisabled || amountBelowMinimum}
+              disabled={confirmDisabled || amountBelowMinimum || quotePending}
               onClick={() => void confirmPayment()}
             >
               {paymentMutation.isPending

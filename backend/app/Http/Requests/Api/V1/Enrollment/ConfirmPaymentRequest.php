@@ -7,6 +7,7 @@ use App\Models\Enrollment;
 use App\Models\Payment;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Payment confirmation remains optional in shape, but an explicitly supplied
@@ -19,6 +20,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * ordering: a repeat request against an enrollment that already has a
  * `Payment` row is always allowed through, even though the enrollment's
  * status has since moved on to `enrolled`.
+ *
+ * A `payment_type` of `full` carries the `quoted_amount` and no `amount`; `installment` carries
+ * an `amount` (ADR 0046).
  */
 final class ConfirmPaymentRequest extends FormRequest
 {
@@ -36,6 +40,10 @@ final class ConfirmPaymentRequest extends FormRequest
             'external_reference' => ['sometimes', 'nullable', 'string'],
             'amount' => ['sometimes', 'nullable', 'numeric', 'min:1000', 'max:99999999.99'],
             'promissory_note_on_file' => ['sometimes', 'boolean'],
+            // ADR 0046. Absent keeps today's behavior exactly (no discount).
+            'payment_type' => ['sometimes', 'string', Rule::in(['full', 'installment'])],
+            // A plain decimal with at most two places: "1e3" or "945.005" would break (or be truncated by) bcmath.
+            'quoted_amount' => ['sometimes', 'nullable', 'numeric', 'regex:/^\d+(\.\d{1,2})?$/', 'min:0', 'max:99999999.99'],
         ];
     }
 
@@ -62,6 +70,21 @@ final class ConfirmPaymentRequest extends FormRequest
             $amount = $this->input('amount');
             $promissoryNoteOnFile = (bool) $this->input('promissory_note_on_file', false);
             $totalDue = $enrollment->assessment?->total_amount;
+            $paymentType = $this->input('payment_type');
+
+            if ($paymentType === 'full') {
+                if ($amount !== null) {
+                    $validator->errors()->add('amount', 'Do not send an amount with a full payment; it collects the quoted net.');
+                }
+
+                if ($this->input('quoted_amount') === null) {
+                    $validator->errors()->add('quoted_amount', 'Send the net amount the Cashier was shown.');
+                }
+            }
+
+            if ($paymentType === 'installment' && $amount === null) {
+                $validator->errors()->add('amount', 'Enter the amount received for an installment.');
+            }
 
             if ($amount !== null && $totalDue !== null && bccomp((string) $amount, (string) $totalDue, 2) === -1 && ! $promissoryNoteOnFile) {
                 $validator->errors()->add(

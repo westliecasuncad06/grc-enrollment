@@ -31,9 +31,15 @@ final class BuildCorSnapshot
             $items->filter(fn ($item): bool => $item->category === AssessmentItemCategory::Miscellaneous),
         );
         // ADR 0025: a scholarship is a negative line, so tuition + other fees +
-        // this always add up to the grand total. Empty when there is none.
+        // the two discount sums always add up to the grand total. Empty when there is none.
         $scholarshipDiscount = array_values($items
             ->filter(fn ($item): bool => $item->category === AssessmentItemCategory::ScholarshipDiscount)
+            ->map(fn ($item): array => $this->feeItem($item))
+            ->all());
+        // ADR 0046: the full-payment discount is a second negative line, written at payment
+        // confirmation. Empty when there is none.
+        $fullPaymentDiscount = array_values($items
+            ->filter(fn ($item): bool => $item->category === AssessmentItemCategory::FullPaymentDiscount)
             ->map(fn ($item): array => $this->feeItem($item))
             ->all());
 
@@ -109,6 +115,8 @@ final class BuildCorSnapshot
                 'total_other_fees' => $this->sum($otherFees),
                 'scholarship_discount' => $scholarshipDiscount,
                 'total_scholarship_discount' => $this->sum($scholarshipDiscount),
+                'full_payment_discount' => $fullPaymentDiscount,
+                'total_full_payment_discount' => $this->sum($fullPaymentDiscount),
                 'grand_total' => $grandTotal,
                 'initial_payment' => $initialPayment,
                 'additional_payments' => $additionalPayments,

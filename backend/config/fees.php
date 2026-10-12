@@ -29,6 +29,13 @@ return [
     'tuition_per_unit' => env('FEES_TUITION_PER_UNIT', '200.00'),
 
     /**
+     * ADR 0046: the starting full-payment discount, used only when the
+     * `payment_discount_settings` row does not exist yet. After that, the percentage the
+     * Registrar Head saved is what counts. One decimal place at most.
+     */
+    'full_payment_discount_percentage' => env('FEES_FULL_PAYMENT_DISCOUNT_PERCENTAGE', '10.0'),
+
+    /**
      * `program_codes` means the fee applies only to that program; omitted
      * means it applies to every student. Computer Lab Fee 2 is explicitly
      * labelled BSIT in the approved reference, so it must not be charged to

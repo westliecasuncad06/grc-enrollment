@@ -3709,6 +3709,13 @@ paths:
         deterministic string and `storage_path` stays null; FR-FIN-010's
         print/download is served by the Student module rendering the
         structured response as a print-stylesheet page.
+
+        Full-payment discount (ADR 0046): with `payment_type: full` and the `quoted_amount`
+        the Cashier was shown (`GET /enrollments/{enrollment}/payment-quote`), the discount line
+        is written in the same transaction and the payment collects the net. If the server's
+        figure no longer equals `quoted_amount`, the request is refused with 422 on
+        `quoted_amount` and nothing is written. An installment, and a request with no
+        `payment_type`, carry no discount and no extra fee.
       security:
         - bearerAuth: []
       tags:
@@ -3766,6 +3773,143 @@ paths:
           description: >
             The submitted data is invalid, or the enrollment is not
             currently `pending_payment` and has no existing payment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/enrollments/{enrollment}/payment-quote:
+    get:
+      operationId: getEnrollmentPaymentQuote
+      summary: Quote what paying in full would collect
+      description: >
+        Accounting Staff only (ADR 0046). For an enrollment that is `pending_payment` and has an
+        assessment: the amount due before any full-payment discount (`total_amount`) and what a
+        full payment collects. `net_total` is always what a full payment collects, discounted
+        when `applies` is true. When no discount applies, `percentage` and `discount_amount` are
+        null and `reason` is one of `off`, `scheduled`, `expired`, `scholar`. Writes nothing.
+        Refused (422, error key `enrollment`) for any other enrollment state or an enrollment
+        with no assessment.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: enrollment
+          in: path
+          required: true
+          description: Enrollment ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The quote.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentQuoteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No enrollment exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The enrollment is not pending payment or has no assessment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/payment-discount-settings:
+    get:
+      operationId: getPaymentDiscountSettings
+      summary: Read the full-payment discount setting
+      description: >
+        Registrar Head and Accounting Staff (ADR 0046). The one setting row, created at the
+        configured default (10.0%) on first read; the response is `200` even when this read
+        created the row.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The setting.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentDiscountSettingResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      operationId: putPaymentDiscountSettings
+      summary: Change the full-payment discount percentage and validity
+      description: >
+        Registrar Head only (ADR 0046). `percentage` is 0 to 100 with at most one decimal; 0 turns
+        the discount off. `valid_from` and `valid_until` are inclusive `Y-m-d` dates in the school's
+        calendar (Asia/Manila); both keys must be sent and `null` clears a date. `valid_until`
+        cannot be before `valid_from`. Audited as `payment_discount.updated`; a save that changes
+        nothing writes no audit row. Existing assessments, payments and CORs are never changed.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePaymentDiscountSettingRequest"
+      responses:
+        "200":
+          description: The saved setting.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentDiscountSettingResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Invalid percentage or dates.
           content:
             application/json:
               schema:
@@ -9130,18 +9274,26 @@ components:
                     enum:
                       - tuition
                       - miscellaneous
+                      - scholarship_discount
+                      - full_payment_discount
+                    description: >
+                      `scholarship_discount` (ADR 0025) and `full_payment_discount`
+                      (ADR 0046) are discount lines with a negative `amount`.
                   category_label:
                     type: string
                   label:
                     type: string
                   quantity:
                     type: ["string", "null"]
-                    description: Units, for the tuition line only.
+                    description: >
+                      Units, for the tuition line; on a discount line the
+                      percentage instead (for example `10.0`). Null otherwise.
                   unit_amount:
                     type: ["string", "null"]
-                    description: Per-unit rate, for the tuition line only.
+                    description: Per-unit rate, for the tuition line only (null on a discount line).
                   amount:
                     type: ["string", "null"]
+                    description: Decimal string; negative on a discount line.
     StoreEnrollmentRequest:
       type: object
       additionalProperties: false
@@ -10260,6 +10412,115 @@ components:
             Exact decimal, matching the `payments.amount` column's own
             `decimal(10,2)` capacity — PRD §17 leaves whether this field is
             required, and any currency/rounding rule, unconfirmed.
+        payment_type:
+          type: string
+          enum: ["full", "installment"]
+          description: >
+            ADR 0046. `full` takes the full-payment discount when one applies and requires
+            `quoted_amount` and no `amount`. `installment` requires `amount` and takes no
+            discount and no extra fee. Absent behaves as before.
+        quoted_amount:
+          type: ["number", "string", "null"]
+          minimum: 0
+          maximum: 99999999.99
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: >
+            With `full`: the net the Cashier was shown (`net_total` of the payment quote), as a
+            decimal string or number with at most two decimals (no exponent form). If the
+            server's figure differs, 422 on `quoted_amount` and nothing is written.
+    PaymentQuoteResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [type, total_amount, full_payment]
+          properties:
+            type:
+              type: string
+              enum: [payment_quote]
+            total_amount:
+              type: string
+              description: Decimal string; the amount due before any full-payment discount.
+            full_payment:
+              type: object
+              additionalProperties: false
+              required: [applies, percentage, discount_amount, net_total, reason]
+              properties:
+                applies:
+                  type: boolean
+                  description: True when a discount is taken from a full payment (`reason` is then null).
+                percentage:
+                  type: ["string", "null"]
+                  description: Decimal string with one decimal, e.g. `10.0`; null when no discount applies.
+                discount_amount:
+                  type: ["string", "null"]
+                  description: Decimal string; null when no discount applies.
+                net_total:
+                  type: string
+                  description: Decimal string; always what a full payment collects.
+                reason:
+                  type: ["string", "null"]
+                  enum: [off, scheduled, expired, scholar, null]
+                  description: >
+                    Why no discount applies: `off` (percentage 0), `scheduled` (before `valid_from`),
+                    `expired` (after `valid_until`) or `scholar` (the assessment already has a
+                    scholarship line). Null when one applies.
+    PaymentDiscountSettingResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [type, percentage, valid_from, valid_until, status, updated_by, updated_at]
+          properties:
+            type:
+              type: string
+              enum: [payment_discount_setting]
+            percentage:
+              type: string
+              description: Decimal string with one decimal, e.g. `10.0`.
+            valid_from:
+              type: ["string", "null"]
+              format: date
+              description: Inclusive first day (Asia/Manila); null is open-ended.
+            valid_until:
+              type: ["string", "null"]
+              format: date
+              description: Inclusive last day (Asia/Manila); null is open-ended.
+            status:
+              type: string
+              enum: [active, scheduled, expired, off]
+              description: Where the setting stands today in the school's calendar.
+            updated_by:
+              type: ["string", "null"]
+              description: Name of the user who last saved it; null before any save.
+            updated_at:
+              type: ["string", "null"]
+              format: date-time
+    UpdatePaymentDiscountSettingRequest:
+      type: object
+      additionalProperties: false
+      required: [percentage, valid_from, valid_until]
+      properties:
+        percentage:
+          type: number
+          minimum: 0
+          maximum: 100
+          multipleOf: 0.1
+          description: At most one decimal place; 0 turns the discount off.
+        valid_from:
+          type: ["string", "null"]
+          format: date
+          description: Must be sent; null clears it.
+        valid_until:
+          type: ["string", "null"]
+          format: date
+          description: Must be sent; null clears it. Cannot be before `valid_from`.
     PaymentConfirmationResponse:
       type: object
       additionalProperties: false
@@ -11087,6 +11348,7 @@ components:
         - enrollment
         - block
         - estimated_total
+        - full_payment
       properties:
         type:
           type: string
@@ -11178,6 +11440,36 @@ components:
         estimated_total:
           type: [string, 'null']
           description: Decimal string; what the enrollment would be assessed to owe. Null when `block` is null.
+        full_payment:
+          type: object
+          additionalProperties: false
+          required: [applies, percentage, discount_amount, net_total, reason]
+          description: >
+            ADR 0046: what paying in full would collect, estimated like `estimated_total` (no
+            assessment exists yet). All keys are always present. `net_total` is the amount a full
+            payment collects, discounted when `applies` is true.
+          properties:
+            applies:
+              type: boolean
+              description: True when a discount is taken from a full payment (`reason` is then null).
+            percentage:
+              type: ["string", "null"]
+              description: Decimal string with one decimal, e.g. `10.0`; null when no discount applies.
+            discount_amount:
+              type: ["string", "null"]
+              description: Decimal string; null when no discount applies.
+            net_total:
+              type: ["string", "null"]
+              description: Decimal string; null only when `reason` is `no_estimate`.
+            reason:
+              type: ["string", "null"]
+              enum: [off, scheduled, expired, no_estimate, null]
+              description: >
+                Why no discount applies: `off` (percentage 0), `scheduled` (before `valid_from`),
+                `expired` (after `valid_until`) or `no_estimate` (`estimated_total` is null, so there
+                is nothing to estimate from; every amount is then null and a full payment is
+                refused). Null when one applies. `scholar` cannot occur: no assessment
+                exists to hold a scholarship line.
     ConfirmFreshmanPaymentRequest:
       type: object
       additionalProperties: false
@@ -11195,6 +11487,15 @@ components:
           type: [string, 'null']
           maxLength: 255
           description: The Cashier's receipt reference.
+        payment_type:
+          type: string
+          enum: [full, installment]
+          description: >
+            ADR 0046. With `full`, `amount` must equal the previewed `full_payment.net_total`
+            (422 on `amount` otherwise, and 422 on `payment_type` when no estimate exists), the
+            money is held as credit like any first payment, and the quoted percentage is frozen
+            on the student profile for the Registrar's approval to apply. `installment`, or the
+            field absent, is the ordinary first payment with no discount.
     FreshmanPaymentResponse:
       type: object
       additionalProperties: false

@@ -129,6 +129,7 @@ export function CertificateOfRegistrationDocument({
   const { student, institution, term, fees } = snapshot
   const displayedOtherFees = otherFeesForDisplay(fees.other_fees)
   const scholarshipDiscount = fees.scholarship_discount ?? []
+  const fullPaymentDiscount = fees.full_payment_discount ?? []
 
   return (
     <article
@@ -239,6 +240,14 @@ export function CertificateOfRegistrationDocument({
               aria-label="Scholarship discount"
             >
               <FeeRows items={scholarshipDiscount} currency={fees.currency} />
+            </div>
+          )}
+          {fullPaymentDiscount.length > 0 && (
+            <div
+              className="cor-document__fee-total"
+              aria-label="Full-payment discount"
+            >
+              <FeeRows items={fullPaymentDiscount} currency={fees.currency} />
             </div>
           )}
           <div className="cor-document__grand-total">

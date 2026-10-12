@@ -70,7 +70,17 @@ describe("freshman-service", () => {
       new Response(JSON.stringify({ data: preview })),
     )
 
-    await expect(getFreshmanPaymentPreview(12)).resolves.toEqual(preview)
+    // This fixture predates `full_payment`, so the parsed preview carries the "no discount" default.
+    await expect(getFreshmanPaymentPreview(12)).resolves.toEqual({
+      ...preview,
+      full_payment: {
+        applies: false,
+        percentage: null,
+        discount_amount: null,
+        net_total: null,
+        reason: null,
+      },
+    })
 
     const [url] = fetchMock.mock.calls[0] ?? []
     expect(urlOf(url)).toContain(
@@ -193,5 +203,49 @@ describe("freshman-service", () => {
     const [url] = fetchMock.mock.calls[0] ?? []
     expect(urlOf(url)).toContain("status=enrolled")
     expect(urlOf(url)).toContain("search=Juan")
+  })
+
+  it("reads the full-payment quote from the preview, and defaults it for an older response", async () => {
+    // A preview with no `full_payment` key (an older server) still parses and offers no discount.
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: preview })),
+    )
+    const older = await getFreshmanPaymentPreview(12)
+    expect(older.full_payment.applies).toBe(false)
+    expect(older.full_payment.net_total).toBeNull()
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            ...preview,
+            full_payment: {
+              applies: true,
+              percentage: "10.0",
+              discount_amount: "920.00",
+              net_total: "8280.00",
+              reason: null,
+            },
+          },
+        }),
+      ),
+    )
+    const current = await getFreshmanPaymentPreview(12)
+    expect(current.full_payment.net_total).toBe("8280.00")
+  })
+
+  it("sends payment_type with a full payment", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 500 }))
+
+    await confirmFreshmanPayment(12, {
+      amount: "8280.00",
+      payment_type: "full",
+    }).catch(() => undefined)
+
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(request.body as string)).toEqual({
+      amount: "8280.00",
+      payment_type: "full",
+    })
   })
 })

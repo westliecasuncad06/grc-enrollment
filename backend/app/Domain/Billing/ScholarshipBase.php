@@ -7,7 +7,7 @@ use App\Models\AssessmentItem;
 /**
  * The amount a scholarship percentage is taken from (ADR 0025): the sum of an
  * assessment's tuition and miscellaneous lines, i.e. every line except an
- * existing scholarship line. Using this base — never the already discounted
+ * existing discount line (scholarship or full-payment). Using this base — never the already discounted
  * total — is what keeps re-applying a tier from compounding.
  */
 final class ScholarshipBase
@@ -21,7 +21,7 @@ final class ScholarshipBase
         $base = '0.00';
 
         foreach ($items as $item) {
-            if ($item->category === AssessmentItemCategory::ScholarshipDiscount) {
+            if ($item->category->isDiscount()) {
                 continue;
             }
 

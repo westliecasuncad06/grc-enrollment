@@ -96,7 +96,12 @@ const queueTicketSchema = z
 const assessmentItemSchema = z
   .object({
     id: z.number().int().positive().optional(),
-    category: z.enum(["tuition", "miscellaneous", "scholarship_discount"]),
+    category: z.enum([
+      "tuition",
+      "miscellaneous",
+      "scholarship_discount",
+      "full_payment_discount",
+    ]),
     category_label: z.string().min(1),
     label: z.string().min(1),
     quantity: z.string().nullable(),
@@ -296,8 +301,37 @@ export const confirmPaymentInputSchema = z
     external_reference: z.string().optional(),
     amount: z.number().min(1000).optional(),
     promissory_note_on_file: z.boolean().optional(),
+    // ADR 0046: `full` carries the net the Cashier was shown and no amount.
+    payment_type: z.enum(["full", "installment"]).optional(),
+    quoted_amount: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/)
+      .optional(),
   })
   .strict()
+
+/** What a full payment collects for an enrollment right now (ADR 0046). */
+export const paymentQuoteSchema = z
+  .object({
+    type: z.literal("payment_quote"),
+    total_amount: z.string().min(1),
+    full_payment: z
+      .object({
+        applies: z.boolean(),
+        percentage: z.string().nullable(),
+        discount_amount: z.string().nullable(),
+        net_total: z.string().min(1),
+        reason: z.enum(["off", "scheduled", "expired", "scholar"]).nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const paymentQuoteEnvelopeSchema = z
+  .object({ data: paymentQuoteSchema })
+  .strict()
+
+export type PaymentQuote = z.infer<typeof paymentQuoteSchema>
 
 // ADR 0025: the three scholarship tiers the Cashier can assign at payment time.
 export const scholarshipPercentageValues = [100, 40, 20] as const

@@ -66,6 +66,26 @@ export const freshmanPaymentPreviewSchema = z
       .strict()
       .nullable(),
     estimated_total: z.string().min(1).nullable(),
+    // ADR 0046: what paying in full collects. Defaults so a response from a server that predates it
+    // still parses and simply offers no discount.
+    full_payment: z
+      .object({
+        applies: z.boolean(),
+        percentage: z.string().nullable(),
+        discount_amount: z.string().nullable(),
+        net_total: z.string().nullable(),
+        reason: z
+          .enum(["off", "scheduled", "expired", "scholar", "no_estimate"])
+          .nullable(),
+      })
+      .strict()
+      .default({
+        applies: false,
+        percentage: null,
+        discount_amount: null,
+        net_total: null,
+        reason: null,
+      }),
   })
   .strict()
 
@@ -80,6 +100,8 @@ export const confirmFreshmanPaymentInputSchema = z
       .trim()
       .regex(/^\d+(\.\d{1,2})?$/, "Enter the amount received, e.g. 1000.00."),
     external_reference: z.string().trim().max(255).optional(),
+    // ADR 0046: `full` pays the discounted estimate; `amount` must be the net the Cashier was shown.
+    payment_type: z.enum(["full", "installment"]).optional(),
   })
   .strict()
 

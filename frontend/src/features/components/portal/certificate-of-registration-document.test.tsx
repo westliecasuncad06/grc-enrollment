@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
 import { CertificateOfRegistrationDocument } from "@/features/components/portal/certificate-of-registration-document"
@@ -120,6 +120,48 @@ describe("CertificateOfRegistrationDocument", () => {
     expect(screen.queryByText(/Payment Status|PAID IN FULL/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Promissory/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/OR-EP000001/)).not.toBeInTheDocument()
+  })
+
+  it("lists the full-payment discount above the grand total, and omits it when there is none", () => {
+    const withDiscount = {
+      ...cor,
+      snapshot: {
+        ...cor.snapshot,
+        fees: {
+          ...cor.snapshot.fees,
+          full_payment_discount: [
+            {
+              label: "Full-payment discount (10%)",
+              quantity: "10.0",
+              unit_amount: null,
+              amount: "-290.00",
+            },
+          ],
+          total_full_payment_discount: "-290.00",
+          grand_total: "2610.00",
+        },
+      },
+    } satisfies CertificateOfRegistration & { snapshot: CorSnapshot }
+    const { rerender } = render(
+      <CertificateOfRegistrationDocument cor={withDiscount} />,
+    )
+
+    const region = screen.getByLabelText("Full-payment discount")
+    expect(
+      within(region).getByText("Full-payment discount (10%)"),
+    ).toBeInTheDocument()
+    expect(within(region).getByText(/290\.00/)).toBeInTheDocument()
+    // The discount line prints above the grand total, never after it.
+    expect(
+      region.compareDocumentPosition(screen.getByText("GRAND TOTAL")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.getByText("₱2,610.00")).toBeInTheDocument()
+
+    rerender(<CertificateOfRegistrationDocument cor={cor} />)
+    expect(
+      screen.queryByLabelText("Full-payment discount"),
+    ).not.toBeInTheDocument()
   })
 
   it("shows the Generated timestamp in Asia/Manila time regardless of the viewer's own timezone", () => {

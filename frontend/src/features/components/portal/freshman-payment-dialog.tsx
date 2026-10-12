@@ -21,6 +21,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/features/components/ui/field"
+import { PaymentTypeChoice } from "@/features/components/portal/payment-type-choice"
 import { Input } from "@/features/components/ui/input"
 import { Skeleton } from "@/features/components/ui/skeleton"
 import {
@@ -66,15 +67,25 @@ export function FreshmanPaymentDialog({
   const [amountInput, setAmountInput] = useState<string | null>(null)
   const [reference, setReference] = useState("")
   const [error, setError] = useState("")
+  const [mode, setMode] = useState<"full" | "installment">("full")
 
   const minimum = preview.data?.minimum_amount ?? "1000.00"
+  const alreadyConfirmed = preview.data?.already_confirmed === true
+  // ADR 0046: with a discount on offer the Cashier chooses Pay in full (the default, at the
+  // discounted estimate, never typed) or Installment (today's minimum-payment flow). Once the
+  // first payment is confirmed there is nothing to choose: confirming again changes nothing.
+  const fullQuote = preview.data?.full_payment ?? null
+  const discountOffered =
+    !alreadyConfirmed && fullQuote?.applies === true && fullQuote.net_total !== null
+  const payInFull = discountOffered && mode === "full"
   // Pre-filled with the minimum: the Cashier types the amount actually received.
-  const amount = amountInput ?? minimum
+  const amount =
+    payInFull && fullQuote?.net_total ? fullQuote.net_total : (amountInput ?? minimum)
   const amountIsNumber = amount.trim() !== "" && Number.isFinite(Number(amount))
-  const belowMinimum = amountIsNumber && Number(amount) < Number(minimum)
+  const belowMinimum =
+    !payInFull && amountIsNumber && Number(amount) < Number(minimum)
   const invalidAmount = !amountIsNumber || belowMinimum
   const busy = mutation.isPending
-  const alreadyConfirmed = preview.data?.already_confirmed === true
   // A transferee also pays first (ADR 0043, amended 2026-10-05): they already have an account and
   // chose their own subjects, so the dialog shows those instead of "the first section with seats".
   const isTransferee =
@@ -89,6 +100,7 @@ export function FreshmanPaymentDialog({
         studentId: ticket.student_id,
         input: {
           amount: Number(amount).toFixed(2),
+          ...(payInFull ? { payment_type: "full" as const } : {}),
           ...(reference.trim() ? { external_reference: reference.trim() } : {}),
         },
       })
@@ -100,6 +112,8 @@ export function FreshmanPaymentDialog({
           "The payment could not be confirmed. Check the connection and try again.",
         ),
       )
+      // A refused quote means the amount due changed: show the Cashier the refreshed one.
+      void preview.refetch()
     }
   }
 
@@ -217,6 +231,14 @@ export function FreshmanPaymentDialog({
         )}
 
         <FieldGroup>
+          {discountOffered && fullQuote && (
+            <PaymentTypeChoice
+              percentage={fullQuote.percentage}
+              payInFull={payInFull}
+              disabled={busy}
+              onChange={setMode}
+            />
+          )}
           <Field data-invalid={invalidAmount}>
             <FieldLabel htmlFor="freshman-payment-amount">
               Amount received
@@ -226,12 +248,23 @@ export function FreshmanPaymentDialog({
               inputMode="decimal"
               value={amount}
               aria-invalid={invalidAmount}
+              readOnly={payInFull}
               disabled={busy}
               onChange={(event) => setAmountInput(event.target.value)}
             />
             <FieldDescription>
-              The first payment must be at least {formatPhp(minimum)}. The
-              balance stays on the student&apos;s account.
+              {payInFull && fullQuote?.discount_amount ? (
+                <>
+                  Full-payment discount ({Number(fullQuote.percentage)}%): −
+                  {formatPhp(fullQuote.discount_amount)} off the estimated
+                  assessment. Pay in full collects the net.
+                </>
+              ) : (
+                <>
+                  The first payment must be at least {formatPhp(minimum)}. The
+                  balance stays on the student&apos;s account.
+                </>
+              )}
             </FieldDescription>
             {invalidAmount && (
               <FieldError>

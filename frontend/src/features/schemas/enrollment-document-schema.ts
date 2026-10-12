@@ -112,6 +112,10 @@ export const corSnapshotSchema = z
         // have neither field.
         scholarship_discount: z.array(corMoneyItemSchema).optional(),
         total_scholarship_discount: z.string().optional(),
+        // ADR 0046: the full-payment discount is a second negative line; snapshots made before it
+        // have neither field.
+        full_payment_discount: z.array(corMoneyItemSchema).optional(),
+        total_full_payment_discount: z.string().optional(),
         grand_total: z.string(),
         payment_amount: z.union([z.string(), z.number()]).transform((val) => String(val)),
         amount_paid: z.union([z.string(), z.number()]).transform((val) => String(val)).optional(),

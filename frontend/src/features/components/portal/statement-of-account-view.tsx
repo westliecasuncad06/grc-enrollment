@@ -122,7 +122,9 @@ function TermLedger({ term }: { term: StatementTerm }) {
         </TableCaption>
         <TableBody>
           {term.lines.map((line, index) => {
-            const discount = line.category === "scholarship_discount"
+            const discount =
+              line.category === "scholarship_discount" ||
+              line.category === "full_payment_discount"
 
             return (
               <TableRow key={`${line.category}-${index}`}>

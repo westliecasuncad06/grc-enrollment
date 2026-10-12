@@ -477,6 +477,8 @@ This process handles grade encoding, Registrar decisions, transferee credits, dr
 - **FR-FIN-008:** Generate the Digital COM after payment confirmation.
 - **FR-FIN-009:** Make confirmation and COM generation idempotent.
 - **FR-FIN-010:** Allow the student to view and print/download the authorized COM.
+- **FR-FIN-011:** Offer a full-payment discount (10% of tuition plus miscellaneous fees by default) when the Cashier collects the whole net assessment in one payment. An installment carries no discount and no extra fee, and the discount does not stack with a scholarship (ADR 0046).
+- **FR-FIN-012:** Let the Registrar Head set the discount percentage and its validity window (valid-from and valid-until dates). Every change is audited and never alters an issued COR (ADR 0046).
 
 #### Acceptance Criteria
 
@@ -1890,6 +1892,7 @@ Do not hardcode these values until confirmed:
 - Queue-ticket reset, priority, active serving-number policy, and the exact Accounting Staff authority for recording Payment Confirmation.
 - Registrar approval requirements for regular and irregular students.
 - Payment confirmation fields and supporting reference requirements.
+- Refund or clawback of the full-payment discount when a fully paid student withdraws or is voided: **decided by the owner on 2026-10-12.** Voiding or withdrawing ends the enrollment process only; the payment is not refunded and the discount stays on the paid assessment, so a student who was voided after paying does not go back to the Cashier. GRC has no refund process (ADR 0046).
 - Whether Certificate of Registration (COR) and Certificate of Matriculation (COM) are distinct artifacts or synonymous terms; if distinct, confirm each audience, trigger, fields, numbering, signatures, and retention.
 - Official COM format, document numbering, signatures, and retention.
 - Honors cutoff, disqualifying grades, and tie handling.

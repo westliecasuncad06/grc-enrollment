@@ -2,6 +2,7 @@
 
 namespace App\Domain\Enrollment;
 
+use App\Domain\Billing\FullPaymentQuote;
 use App\Models\Enrollment;
 use App\Models\StudentProfile;
 
@@ -23,5 +24,6 @@ final readonly class FreshmanPaymentPreview
         public ?EnrollmentBlock $block,
         public ?string $estimatedTotal,
         public ?Enrollment $enrollment = null,
+        public ?FullPaymentQuote $fullPayment = null,
     ) {}
 }

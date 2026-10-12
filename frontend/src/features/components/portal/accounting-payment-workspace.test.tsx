@@ -145,6 +145,31 @@ const studentAccount = {
   transactions: [],
 } as const
 
+/** What the API says when no full-payment discount applies (the quote's default in these tests). */
+const noDiscountQuote = {
+  type: "payment_quote",
+  total_amount: "5775.00",
+  full_payment: {
+    applies: false,
+    percentage: null,
+    discount_amount: null,
+    net_total: "5775.00",
+    reason: "off",
+  },
+} as const
+
+const discountQuote = {
+  type: "payment_quote",
+  total_amount: "5775.00",
+  full_payment: {
+    applies: true,
+    percentage: "10.0",
+    discount_amount: "577.50",
+    net_total: "5197.50",
+    reason: null,
+  },
+} as const
+
 const cashierPaymentCandidate = {
   type: "cashier_payment_candidate",
   student_id: 5,
@@ -202,6 +227,8 @@ function mockRoutes(
     tickets?: readonly unknown[]
     candidate?: typeof cashierPaymentCandidate | typeof cashierPaymentCandidateNoTicket
     cycle?: typeof openCycle | typeof cutOffCycle | null
+    /** The quote's `data`, or the string "fail" for a response that cannot be read. */
+    quote?: unknown
   } = {},
 ) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
@@ -243,6 +270,15 @@ function mockRoutes(
     if (target.includes("/students/4/account"))
       return Promise.resolve(
         new Response(JSON.stringify({ data: studentAccount })),
+      )
+    if (target.includes("/enrollments/9/payment-quote"))
+      return Promise.resolve(
+        overrides.quote === "fail"
+          ? new Response(
+              JSON.stringify({ error: { code: "NOT_FOUND", message: "Not found.", request_id: "r1" } }),
+              { status: 404 },
+            )
+          : new Response(JSON.stringify({ data: overrides.quote ?? noDiscountQuote })),
       )
     if (target.includes("/enrollments/9/assessment") && init?.method === "PATCH")
       return Promise.resolve(
@@ -708,6 +744,93 @@ describe("AccountingPaymentWorkspace", () => {
         within(dialog).getByRole("button", { name: "Confirm first payment" }),
       ).toBeDisabled()
       expect(within(dialog).getByText(/Enter an amount of at least/)).toBeInTheDocument()
+    })
+
+    const discountedPreview = {
+      ...previewData,
+      full_payment: {
+        applies: true,
+        percentage: "10.0",
+        discount_amount: "920.00",
+        net_total: "8280.00",
+        reason: null,
+      },
+    } as const
+
+    it("offers Pay in full at the discounted estimate and sends it as a full payment", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(mockFreshmanRoutes({ preview: discountedPreview }))
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+
+      const choice = await within(dialog).findByRole("group", { name: "Payment type" })
+      expect(within(choice).getByRole("button", { name: /Pay in full/ })).toHaveAttribute("aria-pressed", "true")
+      expect(within(dialog).getByLabelText("Amount received")).toHaveValue("8280.00")
+      expect(within(dialog).getByLabelText("Amount received")).toHaveAttribute("readonly")
+      expect(within(dialog).getByText(/Full-payment discount \(10%\)/)).toBeInTheDocument()
+
+      await user.click(within(dialog).getByRole("button", { name: "Confirm first payment" }))
+
+      await screen.findByRole("status")
+      const post = fetchMock.mock.calls.find(
+        ([input, init]) => url(input).endsWith("/freshman-payment") && init?.method === "POST",
+      )
+      expect(JSON.parse(post?.[1]?.body as string)).toEqual({
+        amount: "8280.00",
+        payment_type: "full",
+      })
+    })
+
+    it("keeps the minimum-payment rule for an installment and sends no payment type", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(mockFreshmanRoutes({ preview: discountedPreview }))
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+
+      await user.click(await within(dialog).findByRole("button", { name: /Installment/ }))
+      expect(within(dialog).getByLabelText("Amount received")).toHaveValue("1000.00")
+      expect(within(dialog).getByLabelText("Amount received")).not.toHaveAttribute("readonly")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm first payment" }))
+
+      await screen.findByRole("status")
+      const post = fetchMock.mock.calls.find(
+        ([input, init]) => url(input).endsWith("/freshman-payment") && init?.method === "POST",
+      )
+      expect(JSON.parse(post?.[1]?.body as string)).toEqual({ amount: "1000.00" })
+    })
+
+    it("shows no payment-type choice when there is nothing to estimate yet", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(
+        mockFreshmanRoutes({
+          preview: {
+            ...previewData,
+            can_enroll: false,
+            block: null,
+            estimated_total: null,
+            full_payment: { applies: false, percentage: null, discount_amount: null, net_total: null, reason: "no_estimate" },
+          },
+        }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+
+      await within(dialog).findByLabelText("Amount received")
+      expect(within(dialog).queryByRole("group", { name: "Payment type" })).not.toBeInTheDocument()
+    })
+
+    it("shows no payment-type choice once the first payment was already confirmed", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(
+        mockFreshmanRoutes({ preview: { ...discountedPreview, already_confirmed: true } }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+      const dialog = await openFreshmanDialog(user)
+
+      // The preview has loaded once the "already confirmed" notice is on screen.
+      expect(await within(dialog).findByText(/already confirmed/)).toBeInTheDocument()
+      expect(within(dialog).queryByRole("group", { name: "Payment type" })).not.toBeInTheDocument()
+      expect(within(dialog).getByLabelText("Amount received")).not.toHaveAttribute("readonly")
     })
 
     it("keeps the dialog open and shows the server's reason when the confirmation is refused", async () => {
@@ -1661,5 +1784,179 @@ describe("AccountingPaymentWorkspace", () => {
 
     expect(await within(dialog).findByText(/cannot be changed after payment confirmation/)).toBeInTheDocument()
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
+  })
+
+  describe("full-payment discount (ADR 0046)", () => {
+    let paymentBody: unknown
+
+    function routesWith(quote: unknown) {
+      return (input: RequestInfo | URL, init?: RequestInit) => {
+        if (url(input).includes("/enrollments/9/payment") && !url(input).includes("quote") && init?.method === "POST") {
+          paymentBody = JSON.parse(init.body as string)
+        }
+        return mockRoutes({ quote })(input, init)
+      }
+    }
+
+    beforeEach(() => {
+      paymentBody = undefined
+    })
+
+    it("offers Pay in full and Installment when a discount applies, and pays the quoted net", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(routesWith(discountQuote))
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      await screen.findByText("Q001")
+      await continueAsRegularPayee(user)
+      const dialog = await screen.findByRole("alertdialog")
+
+      const choice = await within(dialog).findByRole("group", { name: "Payment type" })
+      expect(within(choice).getByRole("button", { name: /Pay in full/ })).toHaveAttribute("aria-pressed", "true")
+      expect(within(dialog).getByLabelText("Amount")).toHaveValue("5197.50")
+      expect(within(dialog).getByLabelText("Amount")).toHaveAttribute("readonly")
+      expect(within(dialog).getByText(/Full-payment discount \(10%\)/)).toBeInTheDocument()
+      expect(within(dialog).getByText("-₱577.50")).toBeInTheDocument()
+      // Paying in full is never a partial payment: no promissory note, no partial-payment warning.
+      expect(within(dialog).queryByLabelText("Promissory note on file")).not.toBeInTheDocument()
+      expect(within(dialog).queryByText(/Partial payment detected/)).not.toBeInTheDocument()
+
+      await user.click(within(dialog).getByRole("button", { name: "Confirm payment" }))
+
+      expect((await screen.findAllByText(/COR000009/)).length).toBeGreaterThan(0)
+      expect(paymentBody).toEqual({ payment_type: "full", quoted_amount: "5197.50" })
+    })
+
+    it("keeps today's amount, minimum and promissory note for an installment and sends no discount", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(routesWith(discountQuote))
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      await screen.findByText("Q001")
+      await continueAsRegularPayee(user)
+      const dialog = await screen.findByRole("alertdialog")
+      await user.click(await within(dialog).findByRole("button", { name: /Installment/ }))
+
+      const amount = within(dialog).getByLabelText("Amount")
+      expect(amount).not.toHaveAttribute("readonly")
+      expect(amount).toHaveValue("5775.00")
+      await user.clear(amount)
+      await user.type(amount, "1000")
+      await user.click(within(dialog).getByLabelText("Promissory note on file"))
+      await user.click(within(dialog).getByRole("button", { name: "Confirm payment" }))
+
+      expect((await screen.findAllByText(/COR000009/)).length).toBeGreaterThan(0)
+      expect(paymentBody).toEqual({ amount: 1000, promissory_note_on_file: true })
+    })
+
+    it("names the discounted assessment in the prior-balance note while paying in full", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(routesWith(discountQuote))
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      await screen.findByText("Q001")
+      await continueAsRegularPayee(user)
+      const dialog = await screen.findByRole("alertdialog")
+      const choice = await within(dialog).findByRole("group", { name: "Payment type" })
+
+      // The student owes a prior-term balance, so the note is shown; paying in full clears the NET.
+      const note = within(dialog).getByText(/This payment clears the current term assessment/)
+      expect(note).toHaveTextContent("current term assessment (₱5,197.50)")
+      expect(note).not.toHaveTextContent("₱5,775.00")
+
+      await user.click(within(choice).getByRole("button", { name: /Installment/ }))
+
+      expect(within(dialog).getByText(/This payment clears the current term assessment/)).toHaveTextContent(
+        "current term assessment (₱5,775.00)",
+      )
+    })
+
+    it("leaves the modal as it is and says so when no discount is active", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(
+        routesWith({
+          ...noDiscountQuote,
+          full_payment: { ...noDiscountQuote.full_payment, reason: "expired" },
+        }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      await screen.findByText("Q001")
+      await continueAsRegularPayee(user)
+      const dialog = await screen.findByRole("alertdialog")
+
+      expect(await within(dialog).findByText("No full-payment discount is active.")).toBeInTheDocument()
+      expect(within(dialog).queryByRole("group", { name: "Payment type" })).not.toBeInTheDocument()
+      expect(within(dialog).getByLabelText("Amount")).toHaveValue("5775.00")
+    })
+
+    it("says nothing about a discount for a scholar", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(
+        routesWith({
+          ...noDiscountQuote,
+          full_payment: { ...noDiscountQuote.full_payment, reason: "scholar" },
+        }),
+      )
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      await screen.findByText("Q001")
+      await continueAsRegularPayee(user)
+      const dialog = await screen.findByRole("alertdialog")
+
+      await within(dialog).findByLabelText("Amount")
+      expect(within(dialog).queryByText("No full-payment discount is active.")).not.toBeInTheDocument()
+      expect(within(dialog).queryByRole("group", { name: "Payment type" })).not.toBeInTheDocument()
+    })
+
+    it("still lets the Cashier take the payment when the quote cannot be read", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation(routesWith("fail"))
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      await screen.findByText("Q001")
+      await continueAsRegularPayee(user)
+      const dialog = await screen.findByRole("alertdialog")
+
+      expect(await within(dialog).findByText(/could not be checked/)).toBeInTheDocument()
+      await user.click(within(dialog).getByLabelText("Promissory note on file"))
+      await user.click(within(dialog).getByRole("button", { name: "Confirm payment" }))
+
+      expect((await screen.findAllByText(/COR000009/)).length).toBeGreaterThan(0)
+      expect(paymentBody).toEqual({ amount: 5775, promissory_note_on_file: true })
+    })
+
+    it("shows the new amount when the discount changed under the Cashier", async () => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation((input, init) => {
+        if (url(input).endsWith("/enrollments/9/payment") && init?.method === "POST") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: "VALIDATION_FAILED",
+                  message: "Validation failed.",
+                  errors: { quoted_amount: ["The amount due changed. Review the new amount and confirm again."] },
+                  request_id: "r1",
+                },
+              }),
+              { status: 422 },
+            ),
+          )
+        }
+        return mockRoutes({ quote: discountQuote })(input, init)
+      })
+      renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+      await screen.findByText("Q001")
+      await continueAsRegularPayee(user)
+      const dialog = await screen.findByRole("alertdialog")
+      await within(dialog).findByRole("group", { name: "Payment type" })
+      await user.click(within(dialog).getByRole("button", { name: "Confirm payment" }))
+
+      expect(await within(dialog).findByText(/The amount due changed/)).toBeInTheDocument()
+      // The dialog stays open so the Cashier can review the refreshed quote.
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument()
+    })
   })
 })

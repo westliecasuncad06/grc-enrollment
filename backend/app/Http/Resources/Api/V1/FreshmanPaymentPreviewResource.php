@@ -57,6 +57,15 @@ final class FreshmanPaymentPreviewResource extends JsonResource
                 ], $block->sections),
             ],
             'estimated_total' => $preview->estimatedTotal,
+            // ADR 0046: what paying in full collects. All keys are always present; with no
+            // estimate yet (`no_estimate`) the amounts are null and a full payment is refused.
+            'full_payment' => [
+                'applies' => $preview->fullPayment?->applies() ?? false,
+                'percentage' => $preview->fullPayment?->percentage,
+                'discount_amount' => $preview->fullPayment?->discountAmount,
+                'net_total' => $preview->fullPayment?->netTotal,
+                'reason' => $preview->fullPayment?->reason,
+            ],
         ];
     }
 }

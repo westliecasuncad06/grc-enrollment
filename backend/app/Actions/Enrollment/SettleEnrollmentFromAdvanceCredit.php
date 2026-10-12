@@ -2,9 +2,11 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Actions\Billing\ApplyFullPaymentDiscount;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\StudentType;
 use App\Models\AccountPayment;
+use App\Models\Assessment;
 use App\Models\Enrollment;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -24,10 +26,16 @@ use Illuminate\Support\Facades\DB;
  * `Payment` row (the idempotency anchor of `ConfirmPayment`) is created for PHP 0.00 so
  * nothing is counted twice. The Cashier who took the money is the one recorded as
  * confirming, not the Registrar who approved. Running it again finds no held credit.
+ *
+ * ADR 0046: a frozen full-payment percentage is applied to the assessment first, when the credit
+ * covers the discounted net.
  */
 final readonly class SettleEnrollmentFromAdvanceCredit
 {
-    public function __construct(private ConfirmPayment $confirmPayment) {}
+    public function __construct(
+        private ConfirmPayment $confirmPayment,
+        private ApplyFullPaymentDiscount $applyFullPaymentDiscount,
+    ) {}
 
     public function execute(Enrollment $enrollment, User $fallbackActor, AuditRequestContext $context): bool
     {
@@ -57,6 +65,20 @@ final readonly class SettleEnrollmentFromAdvanceCredit
             }
 
             $cashier = User::query()->find($held->first()->received_by) ?? $fallbackActor;
+
+            // ADR 0046: the percentage frozen when the Cashier took a full payment is applied to the
+            // real assessment now, only if the held credit covers the discounted net. It is used
+            // once either way (cleared below), so it can never apply to a later term.
+            $frozen = $student->full_payment_discount_percentage;
+            if ($frozen !== null) {
+                $assessment = Assessment::query()->where('enrollment_id', $enrollment->id)->lockForUpdate()->first();
+
+                if ($assessment instanceof Assessment) {
+                    $this->applyFullPaymentDiscount->forHeldCredit($assessment, $frozen, $total, $fallbackActor, $context);
+                }
+
+                $student->forceFill(['full_payment_discount_percentage' => null])->save();
+            }
 
             AccountPayment::query()->whereKey($held->modelKeys())->update(['enrollment_id' => $enrollment->id]);
 

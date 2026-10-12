@@ -215,6 +215,10 @@ const FeeSettingsWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/fee-settings-workspace"),
   "FeeSettingsWorkspace",
 )
+const PaymentDiscountWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/payment-discount-workspace"),
+  "PaymentDiscountWorkspace",
+)
 const RoomsOperationsWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/rooms-operations-workspace"),
   "RoomsOperationsWorkspace",
@@ -333,6 +337,7 @@ export type ConnectedModuleId =
   | "institution-dashboard"
   | "policy-settings"
   | "fee-settings"
+  | "payment-discount"
   | "academic-terms"
   | "it-control-students"
   | "it-control-faculty"
@@ -397,6 +402,7 @@ export const connectedModuleIds = [
   "institution-dashboard",
   "policy-settings",
   "fee-settings",
+  "payment-discount",
   "academic-terms",
   "it-control-students",
   "it-control-faculty",
@@ -536,6 +542,7 @@ export const connectedModuleRegistry: Readonly<
   "institution-dashboard": InstitutionDashboardWorkspace,
   "policy-settings": PolicySettingsWorkspace,
   "fee-settings": FeeSettingsWorkspace,
+  "payment-discount": PaymentDiscountWorkspace,
   "academic-terms": academicTermWorkspace,
   "it-control-students": ItControlStudentsWorkspace,
   "it-control-faculty": ItControlFacultyWorkspace,

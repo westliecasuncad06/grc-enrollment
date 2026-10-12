@@ -5,6 +5,7 @@ import {
   createEnrollment,
   getEligibleSubjects,
   getEnrollments,
+  getPaymentQuote,
   listEnrollments,
   updateEnrollment,
 } from "@/features/services/enrollment-service"
@@ -253,6 +254,43 @@ describe("enrollment-service", () => {
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
       academic_term_id: 2,
       sections: [{ section_id: 5 }],
+    })
+  })
+
+  it("reads the payment quote for an enrollment", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            type: "payment_quote",
+            total_amount: "1050.00",
+            full_payment: {
+              applies: true,
+              percentage: "10.0",
+              discount_amount: "105.00",
+              net_total: "945.00",
+              reason: null,
+            },
+          },
+        }),
+      ),
+    )
+
+    const quote = await getPaymentQuote(9)
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/v1/enrollments/9/payment-quote")
+    expect(quote.full_payment.net_total).toBe("945.00")
+  })
+
+  it("sends a full payment with its quoted amount and no amount", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 500 }))
+
+    await confirmPayment(9, { payment_type: "full", quoted_amount: "945.00" }).catch(() => undefined)
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(JSON.parse(init?.body as string)).toEqual({
+      payment_type: "full",
+      quoted_amount: "945.00",
     })
   })
 })

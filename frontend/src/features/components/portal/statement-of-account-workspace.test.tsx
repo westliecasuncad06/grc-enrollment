@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -134,6 +134,53 @@ describe("StatementOfAccountWorkspace", () => {
     expect(
       screen.queryByLabelText(/Student number, name, or email/i),
     ).not.toBeInTheDocument()
+  })
+
+  it("shows a full-payment discount line as a credit like a scholarship", async () => {
+    const [term] = statement.terms
+    fetchMock.mockImplementation((input) => {
+      if (url(input).includes("/api/v1/me/statement-of-account")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...statement,
+                terms: [
+                  {
+                    ...term,
+                    lines: [
+                      ...term.lines,
+                      {
+                        category: "full_payment_discount",
+                        label: "Full-payment discount (10%)",
+                        quantity: "10.0",
+                        unit_amount: null,
+                        amount: "-105.00",
+                      },
+                    ],
+                  },
+                ],
+              },
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(<StatementOfAccountWorkspace />, {
+      session: studentSession,
+    })
+
+    const row = (
+      await screen.findByText("Full-payment discount (10%)")
+    ).closest("tr") as HTMLElement
+    expect(within(row).getByText(/105\.00/).className).toMatch(/text-success/)
+    // An ordinary charge stays in the default tone.
+    const libraryRow = screen.getByText("Library").closest("tr") as HTMLElement
+    expect(within(libraryRow).getByText(/400\.00/).className).not.toMatch(
+      /text-success/,
+    )
   })
 
   it("re-queries with the chosen term", async () => {

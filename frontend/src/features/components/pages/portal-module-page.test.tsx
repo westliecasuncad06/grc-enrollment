@@ -102,6 +102,7 @@ const workspaceHeadings: Record<string, string> = {
   "institution-dashboard": "Institution dashboard",
   "policy-settings": "Policy settings",
   "fee-settings": "Fee Settings",
+  "payment-discount": "Payment Discount",
   "grade-approvals": "Grade approvals",
   "academic-transcripts": "Academic transcripts",
   "enrollment-change-requests": "Add/Drop requests",

@@ -15,6 +15,7 @@ import {
   Medal,
   Network,
   NotebookText,
+  Percent,
   ReceiptText,
   ScrollText,
   ShieldCheck,
@@ -397,6 +398,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Enrollment Dashboard",
         "View enrollment status counts — overall, per department, per section, and per student.",
         Gauge,
+      ),
+      portalModule(
+        "payment-discount",
+        "Payment Discount",
+        "Set the discount for students who pay in full, and the dates it is valid.",
+        Percent,
       ),
       portalModule(
         "audit-logs",

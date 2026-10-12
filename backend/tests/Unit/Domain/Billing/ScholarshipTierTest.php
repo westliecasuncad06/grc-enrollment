@@ -56,4 +56,19 @@ final class ScholarshipTierTest extends TestCase
         ]));
         self::assertSame('0.00', ScholarshipBase::amount([]));
     }
+
+    public function test_the_base_skips_both_discount_lines(): void
+    {
+        $items = [
+            new AssessmentItem(['category' => 'tuition', 'amount' => '750.00']),
+            new AssessmentItem(['category' => 'miscellaneous', 'amount' => '300.00']),
+            new AssessmentItem(['category' => 'scholarship_discount', 'amount' => '-420.00']),
+            new AssessmentItem(['category' => 'full_payment_discount', 'amount' => '-105.00']),
+        ];
+
+        self::assertSame('1050.00', ScholarshipBase::amount($items));
+        self::assertTrue(AssessmentItemCategory::FullPaymentDiscount->isDiscount());
+        self::assertTrue(AssessmentItemCategory::ScholarshipDiscount->isDiscount());
+        self::assertFalse(AssessmentItemCategory::Tuition->isDiscount());
+    }
 }

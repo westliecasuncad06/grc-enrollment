@@ -3,6 +3,7 @@
 namespace App\Actions\Enrollment;
 
 use App\Actions\Billing\AssessEnrollment;
+use App\Actions\Billing\QuoteFullPayment;
 use App\Domain\Enrollment\EnrollmentBlock;
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Enrollment\EnrollmentStatus;
@@ -25,6 +26,7 @@ final readonly class PreviewFreshmanPayment
     public function __construct(
         private BuildEnrollmentBlockPool $blockPool,
         private AssessEnrollment $assessEnrollment,
+        private QuoteFullPayment $quoteFullPayment,
     ) {}
 
     public function execute(StudentProfile $profile): FreshmanPaymentPreview
@@ -58,6 +60,8 @@ final readonly class PreviewFreshmanPayment
                 : $this->assessEnrollment->estimateTotal($profile, $term, $block->totalUnits);
         }
 
+        // `estimateTotal()` returns a bcmath total, so it is a numeric string.
+        /** @var numeric-string|null $estimatedTotal */
         return new FreshmanPaymentPreview(
             $profile,
             $profile->queueTicket?->ticket_number,
@@ -66,6 +70,7 @@ final readonly class PreviewFreshmanPayment
             $block,
             $estimatedTotal,
             $enrollment,
+            $this->quoteFullPayment->forEstimate($estimatedTotal),
         );
     }
 

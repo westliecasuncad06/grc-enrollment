@@ -7,6 +7,7 @@ import {
   enrollmentFiltersSchema,
   paginatedEnrollmentsSchema,
   paymentConfirmationEnvelopeSchema,
+  paymentQuoteEnvelopeSchema,
   reviseEnrollmentSubjectsInputSchema,
   storeEnrollmentInputSchema,
   updateEnrollmentInputSchema,
@@ -18,6 +19,7 @@ import {
   type EnrollmentFilters,
   type Paginated,
   type PaymentConfirmation,
+  type PaymentQuote,
   type ReviseEnrollmentSubjectsInput,
   type StoreEnrollmentInput,
   type UpdateEnrollmentInput,
@@ -231,4 +233,19 @@ export async function getCorPreview(
     signal,
   )
   return parse(corPreviewEnvelopeSchema, payload, "COR preview").data
+}
+
+/**
+ * ADR 0046: what paying in full collects for a pending-payment enrollment, computed by the API
+ * so the browser never disagrees with it on rounding.
+ */
+export async function getPaymentQuote(
+  enrollmentId: number,
+  signal?: AbortSignal,
+): Promise<PaymentQuote> {
+  const payload = await getAuthenticatedJson(
+    `${ENROLLMENTS_PATH}/${enrollmentId}/payment-quote`,
+    signal,
+  )
+  return parse(paymentQuoteEnvelopeSchema, payload, "payment quote").data
 }

@@ -84,6 +84,8 @@ final class AuditableType
 
     public const FEE_SCHEDULE = 'fee_schedule';
 
+    public const PAYMENT_DISCOUNT_SETTING = 'payment_discount_setting';
+
     public const FACULTY_LOAD_LIMIT = 'faculty_load_limit';
 
     public const FACULTY_LOAD_OVERRIDE = 'faculty_load_override';
@@ -137,6 +139,7 @@ final class AuditableType
             self::SECTION_CHANGE_REQUEST,
             self::PROGRAM_SHIFT,
             self::FEE_SCHEDULE,
+            self::PAYMENT_DISCOUNT_SETTING,
             self::FACULTY_LOAD_LIMIT,
             self::FACULTY_LOAD_OVERRIDE,
             self::USER_ACCOUNT,
