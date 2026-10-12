@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Enrollment;
 
+use App\Actions\Enrollment\PromissoryNoteRule;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Models\Enrollment;
 use App\Models\Payment;
@@ -86,7 +87,12 @@ final class ConfirmPaymentRequest extends FormRequest
                 $validator->errors()->add('amount', 'Enter the amount received for an installment.');
             }
 
-            if ($amount !== null && $totalDue !== null && bccomp((string) $amount, (string) $totalDue, 2) === -1 && ! $promissoryNoteOnFile) {
+            // A promissory note is only for a student who carries a previous bill (owner, 2026-10-13); the
+            // rule is `PromissoryNoteRule`, shared with `ConfirmPayment`. Skipped when the amount itself is
+            // invalid, which is reported on its own.
+            if (! $promissoryNoteOnFile
+                && ! $validator->errors()->has('amount')
+                && app(PromissoryNoteRule::class)->isRequired($enrollment, $amount, $totalDue)) {
                 $validator->errors()->add(
                     'promissory_note_on_file',
                     'A promissory note on file is required for partial payments.',

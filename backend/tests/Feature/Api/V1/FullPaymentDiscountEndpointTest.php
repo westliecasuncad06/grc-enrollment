@@ -320,14 +320,26 @@ final class FullPaymentDiscountEndpointTest extends TestCase
         self::assertSame(2, $this->assessment->items()->count());
     }
 
-    public function test_an_installment_still_needs_a_promissory_note_below_the_total(): void
+    public function test_an_installment_below_the_total_needs_no_promissory_note_without_a_previous_bill(): void
     {
         $this->actAs(UserRole::AccountingStaff);
 
-        $this->postJson($this->payUrl(), ['payment_type' => 'installment', 'amount' => '1000.00'])
+        // 2026-10-13: a note is only for a student with a previous bill (`PromissoryNoteRule`); this one has none.
+        $this->postJson($this->payUrl(), ['payment_type' => 'installment', 'amount' => '1000.00'])->assertCreated();
+
+        $payment = Payment::query()->where('enrollment_id', $this->enrollment->id)->sole();
+        self::assertSame('1000.00', $payment->amount);
+        self::assertFalse($payment->promissory_note_on_file);
+        self::assertSame([], $this->discountLines());
+    }
+
+    public function test_an_installment_without_an_amount_is_refused(): void
+    {
+        $this->actAs(UserRole::AccountingStaff);
+
+        $this->postJson($this->payUrl(), ['payment_type' => 'installment'])
             ->assertUnprocessable()
             ->assertJsonPath('error.code', 'VALIDATION_FAILED');
-        $this->postJson($this->payUrl(), ['payment_type' => 'installment'])->assertUnprocessable();
         self::assertSame(0, Payment::query()->count());
     }
 

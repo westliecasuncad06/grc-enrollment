@@ -3,6 +3,7 @@
 namespace Tests\Feature\Actions\Enrollment;
 
 use App\Actions\Enrollment\BuildEnrollmentAccessContext;
+use App\Domain\Academic\GradeStatus;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Enrollment\EnrollmentAudience;
@@ -13,6 +14,7 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
+use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
 use App\Models\Curriculum;
@@ -41,19 +43,46 @@ final class BuildEnrollmentAccessContextTest extends TestCase
         ]);
     }
 
-    private function makeStudent(Curriculum $curriculum, string $email, ?string $category): StudentProfile
+    /**
+     * `$withRecord` (the default) gives the student a result from an earlier term in a subject no curriculum
+     * places, so the system knows them (owner, 2026-10-13: a student with no record at all is not classified)
+     * without that result touching any rule under test. Pass false for a brand-new student.
+     */
+    private function makeStudent(Curriculum $curriculum, string $email, ?string $category, bool $withRecord = true): StudentProfile
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
             'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
         ]);
 
-        return StudentProfile::create([
+        $student = StudentProfile::create([
             'user_id' => $user->id, 'student_number' => 'STU-'.$user->id,
             'program_id' => $curriculum->program_id, 'curriculum_id' => $curriculum->id,
             'year_level' => 2, 'enrollment_category' => $category,
             'admission_status' => AdmissionStatus::Admitted, 'academic_standing' => AcademicStanding::Good,
         ]);
+
+        if ($withRecord) {
+            $anchorTerm = AcademicTerm::firstOrCreate(
+                ['school_year' => '2019-2020', 'semester' => '1st'],
+                ['status' => AcademicTermStatus::Archived],
+            );
+            $anchorSubject = Subject::firstOrCreate(
+                ['code' => 'RECORD-ANCHOR'],
+                ['title' => 'Record anchor', 'units' => 3.0, 'status' => SubjectStatus::Active],
+            );
+            // Not a RegistrarHead: one test below depends on there being none.
+            $encoder = User::firstOrCreate(
+                ['email' => 'record-anchor.encoder@grc.test'],
+                ['name' => 'Record encoder', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarStaff, 'status' => UserStatus::Active],
+            );
+            AcademicGrade::create([
+                'student_id' => $student->id, 'subject_id' => $anchorSubject->id, 'academic_term_id' => $anchorTerm->id,
+                'mark' => '2.00', 'status' => GradeStatus::Locked, 'encoded_by' => $encoder->id,
+            ]);
+        }
+
+        return $student;
     }
 
     private function makeBlock(AcademicTerm $term, Curriculum $curriculum): void
@@ -117,6 +146,41 @@ final class BuildEnrollmentAccessContextTest extends TestCase
 
         self::assertNotSame(EnrollmentAudience::Irregular, $context->viewerAudience);
         self::assertSame('irregular', $student->fresh()->enrollment_category);
+    }
+
+    public function test_a_new_student_with_no_record_is_never_flipped_to_irregular_by_opening_enrollment(): void
+    {
+        // The 2026-10-13 bug: a year-level-2+ student Admission had just created, with no grades and no
+        // earlier enrollment, turned Irregular within seconds of opening the Enrollment page, because every
+        // earlier subject looked "not passed". Their stored category (what Admission chose) must stand.
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $curriculum = $this->makeCurriculum();
+        $this->makeBlock($term, $curriculum);
+        // An earlier-year subject with an open (non-block) section, so the old rule saw a backlog.
+        $earlier = Subject::create(['code' => 'CS101', 'title' => 'CS101 Title', 'units' => 3, 'status' => SubjectStatus::Active]);
+        CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id, 'subject_id' => $earlier->id,
+            'year_level' => 1, 'semester' => '1st', 'is_required' => true,
+        ]);
+        Section::create([
+            'academic_term_id' => $term->id, 'subject_id' => $earlier->id, 'section_code' => 'A',
+            'capacity' => 40, 'is_block_exclusive' => false, 'status' => SectionStatus::Published,
+        ]);
+        $student = $this->makeStudent($curriculum, 'brand-new@grc.test', 'regular', withRecord: false);
+        User::create([
+            'name' => 'Registrar', 'email' => 'registrar.brandnew@grc.test',
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+        ]);
+
+        $context = app(BuildEnrollmentAccessContext::class)->execute($term, $student);
+
+        self::assertNotSame(EnrollmentAudience::Irregular, $context->viewerAudience);
+        $fresh = $student->fresh();
+        self::assertSame('regular', $fresh->enrollment_category);
+        self::assertNull($fresh->enrollment_category_derived_at);
+        $this->assertDatabaseCount('notifications', 0);
     }
 
     public function test_browsing_an_archived_term_never_mutates_stored_standing(): void

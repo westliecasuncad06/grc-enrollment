@@ -3716,6 +3716,11 @@ paths:
         figure no longer equals `quoted_amount`, the request is refused with 422 on
         `quoted_amount` and nothing is written. An installment, and a request with no
         `payment_type`, carry no discount and no extra fee.
+
+        Promissory note (ADR 0047): `promissory_note_on_file` is required (422) only when the
+        `amount` is below the term's assessment AND the student has a previous bill, an unpaid
+        balance on another of their enrollments. A downpayment with nothing owed from before
+        needs no note.
       security:
         - bearerAuth: []
       tags:

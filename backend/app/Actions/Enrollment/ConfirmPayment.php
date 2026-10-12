@@ -76,6 +76,7 @@ final readonly class ConfirmPayment
         private AuditRecorder $auditRecorder,
         private BuildCorSnapshot $buildCorSnapshot,
         private ApplyFullPaymentDiscount $applyFullPaymentDiscount,
+        private PromissoryNoteRule $promissoryNoteRule,
     ) {}
 
     /**
@@ -140,7 +141,10 @@ final readonly class ConfirmPayment
 
             $promissoryNoteOnFile = (bool) ($validated['promissory_note_on_file'] ?? false);
 
-            if (! $freshmanFirstPayment && $amount !== null && $assessment?->total_amount !== null && bccomp((string) $amount, (string) $assessment->total_amount, 2) === -1 && ! $promissoryNoteOnFile) {
+            // A promissory note is only for a student with a previous bill (`PromissoryNoteRule`, owner 2026-10-13).
+            if (! $freshmanFirstPayment
+                && ! $promissoryNoteOnFile
+                && $this->promissoryNoteRule->isRequired($lockedEnrollment, $amount, $assessment?->total_amount)) {
                 throw ValidationException::withMessages([
                     'promissory_note_on_file' => 'A promissory note on file is required for partial payments.',
                 ]);

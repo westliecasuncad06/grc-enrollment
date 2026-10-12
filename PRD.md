@@ -306,7 +306,9 @@ Rules:
    Cashier kiosk, or Accounting Staff may issue one on the Student's behalf.
 4. Registrar Staff or Registrar Head approval changes the enrollment to `pending_payment`
    for every enrollment, regular or irregular, and creates its assessment.
-5. Accounting confirmation changes it to `enrolled`.
+5. Accounting confirmation changes it to `enrolled`. A payment below this term's assessment needs a
+   promissory note on file only when the student carries a previous bill (an unpaid balance from another
+   term); a downpayment with nothing owed from before needs none (ADR 0047).
 6. The same database transaction creates or confirms the Digital COM record.
 7. Rejection, cancellation, and withdrawal require a reason and audit entry.
 8. Repeated requests must not duplicate seats, payments, queue tickets, notifications, or documents.

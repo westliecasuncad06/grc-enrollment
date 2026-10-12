@@ -8,6 +8,7 @@ use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Enrollment\ClassificationVerdict;
+use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
@@ -23,6 +24,7 @@ use App\Models\CurriculumMigration;
 use App\Models\CurriculumMigrationCredit;
 use App\Models\CurriculumSubject;
 use App\Models\CurriculumSubjectEquivalency;
+use App\Models\Enrollment;
 use App\Models\Program;
 use App\Models\Section;
 use App\Models\StudentProfile;
@@ -71,14 +73,19 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         ]);
     }
 
-    private function makeStudent(Curriculum $curriculum, string $email, int $yearLevel = 2): StudentProfile
+    /**
+     * `$withRecord` (the default) gives the student a result from an earlier term in a subject no curriculum
+     * places, so they are a student the system knows (owner, 2026-10-13: a student with no record at all is not
+     * classified) without that result touching any rule under test. Pass false for a brand-new student.
+     */
+    private function makeStudent(Curriculum $curriculum, string $email, int $yearLevel = 2, bool $withRecord = true): StudentProfile
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
             'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
         ]);
 
-        return StudentProfile::create([
+        $student = StudentProfile::create([
             'user_id' => $user->id,
             'student_number' => 'STU-'.$user->id,
             'program_id' => $curriculum->program_id,
@@ -87,6 +94,20 @@ final class ClassifyEnrollmentStandingTest extends TestCase
             'admission_status' => AdmissionStatus::Admitted,
             'academic_standing' => AcademicStanding::Good,
         ]);
+
+        if ($withRecord) {
+            $anchorTerm = AcademicTerm::firstOrCreate(
+                ['school_year' => '2019-2020', 'semester' => '1st'],
+                ['status' => AcademicTermStatus::Archived],
+            );
+            $anchorSubject = Subject::firstOrCreate(
+                ['code' => 'RECORD-ANCHOR'],
+                ['title' => 'Record anchor', 'units' => 3.0, 'status' => SubjectStatus::Active],
+            );
+            $this->lockGrade($student, $anchorSubject, $anchorTerm, '2.00');
+        }
+
+        return $student;
     }
 
     private function makePlan(AcademicTerm $term, Curriculum $curriculum, int $yearLevel): AcademicTermSectionPlan
@@ -554,6 +575,108 @@ final class ClassifyEnrollmentStandingTest extends TestCase
 
         self::assertTrue($verdicts[$fits->id]->isRegular());
         self::assertFalse($verdicts[$blocked->id]->isRegular());
+    }
+
+    /**
+     * A year-4 student whose block subject needs a prerequisite and whose earlier subject has an open
+     * section: with no record in the system either rule would call them Irregular.
+     */
+    private function yearFourStudentWhoLooksBehind(AcademicTerm $term, string $email): StudentProfile
+    {
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 4);
+        $prereq = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $prereq, 1, '1st');
+        $this->makePlainSection($term, $prereq);
+        $advanced = $this->makeSubject('CS401');
+        $placement = $this->placeSubject($curriculum, $advanced, 4);
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $prereq->id, 'minimum_grade' => '3.00',
+        ]);
+        $this->makeBlockSection($term, $plan, $advanced);
+
+        return $this->makeStudent($curriculum, $email, yearLevel: 4, withRecord: false);
+    }
+
+    private function enrollInTerm(StudentProfile $student, AcademicTerm $term, EnrollmentStatus $status = EnrollmentStatus::Enrolled): Enrollment
+    {
+        return Enrollment::create([
+            'student_id' => $student->id, 'academic_term_id' => $term->id,
+            'status' => $status, 'total_units' => 3, 'submitted_at' => now(),
+        ]);
+    }
+
+    public function test_a_new_student_with_no_academic_record_is_undetermined_not_irregular(): void
+    {
+        // Owner, 2026-10-13: a student Admission has just created must not become Irregular on their own.
+        // Nothing in the system says they have taken or failed anything, so there is no evidence either way.
+        $term = $this->makeTerm();
+        $student = $this->yearFourStudentWhoLooksBehind($term, 'brand-new@grc.test');
+
+        self::assertNull(app(ClassifyEnrollmentStanding::class)->classify($student, $term));
+    }
+
+    public function test_a_student_enrolled_only_in_the_current_term_still_has_no_record(): void
+    {
+        // Enrolling this term is not history: it is the very enrollment being classified.
+        $term = $this->makeTerm();
+        $student = $this->yearFourStudentWhoLooksBehind($term, 'this-term-only@grc.test');
+        $this->enrollInTerm($student, $term);
+
+        self::assertNull(app(ClassifyEnrollmentStanding::class)->classify($student, $term));
+    }
+
+    public function test_a_student_enrolled_in_an_earlier_term_has_a_record_so_standing_is_derived_as_before(): void
+    {
+        $earlier = AcademicTerm::create([
+            'school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived,
+        ]);
+        $term = $this->makeTerm();
+        $student = $this->yearFourStudentWhoLooksBehind($term, 'earlier-term@grc.test');
+        $this->enrollInTerm($student, $earlier);
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertFalse($verdict->isRegular());
+    }
+
+    public function test_a_student_whose_earlier_enrollment_was_withdrawn_has_no_record(): void
+    {
+        $earlier = AcademicTerm::create([
+            'school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived,
+        ]);
+        $term = $this->makeTerm();
+        $student = $this->yearFourStudentWhoLooksBehind($term, 'withdrawn@grc.test');
+        $this->enrollInTerm($student, $earlier, EnrollmentStatus::Withdrawn);
+
+        self::assertNull(app(ClassifyEnrollmentStanding::class)->classify($student, $term));
+    }
+
+    public function test_classify_many_leaves_only_the_student_without_a_record_undetermined(): void
+    {
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 2);
+        $subject = $this->makeSubject('CS201');
+        $placement = $this->placeSubject($curriculum, $subject, 2);
+        $prereq = $this->makeSubject('CS100');
+        $this->placeSubject($curriculum, $prereq, 1, '1st');
+        $other = $this->makeSubject('CS150');
+        $this->placeSubject($curriculum, $other, 1, '1st');
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $prereq->id, 'minimum_grade' => '3.00',
+        ]);
+        $this->makeBlockSection($term, $plan, $subject);
+        $withRecord = $this->makeStudent($curriculum, 'many-record@grc.test');
+        $this->lockGrade($withRecord, $other, $priorTerm, '2.00'); // has a record, but not the prerequisite
+        $newcomer = $this->makeStudent($curriculum, 'many-newcomer@grc.test', withRecord: false);
+
+        $verdicts = app(ClassifyEnrollmentStanding::class)->classifyMany(new Collection([$withRecord, $newcomer]), $term);
+
+        self::assertFalse($verdicts[$withRecord->id]->isRegular());
+        self::assertNull($verdicts[$newcomer->id]);
     }
 
     public function test_locked_grades_in_current_term_do_not_make_student_irregular(): void

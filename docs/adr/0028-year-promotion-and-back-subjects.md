@@ -51,7 +51,8 @@ message differs. Two rules are kept on purpose:
 
 A never-taken backlog subject still counts only when a section is open this term (unchanged;
 the 2026-08-19 spec's Amurao case). "Undetermined" (`null`) now means only "no block yet **and**
-nothing else settles it": a failed back subject settles it.
+nothing else settles it": a failed back subject settles it. (ADR 0047 adds one more case: a
+student with no record in the system at all is also undetermined.)
 
 **4. Promotion runs when a grade is locked, not only nightly.** `PromoteEligibleStudents::
 promoteStudent()` is called after `UpdateAcademicGrade` (lock, and INC resolution) and after

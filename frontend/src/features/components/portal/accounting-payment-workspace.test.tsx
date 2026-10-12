@@ -145,6 +145,17 @@ const studentAccount = {
   transactions: [],
 } as const
 
+/** A student whose only bill is the term being paid: no previous bill (owner, 2026-10-13: no promissory note). */
+const studentAccountNoPriorBill = {
+  ...studentAccount,
+  total_assessed: "5775.00",
+  total_paid: "0.00",
+  prior_balance: "0.00",
+  outstanding_balance: "5775.00",
+  has_promissory_note_on_file: false,
+  entries: [studentAccount.entries[1]],
+} as const
+
 /** What the API says when no full-payment discount applies (the quote's default in these tests). */
 const noDiscountQuote = {
   type: "payment_quote",
@@ -229,6 +240,8 @@ function mockRoutes(
     cycle?: typeof openCycle | typeof cutOffCycle | null
     /** The quote's `data`, or the string "fail" for a response that cannot be read. */
     quote?: unknown
+    /** The student's account; defaults to one with a previous bill. */
+    account?: typeof studentAccount | typeof studentAccountNoPriorBill
   } = {},
 ) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
@@ -269,7 +282,7 @@ function mockRoutes(
       )
     if (target.includes("/students/4/account"))
       return Promise.resolve(
-        new Response(JSON.stringify({ data: studentAccount })),
+        new Response(JSON.stringify({ data: overrides.account ?? studentAccount })),
       )
     if (target.includes("/enrollments/9/payment-quote"))
       return Promise.resolve(
@@ -381,6 +394,7 @@ function mockScholarshipRoutes(
   calls: string[],
   initial: number | null = null,
   base = 5775,
+  routeOverrides: Parameters<typeof mockRoutes>[0] = {},
 ) {
   let percentage = initial
 
@@ -415,8 +429,19 @@ function mockScholarshipRoutes(
       )
     }
 
-    return mockRoutes()(input, init)
+    return mockRoutes(routeOverrides)(input, init)
   }
+}
+
+/** Type the amount received into the payment modal (it opens at 0.00). */
+async function typeAmount(
+  user: ReturnType<typeof userEvent.setup>,
+  dialog: HTMLElement,
+  value: string,
+) {
+  const amount = within(dialog).getByLabelText("Amount")
+  await user.clear(amount)
+  await user.type(amount, value)
 }
 
 describe("AccountingPaymentWorkspace", () => {
@@ -1307,7 +1332,7 @@ describe("AccountingPaymentWorkspace", () => {
     })
   })
 
-  it("confirms a payment pre-filled with the assessed total and shows the generated COR", async () => {
+  it("opens with the amount at 0.00, and confirms the amount the Cashier types and shows the generated COR", async () => {
     const user = userEvent.setup()
     let paymentRequest: RequestInit | undefined
     fetchMock.mockImplementation((input, init) => {
@@ -1326,20 +1351,21 @@ describe("AccountingPaymentWorkspace", () => {
     await screen.findByText("Q001")
     await continueAsRegularPayee(user)
     const dialog = screen.getByRole("alertdialog")
-    expect(within(dialog).getByLabelText("Amount")).toHaveValue("5775.00")
-    await user.click(
-      within(dialog).getByRole("checkbox", {
-        name: "Promissory note on file",
-      }),
-    )
-    await user.click(
-      within(dialog).getByRole("button", { name: "Confirm payment" }),
-    )
+    // Owner, 2026-10-13: nothing is pre-filled, so a full balance is never confirmed by accident.
+    expect(within(dialog).getByLabelText("Amount")).toHaveValue("0.00")
+    const confirm = within(dialog).getByRole("button", { name: "Confirm payment" })
+    expect(confirm).toBeDisabled()
+    // The untouched 0.00 is a prompt, not an error.
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument()
+
+    await typeAmount(user, dialog, "5775")
+    expect(confirm).toBeEnabled()
+    await user.click(confirm)
 
     expect((await screen.findAllByText(/COR000009/)).length).toBeGreaterThan(0)
     await vi.waitFor(() => expect(paymentRequest).toBeDefined())
     expect(JSON.parse(paymentRequest?.body as string)).toEqual({
-      promissory_note_on_file: true,
+      promissory_note_on_file: false,
       amount: 5775,
     })
     expect(
@@ -1361,6 +1387,7 @@ describe("AccountingPaymentWorkspace", () => {
     })
 
     await continueAsRegularPayee(user)
+    await typeAmount(user, screen.getByRole("alertdialog"), "5775")
     await user.click(
       within(screen.getByRole("alertdialog")).getByRole("button", {
         name: "Confirm payment",
@@ -1381,6 +1408,7 @@ describe("AccountingPaymentWorkspace", () => {
     })
 
     await continueAsRegularPayee(user)
+    await typeAmount(user, screen.getByRole("alertdialog"), "5775")
     await user.click(
       within(screen.getByRole("alertdialog")).getByRole("button", {
         name: "Confirm payment",
@@ -1627,6 +1655,10 @@ describe("AccountingPaymentWorkspace", () => {
     const confirm = within(dialog).getByRole("button", { name: "Confirm payment" })
 
     expect(within(dialog).getByText(/at least ₱1,000\.00/)).toBeInTheDocument()
+    // It opens at 0.00 with Confirm disabled, and the untouched 0.00 is not shown as an error.
+    expect(amount).toHaveValue("0.00")
+    expect(confirm).toBeDisabled()
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument()
     await user.clear(amount)
     await user.type(amount, "500")
     expect(within(dialog).getByRole("alert")).toHaveTextContent(/must be at least ₱1,000\.00/)
@@ -1634,8 +1666,8 @@ describe("AccountingPaymentWorkspace", () => {
 
     await user.clear(amount)
     await user.type(amount, "1000")
-    // ₱1,000 is below the assessed total, so it is a partial payment and needs
-    // a promissory note on file (stakeholder Doc 14, S24).
+    // ₱1,000 is below the assessed total, so it is a partial payment. This student has a previous
+    // bill (₱3,500.00), so it needs a promissory note on file (stakeholder Doc 14, S24; owner 2026-10-13).
     expect(within(dialog).getByRole("alert")).toHaveTextContent(/promissory note on file is required/)
     expect(confirm).toBeDisabled()
     await user.click(within(dialog).getByLabelText("Promissory note on file"))
@@ -1643,6 +1675,70 @@ describe("AccountingPaymentWorkspace", () => {
     expect(confirm).toBeEnabled()
     // A payee with no scholarship needs no change on the server.
     expect(calls).toEqual([])
+  })
+
+  it("needs no promissory note for a downpayment when the student has no previous bill", async () => {
+    const user = userEvent.setup()
+    let paymentBody: unknown = null
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/enrollments/9/payment") && init?.method === "POST") {
+        paymentBody = JSON.parse(init.body as string)
+      }
+      return mockRoutes({ account: studentAccountNoPriorBill })(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await screen.findByText("Q001")
+    await continueAsRegularPayee(user)
+    const dialog = await screen.findByRole("alertdialog")
+    const confirm = within(dialog).getByRole("button", { name: "Confirm payment" })
+    // Nothing is owed from before, so the screen never asks for a note (owner, 2026-10-13).
+    await vi.waitFor(() => expect(within(dialog).getByText(/Total Account Outstanding/)).toBeInTheDocument())
+
+    await typeAmount(user, dialog, "1000")
+
+    expect(within(dialog).queryByLabelText("Promissory note on file")).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/No promissory note is needed because there is no previous bill/)).toBeInTheDocument()
+    expect(confirm).toBeEnabled()
+    await user.click(confirm)
+
+    expect((await screen.findAllByText(/COR000009/)).length).toBeGreaterThan(0)
+    expect(paymentBody).toEqual({ amount: 1000, promissory_note_on_file: false })
+  })
+
+  it("offers the promissory note when the server finds a previous bill the screen did not know about", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).endsWith("/enrollments/9/payment") && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_FAILED",
+                message: "Validation failed.",
+                errors: { promissory_note_on_file: ["A promissory note on file is required for partial payments."] },
+                request_id: "r1",
+              },
+            }),
+            { status: 422 },
+          ),
+        )
+      }
+      return mockRoutes({ account: studentAccountNoPriorBill })(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await screen.findByText("Q001")
+    await continueAsRegularPayee(user)
+    const dialog = await screen.findByRole("alertdialog")
+    await typeAmount(user, dialog, "1000")
+    expect(within(dialog).queryByLabelText("Promissory note on file")).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole("button", { name: "Confirm payment" }))
+
+    // The checkbox appears so the Cashier can tick it and send again.
+    expect(await within(dialog).findByLabelText("Promissory note on file")).toBeInTheDocument()
+    expect(within(dialog).getByRole("button", { name: "Confirm payment" })).toBeDisabled()
   })
 
   it("lets a scholar pick a tier, deducts it automatically, and opens the payment modal on the net", async () => {
@@ -1665,7 +1761,9 @@ describe("AccountingPaymentWorkspace", () => {
 
     const payment = await screen.findByRole("alertdialog")
     expect(calls).toEqual(["PUT 40"])
-    expect(within(payment).getByLabelText("Amount")).toHaveValue("3465.00")
+    // The amount starts at 0.00 even with a scholarship; the net it is paid against is on the summary.
+    expect(within(payment).getByLabelText("Amount")).toHaveValue("0.00")
+    expect(within(payment).getByText("Current Term Assessment:").nextSibling).toHaveTextContent("₱3,465.00")
     expect(within(payment).getByText("Scholarship discount (40%):")).toBeInTheDocument()
     expect(within(payment).getByText("-₱2,310.00")).toBeInTheDocument()
   })
@@ -1749,7 +1847,7 @@ describe("AccountingPaymentWorkspace", () => {
 
     const payment = await screen.findByRole("alertdialog")
     expect(calls).toEqual(["DELETE"])
-    expect(within(payment).getByLabelText("Amount")).toHaveValue("5775.00")
+    expect(within(payment).getByLabelText("Amount")).toHaveValue("0.00")
     expect(within(payment).queryByText(/Scholarship discount/)).not.toBeInTheDocument()
   })
 
@@ -1812,6 +1910,14 @@ describe("AccountingPaymentWorkspace", () => {
       const dialog = await screen.findByRole("alertdialog")
 
       const choice = await within(dialog).findByRole("group", { name: "Payment type" })
+      // Installment is the default (owner, 2026-10-13), with the amount at 0.00 and no discount shown.
+      expect(within(choice).getByRole("button", { name: /Installment/ })).toHaveAttribute("aria-pressed", "true")
+      expect(within(choice).getByRole("button", { name: /Pay in full/ })).toHaveAttribute("aria-pressed", "false")
+      expect(within(dialog).getByLabelText("Amount")).toHaveValue("0.00")
+      expect(within(dialog).queryByText(/Full-payment discount \(10%\)/)).not.toBeInTheDocument()
+
+      await user.click(within(choice).getByRole("button", { name: /Pay in full/ }))
+
       expect(within(choice).getByRole("button", { name: /Pay in full/ })).toHaveAttribute("aria-pressed", "true")
       expect(within(dialog).getByLabelText("Amount")).toHaveValue("5197.50")
       expect(within(dialog).getByLabelText("Amount")).toHaveAttribute("readonly")
@@ -1835,11 +1941,11 @@ describe("AccountingPaymentWorkspace", () => {
       await screen.findByText("Q001")
       await continueAsRegularPayee(user)
       const dialog = await screen.findByRole("alertdialog")
-      await user.click(await within(dialog).findByRole("button", { name: /Installment/ }))
+      expect(await within(dialog).findByRole("button", { name: /Installment/ })).toHaveAttribute("aria-pressed", "true")
 
       const amount = within(dialog).getByLabelText("Amount")
       expect(amount).not.toHaveAttribute("readonly")
-      expect(amount).toHaveValue("5775.00")
+      expect(amount).toHaveValue("0.00")
       await user.clear(amount)
       await user.type(amount, "1000")
       await user.click(within(dialog).getByLabelText("Promissory note on file"))
@@ -1859,16 +1965,17 @@ describe("AccountingPaymentWorkspace", () => {
       const dialog = await screen.findByRole("alertdialog")
       const choice = await within(dialog).findByRole("group", { name: "Payment type" })
 
+      // Installment is the default: the note names the full assessment.
+      expect(within(dialog).getByText(/This payment clears the current term assessment/)).toHaveTextContent(
+        "current term assessment (₱5,775.00)",
+      )
+
+      await user.click(within(choice).getByRole("button", { name: /Pay in full/ }))
+
       // The student owes a prior-term balance, so the note is shown; paying in full clears the NET.
       const note = within(dialog).getByText(/This payment clears the current term assessment/)
       expect(note).toHaveTextContent("current term assessment (₱5,197.50)")
       expect(note).not.toHaveTextContent("₱5,775.00")
-
-      await user.click(within(choice).getByRole("button", { name: /Installment/ }))
-
-      expect(within(dialog).getByText(/This payment clears the current term assessment/)).toHaveTextContent(
-        "current term assessment (₱5,775.00)",
-      )
     })
 
     it("leaves the modal as it is and says so when no discount is active", async () => {
@@ -1887,7 +1994,7 @@ describe("AccountingPaymentWorkspace", () => {
 
       expect(await within(dialog).findByText("No full-payment discount is active.")).toBeInTheDocument()
       expect(within(dialog).queryByRole("group", { name: "Payment type" })).not.toBeInTheDocument()
-      expect(within(dialog).getByLabelText("Amount")).toHaveValue("5775.00")
+      expect(within(dialog).getByLabelText("Amount")).toHaveValue("0.00")
     })
 
     it("says nothing about a discount for a scholar", async () => {
@@ -1919,11 +2026,12 @@ describe("AccountingPaymentWorkspace", () => {
       const dialog = await screen.findByRole("alertdialog")
 
       expect(await within(dialog).findByText(/could not be checked/)).toBeInTheDocument()
+      await typeAmount(user, dialog, "1000")
       await user.click(within(dialog).getByLabelText("Promissory note on file"))
       await user.click(within(dialog).getByRole("button", { name: "Confirm payment" }))
 
       expect((await screen.findAllByText(/COR000009/)).length).toBeGreaterThan(0)
-      expect(paymentBody).toEqual({ amount: 5775, promissory_note_on_file: true })
+      expect(paymentBody).toEqual({ amount: 1000, promissory_note_on_file: true })
     })
 
     it("shows the new amount when the discount changed under the Cashier", async () => {
@@ -1951,7 +2059,8 @@ describe("AccountingPaymentWorkspace", () => {
       await screen.findByText("Q001")
       await continueAsRegularPayee(user)
       const dialog = await screen.findByRole("alertdialog")
-      await within(dialog).findByRole("group", { name: "Payment type" })
+      const choice = await within(dialog).findByRole("group", { name: "Payment type" })
+      await user.click(within(choice).getByRole("button", { name: /Pay in full/ }))
       await user.click(within(dialog).getByRole("button", { name: "Confirm payment" }))
 
       expect(await within(dialog).findByText(/The amount due changed/)).toBeInTheDocument()

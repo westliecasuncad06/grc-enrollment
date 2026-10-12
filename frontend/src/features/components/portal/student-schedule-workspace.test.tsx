@@ -164,13 +164,16 @@ const paginationMeta = {
   total: 1,
 }
 
-function mockFetchRoutes(customEnrollments = enrollmentFixture.data) {
+function mockFetchRoutes(
+  customEnrollments = enrollmentFixture.data,
+  customTerms: readonly unknown[] = termsFixture.data,
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>((input) => {
       const url = typeof input === "string" ? input : "url" in input ? input.url : String(input)
       if (url.includes("/api/v1/academic-terms")) {
-        return Promise.resolve(new Response(JSON.stringify(termsFixture)))
+        return Promise.resolve(new Response(JSON.stringify({ data: customTerms })))
       }
       if (url.includes("/api/v1/enrollments")) {
         return Promise.resolve(
@@ -264,6 +267,66 @@ describe("StudentScheduleWorkspace", () => {
     expect(within(table).getByText("Understanding the Self")).toBeInTheDocument()
     expect(within(table).getByText("LAB-1")).toBeInTheDocument()
     expect(within(table).getByText("R201")).toBeInTheDocument()
+  })
+
+  describe("school year and semester picker", () => {
+    const term = (id: number, schoolYear: string, semester: string, status: string) => ({
+      ...termsFixture.data[0],
+      id,
+      school_year: schoolYear,
+      semester,
+      status,
+      status_label: status,
+    })
+    const allTerms = [
+      term(1, "2026-2027", "1st", "semester_ongoing"),
+      term(2, "2025-2026", "2nd", "archived"),
+      term(3, "2024-2025", "1st", "archived"),
+      term(4, "2023-2024", "2nd", "archived"),
+    ]
+
+    it("lists only the terms the student has data for, plus the current term", async () => {
+      // Owner, 2026-10-13: the dropdown listed every school year back to 2017; the student only has
+      // an enrollment in 2025-2026 · 2nd (and a withdrawn one with no subjects in 2023-2024 · 2nd).
+      mockFetchRoutes(
+        [
+          { ...enrollmentFixture.data[0], id: 43, academic_term_id: 2 },
+          { ...enrollmentFixture.data[0], id: 44, academic_term_id: 4, status: "withdrawn", subjects: [] },
+        ],
+        allTerms,
+      )
+      renderWithSession(<StudentScheduleWorkspace />, { session: studentSession })
+
+      const picker = await screen.findByRole("combobox")
+      await screen.findByRole("option", { name: /2025-2026 · 2nd/ })
+      const labels = within(picker)
+        .getAllByRole("option")
+        .map((option) => option.textContent)
+      expect(labels).toEqual(["2026-2027 · 1st", "2025-2026 · 2nd (Archived)"])
+    })
+
+    it("shows only the current term to a student with no enrollment yet", async () => {
+      mockFetchRoutes([], allTerms)
+      renderWithSession(<StudentScheduleWorkspace />, { session: studentSession })
+
+      await screen.findByText("No class schedule for this term")
+      const labels = within(screen.getByRole("combobox"))
+        .getAllByRole("option")
+        .map((option) => option.textContent)
+      expect(labels).toEqual(["2026-2027 · 1st"])
+    })
+
+    it("lets the student switch to a past term they were enrolled in", async () => {
+      const user = userEvent.setup()
+      mockFetchRoutes([{ ...enrollmentFixture.data[0], id: 43, academic_term_id: 2 }], allTerms)
+      renderWithSession(<StudentScheduleWorkspace />, { session: studentSession })
+
+      const picker = await screen.findByRole("combobox")
+      await screen.findByRole("option", { name: /2025-2026 · 2nd/ })
+      await user.selectOptions(picker, screen.getByRole("option", { name: /2025-2026 · 2nd/ }))
+
+      expect(await screen.findByText("6 units")).toBeInTheDocument()
+    })
   })
 
   it("keeps a LEC immediately followed by its paired LAB in the table view, regardless of schedule order", async () => {

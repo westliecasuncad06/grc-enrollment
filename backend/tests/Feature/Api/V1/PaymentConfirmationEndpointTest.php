@@ -400,14 +400,82 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $this->assertDatabaseCount('enrollment_documents', 1);
     }
 
-    public function test_partial_payment_without_promissory_note_is_rejected(): void
+    /**
+     * A bill from an earlier term that is still unpaid: an enrolled, archived-term enrollment assessed
+     * `$assessed` of which `$paid` was received. The student's account then carries `$assessed - $paid`
+     * as a previous balance (owner, 2026-10-13: a promissory note is only for a student with a previous bill).
+     */
+    private function makePreviousBill(StudentProfile $student, string $assessed, string $paid): Enrollment
+    {
+        $earlier = AcademicTerm::create([
+            'school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived,
+        ]);
+        $previous = $this->makeEnrollment($student, $earlier, EnrollmentStatus::Enrolled);
+        Assessment::create([
+            'enrollment_id' => $previous->id,
+            'total_amount' => $assessed,
+            'currency' => 'PHP',
+            'assessed_at' => now()->subMonths(8),
+        ]);
+        Payment::create([
+            'enrollment_id' => $previous->id,
+            'confirmed_by' => $student->user_id,
+            'amount' => $paid,
+            'promissory_note_on_file' => false,
+            'confirmed_at' => now()->subMonths(8),
+        ]);
+
+        return $previous;
+    }
+
+    public function test_a_partial_payment_needs_no_promissory_note_when_the_student_has_no_previous_bill(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '10500.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.nopromissory@grc.test');
+
+        // The Cashier screenshot case: 10,400 of 10,500 paid, nothing owed from before, so no note.
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'amount' => 10400,
+            'promissory_note_on_file' => false,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.enrollment.status', 'enrolled')
+            ->assertJsonPath('data.payment.amount', '10400.00')
+            ->assertJsonPath('data.payment.promissory_note_on_file', false);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('enrollment_documents', 1);
+    }
+
+    public function test_a_downpayment_of_1000_needs_no_promissory_note_when_the_student_has_no_previous_bill(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
         $enrollment = $this->makeEnrollment($student, $term);
         $this->makeAssessment($enrollment, '2400.00');
-        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.nopromissory@grc.test');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.downpayment@grc.test');
+
+        $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", ['amount' => 1000])
+            ->assertCreated()
+            ->assertJsonPath('data.payment.amount', '1000.00')
+            ->assertJsonPath('data.payment.promissory_note_on_file', false);
+        $this->assertDatabaseCount('payments', 1);
+    }
+
+    public function test_a_partial_payment_without_a_promissory_note_is_rejected_when_the_student_has_a_previous_bill(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $this->makePreviousBill($student, '5000.00', '1000.00');
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.previousbill@grc.test');
 
         $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
             'amount' => 1000,
@@ -416,9 +484,77 @@ final class PaymentConfirmationEndpointTest extends TestCase
 
         $response->assertUnprocessable()
             ->assertJsonPath('error.errors.promissory_note_on_file.0', 'A promissory note on file is required for partial payments.');
-        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('enrollment_documents', 0);
         self::assertSame(EnrollmentStatus::PendingPayment, $enrollment->refresh()->status);
+    }
+
+    public function test_a_partial_payment_with_a_promissory_note_is_accepted_when_the_student_has_a_previous_bill(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $this->makePreviousBill($student, '5000.00', '1000.00');
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.previousbillnote@grc.test');
+
+        $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'amount' => 1000,
+            'promissory_note_on_file' => true,
+        ])->assertCreated()
+            ->assertJsonPath('data.payment.promissory_note_on_file', true);
+    }
+
+    public function test_paying_the_whole_term_needs_no_promissory_note_even_with_a_previous_bill(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $this->makePreviousBill($student, '5000.00', '1000.00');
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.wholeterm@grc.test');
+
+        $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", ['amount' => 2400])
+            ->assertCreated()
+            ->assertJsonPath('data.payment.amount', '2400.00');
+    }
+
+    public function test_a_fully_settled_previous_term_does_not_count_as_a_previous_bill(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $this->makePreviousBill($student, '5000.00', '5000.00');
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.settled@grc.test');
+
+        $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", ['amount' => 1000])
+            ->assertCreated()
+            ->assertJsonPath('data.payment.promissory_note_on_file', false);
+    }
+
+    public function test_a_previous_bill_paid_off_by_an_account_payment_does_not_need_a_promissory_note(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $previous = $this->makePreviousBill($student, '5000.00', '1000.00');
+        // The Cashier later settled the rest of that term through "Record Payment".
+        $student->accountPayments()->create([
+            'enrollment_id' => $previous->id,
+            'received_by' => $student->user_id,
+            'amount' => '4000.00',
+            'received_at' => now()->subMonth(),
+        ]);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.accountpaid@grc.test');
+
+        $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", ['amount' => 1000])
+            ->assertCreated();
     }
 
     public function test_an_omitted_amount_with_no_assessment_stays_null(): void

@@ -564,7 +564,7 @@ final class AutomationStepsTest extends TestCase
         $secondSection = $createSection('IRR202');
 
         $student = $this->makeStudent($program, $curriculum, 'IRR-001', 'irregular@student.grc.test');
-        $student->update(['year_level' => 2]);
+        $student->update(['year_level' => 2, 'enrollment_category' => 'irregular']);
 
         return [$student, $firstSection, $secondSection];
     }
@@ -590,7 +590,9 @@ final class AutomationStepsTest extends TestCase
 
         return StudentProfile::create([
             'user_id' => $user->id, 'student_number' => $number, 'program_id' => $program->id, 'curriculum_id' => $curriculum->id,
-            'year_level' => 1, 'admission_status' => AdmissionStatus::Admitted, 'academic_standing' => AcademicStanding::Good,
+            // Chosen by Admission, as for any real student: a student with no record is no longer derived
+            // (owner, 2026-10-13), so the category has to be there already.
+            'year_level' => 1, 'enrollment_category' => 'regular', 'admission_status' => AdmissionStatus::Admitted, 'academic_standing' => AcademicStanding::Good,
         ]);
     }
 

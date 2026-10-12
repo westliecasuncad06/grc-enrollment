@@ -104,8 +104,12 @@ final class ResyncStalePreFixEnrollmentClassificationsMigrationTest extends Test
         self::assertNull($audit->after_values['enrollment_category']);
     }
 
-    public function test_it_sets_the_determinate_regular_verdict_when_a_block_is_published_with_no_back_subjects(): void
+    public function test_it_still_clears_the_stale_value_when_a_block_is_published_because_a_student_with_no_record_is_undetermined(): void
     {
+        // This migration only ever looks at students with zero enrollments and zero grades. Since
+        // ADR 0047 (2026-10-13) such a student is undetermined for the classifier even when a block is
+        // published, so the stale Irregular is cleared to NULL rather than set to a determinate Regular
+        // (the migration ran once, on 2026-09-28; this only keeps its `up()` honest against the new rule).
         $this->makeItAdmin();
         $term = $this->makeOngoingTerm();
         $curriculum = $this->makeCurriculum();
@@ -118,8 +122,8 @@ final class ResyncStalePreFixEnrollmentClassificationsMigrationTest extends Test
         $this->runMigration();
 
         $student->refresh();
-        self::assertSame(EnrollmentCategory::Regular->value, $student->enrollment_category);
-        self::assertNotNull($student->enrollment_category_derived_at);
+        self::assertNull($student->enrollment_category);
+        self::assertNull($student->enrollment_category_derived_at);
     }
 
     public function test_it_leaves_an_irregular_student_with_a_real_enrollment_untouched(): void

@@ -71,14 +71,19 @@ final class ReclassifyStudentEnrollmentCategoryTest extends TestCase
         ]);
     }
 
-    private function makeStudent(Curriculum $curriculum, string $email, int $yearLevel = 2, ?string $category = null): StudentProfile
+    /**
+     * `$withRecord` (the default) gives the student a result from an earlier term in a subject no curriculum
+     * places, so the system knows them (owner, 2026-10-13: a student with no record at all is not classified)
+     * without that result touching any rule under test. Pass false for a brand-new student.
+     */
+    private function makeStudent(Curriculum $curriculum, string $email, int $yearLevel = 2, ?string $category = null, bool $withRecord = true): StudentProfile
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
             'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
-        return StudentProfile::create([
+        $student = StudentProfile::create([
             'user_id' => $user->id,
             'student_number' => 'STU-'.$user->id,
             'program_id' => $curriculum->program_id,
@@ -88,6 +93,24 @@ final class ReclassifyStudentEnrollmentCategoryTest extends TestCase
             'admission_status' => AdmissionStatus::Admitted,
             'academic_standing' => AcademicStanding::Good,
         ]);
+
+        if ($withRecord) {
+            $anchorTerm = AcademicTerm::firstOrCreate(
+                ['school_year' => '2019-2020', 'semester' => '1st'],
+                ['status' => AcademicTermStatus::Archived],
+            );
+            $anchorSubject = Subject::firstOrCreate(
+                ['code' => 'RECORD-ANCHOR'],
+                ['title' => 'Record anchor', 'units' => 3.0, 'status' => SubjectStatus::Active],
+            );
+            $encoder = User::firstOrCreate(
+                ['email' => 'record-anchor.encoder@grc.test'],
+                ['name' => 'Record encoder', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarStaff, 'status' => UserStatus::Active],
+            );
+            $this->lockGrade($student, $anchorSubject, $anchorTerm, '2.00', $encoder);
+        }
+
+        return $student;
     }
 
     private function makeRegistrarHead(): User
@@ -152,6 +175,55 @@ final class ReclassifyStudentEnrollmentCategoryTest extends TestCase
         self::assertSame('regular', $student->fresh()->enrollment_category);
         self::assertSame(0, AuditLog::query()->where('action', AuditAction::STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED)->count());
         self::assertSame(0, Notification::query()->where('type', NotificationType::EnrollmentCategoryReclassified)->count());
+    }
+
+    public function test_a_new_student_with_no_academic_record_keeps_the_category_admission_chose(): void
+    {
+        // Owner, 2026-10-13: students created by Admission were turning Irregular on their own. The same
+        // setup as the next test, but this student has no grade, credit or earlier enrollment, so nothing
+        // is written, audited or notified and the stored category stands.
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 4);
+        $standard = $this->makeSubject('CS401');
+        $this->placeSubject($curriculum, $standard, 4);
+        $this->makeBlockSection($term, $plan, $standard);
+        $backlog = $this->makeSubject('ITC');
+        $this->placeSubject($curriculum, $backlog, 1, '1st');
+        $this->makePlainSection($term, $backlog);
+        $student = $this->makeStudent($curriculum, 'newcomer@grc.test', yearLevel: 4, category: 'regular', withRecord: false);
+        $registrar = $this->makeRegistrarHead();
+
+        $verdict = app(ReclassifyStudentEnrollmentCategory::class)->execute(
+            $student, $term, $registrar, new AuditRequestContext('test-reclassify', null),
+        );
+
+        self::assertTrue($verdict->isRegular());
+        $fresh = $student->fresh();
+        self::assertSame('regular', $fresh->enrollment_category);
+        self::assertNull($fresh->enrollment_category_derived_at);
+        self::assertSame(0, AuditLog::query()->where('action', AuditAction::STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED)->count());
+        self::assertSame(0, Notification::query()->where('type', NotificationType::EnrollmentCategoryReclassified)->count());
+    }
+
+    public function test_a_new_student_admission_marked_irregular_stays_irregular(): void
+    {
+        // Admission's explicit choice of Irregular is kept too: with no record there is nothing to derive from.
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 2);
+        $standard = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $standard, 2);
+        $this->makeBlockSection($term, $plan, $standard);
+        $student = $this->makeStudent($curriculum, 'chosen-irregular@grc.test', yearLevel: 2, category: 'irregular', withRecord: false);
+        $registrar = $this->makeRegistrarHead();
+
+        app(ReclassifyStudentEnrollmentCategory::class)->execute(
+            $student, $term, $registrar, new AuditRequestContext('test-reclassify', null),
+        );
+
+        self::assertSame('irregular', $student->fresh()->enrollment_category);
+        self::assertSame(0, AuditLog::query()->where('action', AuditAction::STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED)->count());
     }
 
     public function test_an_open_backlog_subject_flips_the_student_to_irregular_and_audits_and_notifies(): void

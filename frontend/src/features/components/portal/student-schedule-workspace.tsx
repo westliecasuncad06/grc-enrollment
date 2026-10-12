@@ -48,7 +48,10 @@ import { useTermSelection } from "@/features/hooks/use-term-selection"
 import { formatTimeRange } from "@/features/lib/format-time"
 import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import { compareBySchedule } from "@/features/lib/schedule-order"
-import { formatAcademicTerm } from "@/features/services/reference-data-service"
+import {
+  formatAcademicTerm,
+  getActiveAcademicTerm,
+} from "@/features/services/reference-data-service"
 
 const TERMINAL_STATUSES = new Set(["rejected", "cancelled", "withdrawn"])
 
@@ -57,18 +60,34 @@ export function StudentScheduleWorkspace() {
   const authorized = session?.role === "student"
 
   const termsQuery = useAcademicTermsQuery()
-  const { selectedTermId, setSelectedTermId } = useTermSelection(
-    termsQuery.data,
-  )
   const enrollmentsQuery = useEnrollmentsQuery({
     enabled: authorized,
   })
 
+  // Only the school years and semesters the student has data for are offered (owner, 2026-10-13):
+  // the term they are enrolled in now, and every term they have an enrollment with subjects in.
+  // The list of every academic term back to the first one is not theirs to browse.
+  const studentTerms = useMemo(() => {
+    const termIdsWithSchedule = new Set(
+      (enrollmentsQuery.data ?? [])
+        .filter((enrollment) => enrollment.subjects.length > 0)
+        .map((enrollment) => enrollment.academic_term_id),
+    )
+
+    const currentTermId = getActiveAcademicTerm(termsQuery.data)?.id
+
+    return (termsQuery.data ?? []).filter(
+      (term) => term.id === currentTermId || termIdsWithSchedule.has(term.id),
+    )
+  }, [termsQuery.data, enrollmentsQuery.data])
+
+  const { selectedTermId, setSelectedTermId } = useTermSelection(studentTerms)
+
   const [view, setView] = useState<"calendar" | "table">("calendar")
 
   const selectedTerm = useMemo(
-    () => termsQuery.data?.find((term) => term.id === selectedTermId),
-    [termsQuery.data, selectedTermId],
+    () => studentTerms.find((term) => term.id === selectedTermId),
+    [studentTerms, selectedTermId],
   )
 
   const activeEnrollment = useMemo(() => {
@@ -138,7 +157,7 @@ export function StudentScheduleWorkspace() {
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <AcademicTermSelector
-          sortedTerms={termsQuery.data ?? []}
+          sortedTerms={studentTerms}
           term={selectedTerm ?? null}
           isCurrentTerm={selectedTerm?.status === "semester_ongoing"}
           onSelectTerm={setSelectedTermId}

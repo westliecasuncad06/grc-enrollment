@@ -8,12 +8,15 @@ use App\Domain\Academic\PrerequisiteEvaluator;
 use App\Domain\Curriculum\SemesterCoverage;
 use App\Domain\Curriculum\SemesterSlot;
 use App\Domain\Enrollment\ClassificationVerdict;
+use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\CurriculumSubject;
+use App\Models\Enrollment;
 use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\TransfereeCredit;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -34,8 +37,11 @@ use Illuminate\Database\Eloquent\Collection;
  * per group, not once per student. `classify()` is a thin single-student
  * wrapper for callers with exactly one student in hand.
  *
- * `null` means undetermined (no block published yet for that year level
- * this term) — never coerce this to Irregular. Forcing Irregular here would
+ * `null` means undetermined — never coerce this to Irregular. Two cases: no
+ * block published yet for that year level this term, and a student with no
+ * record in the system at all (no locked result, credit or earlier-term
+ * enrollment), whom Admission has just created and nothing can be derived
+ * for (owner, 2026-10-13). Forcing Irregular here would
  * eagerly flip every student in that year level the instant they open
  * their enrollment page, purely because setup isn't finished yet. The one
  * exception is a failed back subject (ADR 0028): a required subject from an
@@ -102,10 +108,21 @@ final readonly class ClassifyEnrollmentStanding
 
         $marksByStudent = $this->latestLockedMarksByStudent($studentIds);
         $creditedByStudent = $this->creditedSubjectIdsByStudent($studentIds, $curriculumId);
+        $withoutRecord = $this->studentIdsWithoutRecord($studentIds, $term, $marksByStudent, $creditedByStudent);
 
         $verdicts = [];
 
         foreach ($students as $student) {
+            // A student with no record in the system cannot be judged: every earlier subject would
+            // look "not passed" and every prerequisite "not met", so a student Admission has just
+            // created would turn Irregular on their own (owner, 2026-10-13). Their stored category,
+            // the one Admission chose, stands until there is something to derive it from.
+            if (isset($withoutRecord[$student->id])) {
+                $verdicts[$student->id] = null;
+
+                continue;
+            }
+
             $marks = $marksByStudent[$student->id] ?? [];
             $credited = $creditedByStudent[$student->id] ?? [];
             $reasons = [];
@@ -286,6 +303,53 @@ final readonly class ClassifyEnrollmentStanding
         }
 
         return $marksByStudent;
+    }
+
+    /**
+     * The students among `$studentIds` the system knows nothing about yet: no locked result, no
+     * credited subject, no transferee credit on file (whatever its status) and no enrollment in an
+     * earlier term. An enrollment in the term being classified is not a record: it is the very
+     * enrollment this verdict is for, so a new student enrolling now stays undetermined.
+     *
+     * @param  list<int>  $studentIds
+     * @param  array<int, array<int, array{mark: GradeMark, academic_term_id: int}>>  $marksByStudent
+     * @param  array<int, array<int, true>>  $creditedByStudent
+     * @return array<int, true> student id => true
+     */
+    private function studentIdsWithoutRecord(array $studentIds, AcademicTerm $term, array $marksByStudent, array $creditedByStudent): array
+    {
+        $candidates = array_values(array_filter(
+            $studentIds,
+            static fn (int $id): bool => ($marksByStudent[$id] ?? []) === [] && ($creditedByStudent[$id] ?? []) === [],
+        ));
+
+        if ($candidates === []) {
+            return [];
+        }
+
+        $known = [];
+
+        $withCredit = TransfereeCredit::query()->whereIn('student_id', $candidates)->distinct()->pluck('student_id');
+        $withEarlierEnrollment = Enrollment::query()
+            ->whereIn('student_id', $candidates)
+            ->where('academic_term_id', '!=', $term->id)
+            ->where('status', EnrollmentStatus::Enrolled->value)
+            ->distinct()
+            ->pluck('student_id');
+
+        foreach ([...$withCredit->all(), ...$withEarlierEnrollment->all()] as $studentId) {
+            $known[(int) $studentId] = true;
+        }
+
+        $without = [];
+
+        foreach ($candidates as $id) {
+            if (! isset($known[$id])) {
+                $without[$id] = true;
+            }
+        }
+
+        return $without;
     }
 
     /**

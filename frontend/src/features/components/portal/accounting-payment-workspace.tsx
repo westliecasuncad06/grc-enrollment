@@ -394,8 +394,15 @@ export function AccountingPaymentWorkspace() {
   const [amountOverride, setAmountOverride] = useState<string | null>(null)
   const [stepError, setStepError] = useState("")
   const [promissoryNoteOnFile, setPromissoryNoteOnFile] = useState(false)
-  // ADR 0046: with a discount on offer, the Cashier chooses Pay in full (the default) or Installment.
-  const [paymentMode, setPaymentMode] = useState<"full" | "installment">("full")
+  // The server refused a payment for want of a promissory note: show the checkbox even if the account
+  // could not be read here (see `promissoryRelevant`).
+  const [promissoryDemanded, setPromissoryDemanded] = useState(false)
+  // ADR 0046: with a discount on offer, the Cashier chooses Pay in full or Installment. Installment is
+  // the default (owner, 2026-10-13): most students pay in instalments, and an amount of 0.00 to start
+  // with means a full balance is never confirmed by accident.
+  const [paymentMode, setPaymentMode] = useState<"full" | "installment">(
+    "installment",
+  )
   const [lastConfirmation, setLastConfirmation] =
     useState<PaymentConfirmation | null>(null)
   const [viewingCorDocumentId, setViewingCorDocumentId] = useState<
@@ -503,21 +510,36 @@ export function AccountingPaymentWorkspace() {
   // Below the minimum (a 100% scholarship's zero included) the assessment is
   // collected in full, so no amount is typed or sent; the API falls back to it.
   const fixedAmount = netTotal !== null && netTotal < MIN_FIRST_PAYMENT
+  // The amount starts at 0.00 (owner, 2026-10-13) instead of the whole balance, so the Cashier types
+  // what was actually received. Only a collected-in-full assessment (below the minimum, or covered by a
+  // scholarship) is filled in, because nothing can be typed there.
+  const defaultAmount =
+    netTotal === null ? "" : fixedAmount ? netTotal.toFixed(2) : "0.00"
   const amount =
     payInFull && fullQuote
       ? fullQuote.net_total
-      : (amountOverride ?? (netTotal !== null ? netTotal.toFixed(2) : ""))
+      : (amountOverride ?? defaultAmount)
   const amountBelowMinimum =
     !payInFull &&
     !fixedAmount &&
     amount.trim() !== "" &&
     !(Number(amount) >= MIN_FIRST_PAYMENT)
+  // The minimum is only reported as an error once the Cashier has typed: the untouched 0.00 is a
+  // prompt, not a mistake (Confirm stays disabled either way).
+  const showAmountError = amountBelowMinimum && amountOverride !== null
   const isPartialPayment =
     !payInFull &&
     !amountBelowMinimum &&
     netTotal !== null &&
     Number(amount) > 0 &&
     Number(amount) < netTotal
+  // A promissory note is only for a student with a previous bill (owner, 2026-10-13): an unpaid balance
+  // from an earlier term. A downpayment on this term, with nothing owed from before, needs none.
+  const previousBill = accountQuery.data
+    ? Number(accountQuery.data.prior_balance)
+    : 0
+  const promissoryRelevant = previousBill > 0 || promissoryDemanded
+  const promissoryRequired = isPartialPayment && promissoryRelevant
   const currentClassification: PaymentClassification =
     (accountQuery.data?.financial_status ??
       nowServingEnrollment?.student_financial_status) === "scholar"
@@ -534,7 +556,7 @@ export function AccountingPaymentWorkspace() {
     paymentMutation.isPending ||
     nowServingEnrollment === undefined ||
     isCurrentEnrollmentProcessed ||
-    (confirming && isPartialPayment && !promissoryNoteOnFile)
+    (confirming && promissoryRequired && !promissoryNoteOnFile)
 
   const callNext = () => {
     const next = waiting[0]
@@ -556,7 +578,8 @@ export function AccountingPaymentWorkspace() {
     if (confirmDisabled) return
     setAmountOverride(null)
     setPromissoryNoteOnFile(false)
-    setPaymentMode("full")
+    setPromissoryDemanded(false)
+    setPaymentMode("installment")
     setError("")
     setStepError("")
     setStep("classification")
@@ -642,12 +665,13 @@ export function AccountingPaymentWorkspace() {
       // No ticket call here: the payment confirmation already marks the ticket served on the
       // server, and the payment mutation's invalidation refreshes the queue.
     } catch (confirmError) {
-      setError(
-        apiMessage(
-          confirmError,
-          "The payment could not be confirmed. Check the connection and try again.",
-        ),
+      const message = apiMessage(
+        confirmError,
+        "The payment could not be confirmed. Check the connection and try again.",
       )
+      setError(message)
+      // The server found a previous bill this screen did not know about: offer the promissory note.
+      if (/promissory/i.test(message)) setPromissoryDemanded(true)
       // A refused quote means the amount due changed: read the new one so the Cashier can review it.
       void paymentQuoteQuery.refetch()
     }
@@ -1344,15 +1368,17 @@ export function AccountingPaymentWorkspace() {
                   No full-payment discount is active.
                 </p>
               )}
-            <Field data-invalid={amountBelowMinimum}>
+            <Field data-invalid={showAmountError}>
               <FieldLabel htmlFor="payment-amount">Amount</FieldLabel>
               <Input
                 id="payment-amount"
                 inputMode="decimal"
                 value={amount}
                 readOnly={fixedAmount || payInFull}
-                aria-invalid={amountBelowMinimum}
+                aria-invalid={showAmountError}
                 onChange={(event) => setAmountOverride(event.target.value)}
+                // The amount starts at 0.00: select it so typing replaces it.
+                onFocus={(event) => event.currentTarget.select()}
                 disabled={paymentMutation.isPending}
               />
               {payInFull ? (
@@ -1371,7 +1397,7 @@ export function AccountingPaymentWorkspace() {
                   The first enrollment payment must be at least ₱1,000.00.
                 </FieldDescription>
               )}
-              {amountBelowMinimum && (
+              {showAmountError && (
                 <FieldError>
                   The first enrollment payment must be at least ₱1,000.00.
                 </FieldError>
@@ -1467,7 +1493,7 @@ export function AccountingPaymentWorkspace() {
                       <div className="flex justify-between border-t pt-1.5 font-medium">
                         <span
                           className={
-                            isPartial
+                            remaining > 0
                               ? "text-destructive font-semibold"
                               : "text-muted-foreground"
                           }
@@ -1476,7 +1502,7 @@ export function AccountingPaymentWorkspace() {
                         </span>
                         <span
                           className={
-                            isPartial
+                            remaining > 0
                               ? "font-bold text-destructive"
                               : "font-bold text-emerald-600"
                           }
@@ -1494,10 +1520,19 @@ export function AccountingPaymentWorkspace() {
                           </span>
                         </div>
                       )}
-                      {isPartial && (
+                      {isPartial && priorBalance > 0 && (
                         <p className="text-[11px] text-amber-800 font-medium pt-1">
                           * Note: Partial payment detected. Ensure a promissory
                           note is on file for the remaining balance.
+                        </p>
+                      )}
+                      {isPartial && accountQuery.data && priorBalance <= 0 && (
+                        <p className="text-[11px] text-muted-foreground font-medium pt-1">
+                          * Note: Partial payment. The remaining{" "}
+                          {formatPhp(String(remaining.toFixed(2)))}{" "}
+                          stays on the student&apos;s account. No promissory
+                          note is needed
+                          because there is no previous bill.
                         </p>
                       )}
                       {priorBalance > 0 && (
@@ -1521,8 +1556,8 @@ export function AccountingPaymentWorkspace() {
                 })()}
               </div>
             )}
-            {!payInFull && (
-              <Field data-invalid={isPartialPayment && !promissoryNoteOnFile}>
+            {!payInFull && promissoryRelevant && (
+              <Field data-invalid={promissoryRequired && !promissoryNoteOnFile}>
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="promissory-note-on-file"
@@ -1536,7 +1571,7 @@ export function AccountingPaymentWorkspace() {
                     Promissory note on file
                   </FieldLabel>
                 </div>
-                {isPartialPayment && !promissoryNoteOnFile && (
+                {promissoryRequired && !promissoryNoteOnFile && (
                   <FieldError className="mt-1">
                     A promissory note on file is required for partial payments.
                   </FieldError>

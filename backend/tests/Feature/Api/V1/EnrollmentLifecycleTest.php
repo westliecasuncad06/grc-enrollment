@@ -126,24 +126,25 @@ final class EnrollmentLifecycleTest extends TestCase
         $total = $enrollment->assessment->total_amount;
         self::assertTrue(bccomp($total, '1000.00', 2) === 1, 'The assessment must exceed the 1,000.00 minimum for a partial payment to be possible.');
 
-        // 3. Accounting previews the COR (nothing is stored) and is refused a partial payment without a promissory note.
+        // 3. Accounting previews the COR (nothing is stored). A payment below the minimum is refused.
         $this->as($accounting)->getJson("/api/v1/enrollments/{$enrollmentId}/cor-preview")
             ->assertOk()->assertJsonStructure(['data' => ['snapshot', 'watermark']]);
         $this->assertDatabaseCount('enrollment_documents', 0);
 
-        $this->as($accounting)->postJson("/api/v1/enrollments/{$enrollmentId}/payment", ['amount' => 1000, 'promissory_note_on_file' => false])
+        $this->as($accounting)->postJson("/api/v1/enrollments/{$enrollmentId}/payment", ['amount' => 999])
             ->assertUnprocessable();
         self::assertSame(EnrollmentStatus::PendingPayment, $enrollment->refresh()->status);
 
-        // 4. With the promissory note the payment is accepted: enrolled, and the COR is issued.
-        $this->as($accounting)->postJson("/api/v1/enrollments/{$enrollmentId}/payment", ['amount' => 1000, 'promissory_note_on_file' => true])
+        // 4. A downpayment of 1,000 needs no promissory note: this student has no previous bill (2026-10-13).
+        //    It is accepted: enrolled, and the COR is issued.
+        $this->as($accounting)->postJson("/api/v1/enrollments/{$enrollmentId}/payment", ['amount' => 1000, 'promissory_note_on_file' => false])
             ->assertCreated()
             ->assertJsonPath('data.enrollment.status', 'enrolled')
             ->assertJsonPath('data.document.document_type', 'cor');
         $this->assertDatabaseCount('enrollment_documents', 1);
 
         // 5. Confirming again changes nothing.
-        $this->as($accounting)->postJson("/api/v1/enrollments/{$enrollmentId}/payment", ['amount' => 1000, 'promissory_note_on_file' => true]);
+        $this->as($accounting)->postJson("/api/v1/enrollments/{$enrollmentId}/payment", ['amount' => 1000, 'promissory_note_on_file' => false]);
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('enrollment_documents', 1);
 
@@ -154,7 +155,7 @@ final class EnrollmentLifecycleTest extends TestCase
             ->assertJsonPath('data.summary.total_assessed', $total)
             ->assertJsonPath('data.summary.total_paid', '1000.00')
             ->assertJsonPath('data.summary.outstanding_balance', $expectedOwed)
-            ->assertJsonPath('data.terms.0.payments.0.promissory_note_on_file', true)
+            ->assertJsonPath('data.terms.0.payments.0.promissory_note_on_file', false)
             ->assertJsonPath('data.terms.0.running_balance', $expectedOwed);
 
         $seenByAccounting = $this->as($accounting)->getJson("/api/v1/students/{$student->id}/statement-of-account");
