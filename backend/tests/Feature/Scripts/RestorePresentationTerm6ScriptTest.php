@@ -356,15 +356,37 @@ final class RestorePresentationTerm6ScriptTest extends TestCase
         DB::table('audit_logs')->where('id', $log->id)->update(['created_at' => $createdAt]);
     }
 
-    private function flipRealStudentToIrregular(): void
+    private function flipRealStudentToIrregular(string $flippedAt = '2026-10-03 08:15:13'): void
     {
         $id = $this->realOne->id;
         $this->auditWithValues('student_profile.enrollment_category_reclassified', 'student_profile', $id, '2026-08-24 06:07:30', ['enrollment_category' => null], ['enrollment_category' => 'regular', 'reasons' => []]);
-        // The rehearsal's flip after the term was archived (written twice in the same second, as on production).
+        // The rehearsal's flip (written twice in the same second, as on production).
         foreach ([1, 2] as $ignored) {
-            $this->auditWithValues('student_profile.enrollment_category_reclassified', 'student_profile', $id, '2026-10-03 08:15:13', ['enrollment_category' => 'regular'], ['enrollment_category' => 'irregular', 'reasons' => [['code' => 'needs_adding_backlog', 'message' => 'x']]]);
+            $this->auditWithValues('student_profile.enrollment_category_reclassified', 'student_profile', $id, $flippedAt, ['enrollment_category' => 'regular'], ['enrollment_category' => 'irregular', 'reasons' => [['code' => 'needs_adding_backlog', 'message' => 'x']]]);
         }
-        DB::table('student_profiles')->where('id', $id)->update(['enrollment_category' => 'irregular', 'enrollment_category_derived_at' => '2026-10-03 08:15:13']);
+        DB::table('student_profiles')->where('id', $id)->update(['enrollment_category' => 'irregular', 'enrollment_category_derived_at' => $flippedAt]);
+    }
+
+    public function test_a_flip_a_few_minutes_before_the_archive_needs_the_since_option_to_be_put_back(): void
+    {
+        // On production the flip happened at 13:15:13 and the archive at 13:18:27: before the default lookback (archive - 2 minutes).
+        $this->flipRealStudentToIrregular('2026-10-03 08:05:00');
+
+        $this->runScript(['--apply']);
+        self::assertSame('irregular', DB::table('student_profiles')->where('id', $this->realOne->id)->value('enrollment_category'), 'the default lookback does not reach it');
+    }
+
+    public function test_the_since_option_widens_the_lookback_for_flips_queue_cycles_and_notifications(): void
+    {
+        $this->flipRealStudentToIrregular('2026-10-03 08:05:00');
+        Notification::create(['user_id' => $this->realOne->user_id, 'type' => NotificationType::EnrollmentPaymentConfirmed, 'message' => 'rehearsal']);
+        DB::table('notifications')->where('message', 'rehearsal')->update(['created_at' => '2026-10-03 08:06:00']);
+
+        [$code, $output] = $this->runScript(['--apply', '--notifications', '--since=2026-10-03T08:00:00']);
+
+        self::assertSame(0, $code, $output);
+        self::assertSame('regular', DB::table('student_profiles')->where('id', $this->realOne->id)->value('enrollment_category'));
+        self::assertSame(0, Notification::query()->where('message', 'rehearsal')->count());
     }
 
     public function test_a_real_student_flipped_to_irregular_since_the_archive_is_put_back_from_the_audit_trail(): void

@@ -15,6 +15,7 @@ declare(strict_types=1);
  *          --accounts-since=2026-09-25  (student accounts created on/after this date are test accounts)
  *          --max-accounts=5             (abort if more accounts than this would be deleted)
  *          --max-category-reverts=5     (abort if more real students than this had their category flipped since the archive)
+ *          --since=2026-10-12T13:00:00  (where the rehearsal's lookback starts; default: two minutes before the archive)
  *          --notifications              (also delete notifications created since the term was archived)
  *
  * What it does, in order, all in ONE transaction:
@@ -235,14 +236,15 @@ function pr_giveBackStudentNumbers(array $accounts): array
         }
     }
     $changed = [];
-    foreach (DB::select('SELECT year, last_value FROM student_number_sequences ORDER BY year') as $sequence) {
+    // `year` and `last_value` are quoted: LAST_VALUE is a reserved word in MySQL 8 (production), not in MariaDB.
+    foreach (DB::select('SELECT `year`, `last_value` FROM student_number_sequences ORDER BY `year`') as $sequence) {
         $value = (int) $sequence->last_value;
         $from = $value;
         while ($value > 0 && isset($held[(int) $sequence->year][$value])) {
             $value--;
         }
         if ($value !== $from) {
-            DB::update('UPDATE student_number_sequences SET last_value = ?, updated_at = ? WHERE year = ?', [$value, date('Y-m-d H:i:s'), $sequence->year]);
+            DB::update('UPDATE student_number_sequences SET `last_value` = ?, updated_at = ? WHERE `year` = ?', [$value, date('Y-m-d H:i:s'), $sequence->year]);
             $changed[(int) $sequence->year] = ['from' => $from, 'to' => $value];
             pr_out(sprintf('  %d counter: %d -> %d', $sequence->year, $from, $value));
         }
@@ -313,8 +315,15 @@ function pr_run(array $o): int
         pr_guard($target !== null, "target term {$o['year']} · {$o['sem']} exists", $target ? "id {$target->id}, status {$target->status}" : '');
         $targetId = (int) $target->id;
         $archivedAt = $target->archived_at;
-        // Everything the rehearsal did starts a little before the archive (the Registrar Head acts, then archives).
+        // Everything the rehearsal did starts a little before the archive (the Registrar Head acts, then archives);
+        // --since overrides it when the first rehearsal action came earlier (read the audit trail first).
         $since = $archivedAt === null ? null : date('Y-m-d H:i:s', strtotime((string) $archivedAt) - 120);
+        if (isset($o['since'])) {
+            $explicit = strtotime((string) $o['since']);
+            pr_guard($explicit !== false, '--since is a valid date and time', (string) $o['since']);
+            $since = date('Y-m-d H:i:s', $explicit);
+        }
+        pr_out('  rehearsal lookback starts at: '.($since ?? '(none: the target term was not archived)'));
 
         $aheadIds = pr_ids('SELECT id FROM academic_terms WHERE school_year > ? ORDER BY id', [$o['year']]);
         $keepIds = pr_ids('SELECT id FROM academic_terms WHERE school_year <= ? ORDER BY id', [$o['year']]);
@@ -470,13 +479,13 @@ function pr_run(array $o): int
         if ($auditDeleted > 0) {
             $report['audit_logs (by entity)'] = $auditDeleted;
         }
-        if ($o['notifications'] === true && $archivedAt !== null) {
-            $n = DB::delete('DELETE FROM notifications WHERE created_at >= ?', [date('Y-m-d H:i:s', strtotime((string) $archivedAt) - 120)]);
+        if ($o['notifications'] === true && $since !== null) {
+            $n = DB::delete('DELETE FROM notifications WHERE created_at >= ?', [$since]);
             if ($n > 0) {
                 $report['notifications (since archive)'] = $n;
             }
-        } elseif ($archivedAt !== null) {
-            $n = (int) DB::selectOne('SELECT COUNT(*) n FROM notifications WHERE created_at >= ?', [date('Y-m-d H:i:s', strtotime((string) $archivedAt) - 120)])->n;
+        } elseif ($since !== null) {
+            $n = (int) DB::selectOne('SELECT COUNT(*) n FROM notifications WHERE created_at >= ?', [$since])->n;
             pr_out("  (notifications created since the archive: {$n}; kept. Pass --notifications to delete them.)");
         }
 
