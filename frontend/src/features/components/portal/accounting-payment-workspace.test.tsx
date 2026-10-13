@@ -782,13 +782,20 @@ describe("AccountingPaymentWorkspace", () => {
       },
     } as const
 
-    it("offers Pay in full at the discounted estimate and sends it as a full payment", async () => {
+    it("opens on Installment, then offers Pay in full at the discounted estimate and sends it as a full payment", async () => {
       const user = userEvent.setup()
       fetchMock.mockImplementation(mockFreshmanRoutes({ preview: discountedPreview }))
       renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
       const dialog = await openFreshmanDialog(user)
 
       const choice = await within(dialog).findByRole("group", { name: "Payment type" })
+      // Installment is the default (owner, 2026-10-13): the discount is never applied unless the Cashier picks it.
+      expect(within(choice).getByRole("button", { name: /Installment/ })).toHaveAttribute("aria-pressed", "true")
+      expect(within(choice).getByRole("button", { name: /Pay in full/ })).toHaveAttribute("aria-pressed", "false")
+      expect(within(dialog).getByLabelText("Amount received")).toHaveValue("1000.00")
+      expect(within(dialog).queryByText(/Full-payment discount \(10%\)/)).not.toBeInTheDocument()
+
+      await user.click(within(choice).getByRole("button", { name: /Pay in full/ }))
       expect(within(choice).getByRole("button", { name: /Pay in full/ })).toHaveAttribute("aria-pressed", "true")
       expect(within(dialog).getByLabelText("Amount received")).toHaveValue("8280.00")
       expect(within(dialog).getByLabelText("Amount received")).toHaveAttribute("readonly")
@@ -812,7 +819,8 @@ describe("AccountingPaymentWorkspace", () => {
       renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
       const dialog = await openFreshmanDialog(user)
 
-      await user.click(await within(dialog).findByRole("button", { name: /Installment/ }))
+      // Installment is already selected: confirming straight away sends the minimum and no payment type.
+      expect(await within(dialog).findByRole("button", { name: /Installment/ })).toHaveAttribute("aria-pressed", "true")
       expect(within(dialog).getByLabelText("Amount received")).toHaveValue("1000.00")
       expect(within(dialog).getByLabelText("Amount received")).not.toHaveAttribute("readonly")
       await user.click(within(dialog).getByRole("button", { name: "Confirm first payment" }))

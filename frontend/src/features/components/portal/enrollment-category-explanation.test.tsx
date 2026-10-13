@@ -35,6 +35,17 @@ describe("EnrollmentCategoryExplanation", () => {
     expect(screen.getByText(/one section for your whole block/)).toBeInTheDocument()
   })
 
+  it("does not claim the student has passed earlier subjects, because a new student has none", () => {
+    render(
+      <EnrollmentCategoryExplanation
+        viewer={viewer({ audience: "year_1", label: "1st Year" })}
+      />,
+    )
+
+    expect(screen.queryByText(/passing, on-time grade/)).not.toBeInTheDocument()
+    expect(screen.getByText(/no unresolved subject/i)).toBeInTheDocument()
+  })
+
   it("explains Irregular standing and mentions Backlog for the irregular audience", () => {
     render(
       <EnrollmentCategoryExplanation

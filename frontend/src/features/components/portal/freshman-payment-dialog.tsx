@@ -67,12 +67,13 @@ export function FreshmanPaymentDialog({
   const [amountInput, setAmountInput] = useState<string | null>(null)
   const [reference, setReference] = useState("")
   const [error, setError] = useState("")
-  const [mode, setMode] = useState<"full" | "installment">("full")
+  const [mode, setMode] = useState<"full" | "installment">("installment")
 
   const minimum = preview.data?.minimum_amount ?? "1000.00"
   const alreadyConfirmed = preview.data?.already_confirmed === true
-  // ADR 0046: with a discount on offer the Cashier chooses Pay in full (the default, at the
-  // discounted estimate, never typed) or Installment (today's minimum-payment flow). Once the
+  // ADR 0046: with a discount on offer the Cashier chooses Installment (the default since the
+  // owner's 2026-10-13 review, today's minimum-payment flow) or Pay in full (the discounted
+  // estimate, never typed), so the discount is only ever applied on purpose. Once the
   // first payment is confirmed there is nothing to choose: confirming again changes nothing.
   const fullQuote = preview.data?.full_payment ?? null
   const discountOffered =

@@ -35,7 +35,7 @@ export function EnrollmentCategoryExplanation({
       <AlertDescription>
         {isIrregular
           ? "At least one subject from a semester you've already completed still needs to be resolved — failed, marked Incomplete, Not Complete, Dropped, or never taken — shown as “Backlog” below. You'll enroll by picking a section per subject instead of a whole block. Once those subjects are resolved and your grades are finalized, you'll return to Regular automatically."
-          : "Every subject from every semester you've already completed has a passing, on-time grade — so you'll enroll by picking one section for your whole block. If a subject from a finished semester is ever left unresolved, you'll switch to Irregular and enroll per subject until it's cleared."}
+          : "You have no unresolved subject from any semester you've already completed — so you'll enroll by picking one section for your whole block. If a subject from a finished semester is ever left unresolved, you'll switch to Irregular and enroll per subject until it's cleared."}
       </AlertDescription>
     </Alert>
   )

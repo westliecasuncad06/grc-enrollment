@@ -26,3 +26,12 @@ Four problems came from the owner's review of the Cashier and the Student pages 
 - A student who is already Irregular because of this bug is not changed back by the code: the category is corrected by Admission or the Registrar on the student's profile (allowed until the first enrollment).
 - Test fixtures that build students with no record now give them one (an earlier-term result in a subject no curriculum places) or set the category explicitly, which is also what real students look like.
 - No migration.
+
+## Addendum (2026-10-13, later the same day)
+
+The owner asked for everything that was left open to be fixed. Two of those items were code:
+
+- **The freshman and transferee first-payment dialog also opens on Installment** (decision 1 above said it kept its own defaults). Its amount stays pre-filled with the PHP 1,000.00 minimum, which is the pay-first rule (ADR 0043), so only the payment type changed: the 10% discount is applied only when the Cashier picks Pay in full.
+- **The Regular explanation on the Enrollment page** no longer says every earlier subject "has a passing, on-time grade", which is untrue for a student with no record (decision 4). It now says the student has no unresolved subject from the semesters already completed.
+
+The presentation restore script (`backend/scripts/restore_presentation_term6.php`) also puts back what a rehearsal changes on rows that stay: a real student whose category was derived again after the term was archived gets the category from the audit trail (limit `--max-category-reverts`), the student-number counter gives back the numbers of the deleted test accounts, and the empty queue cycles the rehearsal opened are removed (the cycle its first claim closed is open again).

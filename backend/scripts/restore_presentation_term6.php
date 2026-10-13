@@ -14,6 +14,7 @@ declare(strict_types=1);
  * Options: --year=2025-2026 --sem=2nd  (the term that becomes current)
  *          --accounts-since=2026-09-25  (student accounts created on/after this date are test accounts)
  *          --max-accounts=5             (abort if more accounts than this would be deleted)
+ *          --max-category-reverts=5     (abort if more real students than this had their category flipped since the archive)
  *          --notifications              (also delete notifications created since the term was archived)
  *
  * What it does, in order, all in ONE transaction:
@@ -25,12 +26,17 @@ declare(strict_types=1);
  *      enrollments, payments, queue tickets, proposals, forecasts, ...), children first, by walking the real
  *      foreign-key graph, so no orphan and no RESTRICT error is left to chance.
  *   4. The test student accounts are deleted the same way, plus their audit rows and personal access tokens.
+ *   4b. A real student whose category was derived again since the archive (the classifier judged them against the
+ *       rehearsal's next term) gets the category the audit trail says they had before; the flip's audit rows go.
+ *   4c. The student-number counter gives back the numbers the deleted accounts took from its top.
+ *   4d. Queue cycles opened since the archive that hold no ticket any more are deleted; the cycle the rehearsal's
+ *       first claim closed is open again.
  *   5. Audit rows that only describe the deleted things (and the target term's archive) are removed.
  *   6. Invariants: the target term and every earlier term have exactly the same section, enrollment, grade,
  *      payment and proposal counts as before; one slot row points at the target; no later term remains.
  *      Any failure throws and the transaction rolls back.
  *
- * Nothing here touches fee schedules, curricula, rooms, faculty, staff or the student-number counter.
+ * Nothing here touches fee schedules, curricula, rooms, faculty or staff.
  */
 
 use Illuminate\Contracts\Console\Kernel;
@@ -53,7 +59,7 @@ if ($runDirectly) {
 /** @return array<string, string|bool> */
 function pr_opts(array $argv): array
 {
-    $out = ['apply' => false, 'notifications' => false, 'year' => '2025-2026', 'sem' => '2nd', 'accounts-since' => '2026-09-25', 'max-accounts' => '5'];
+    $out = ['apply' => false, 'notifications' => false, 'year' => '2025-2026', 'sem' => '2nd', 'accounts-since' => '2026-09-25', 'max-accounts' => '5', 'max-category-reverts' => '5'];
     foreach (array_slice($argv, 1) as $arg) {
         if ($arg === '--apply') {
             $out['apply'] = true;
@@ -165,6 +171,122 @@ function pr_protectedCounts(int $targetId, array $keepTermIds): array
     return $counts;
 }
 
+/**
+ * A real student whose category was derived again after the archive (a rehearsal opened the next term, so the
+ * classifier judged them against it) goes back to the category the audit trail says they had before: the
+ * `before` value of their EARLIEST reclassification since `$since`. `derived_at` goes back to the time of their
+ * latest earlier reclassification (NULL if there was none). The audit rows of the flip are collected in `$flipAuditIds`
+ * so they can be removed with the other rows that only describe the rehearsal.
+ *
+ * @param  list<int>  $flipAuditIds
+ * @return array<int, array{category: ?string, derived_at: ?string}> student id => what it was put back to
+ */
+function pr_putBackCategories(string $since, int $max, array &$flipAuditIds): array
+{
+    $flips = DB::select(
+        "SELECT a.id, a.auditable_id, a.before_values
+           FROM audit_logs a JOIN student_profiles sp ON sp.id = a.auditable_id
+          WHERE a.action = 'student_profile.enrollment_category_reclassified' AND a.auditable_type = 'student_profile' AND a.created_at >= ?
+          ORDER BY a.id",
+        [$since],
+    );
+    $reverts = [];
+    foreach ($flips as $flip) {
+        $flipAuditIds[] = (int) $flip->id;
+        $studentId = (int) $flip->auditable_id;
+        if (! isset($reverts[$studentId])) {
+            $before = json_decode((string) $flip->before_values, true);
+            $reverts[$studentId] = ['category' => is_array($before) ? ($before['enrollment_category'] ?? null) : null, 'derived_at' => null];
+        }
+    }
+    pr_guard(count($reverts) <= $max, 'number of category flips to put back is within the limit', count($reverts).' found (limit '.$max.')');
+
+    foreach ($reverts as $studentId => $revert) {
+        $earlier = DB::selectOne(
+            "SELECT created_at FROM audit_logs WHERE action = 'student_profile.enrollment_category_reclassified' AND auditable_type = 'student_profile' AND auditable_id = ? AND created_at < ? ORDER BY id DESC LIMIT 1",
+            [$studentId, $since],
+        );
+        $reverts[$studentId]['derived_at'] = $earlier === null ? null : (string) $earlier->created_at;
+        // Raw UPDATE: updated_at is deliberately left alone.
+        DB::update('UPDATE student_profiles SET enrollment_category = ?, enrollment_category_derived_at = ? WHERE id = ?', [$revert['category'], $reverts[$studentId]['derived_at'], $studentId]);
+        pr_out(sprintf('  student #%d: category -> %s, derived_at -> %s', $studentId, $revert['category'] ?? 'NULL', $reverts[$studentId]['derived_at'] ?? 'NULL'));
+    }
+    if ($reverts === []) {
+        pr_out('  (no real student was reclassified since the archive)');
+    }
+
+    return $reverts;
+}
+
+/**
+ * Each year has one counter (`student_number_sequences`). The deleted test accounts took numbers from the TOP of
+ * it, so peel those off again: while the counter's value is a number one of the deleted accounts held, step down.
+ * A counter whose top number belongs to a real student is never touched.
+ *
+ * @param  list<object>  $accounts  rows with `student_number`
+ * @return array<int, array{from: int, to: int}> year => change
+ */
+function pr_giveBackStudentNumbers(array $accounts): array
+{
+    $held = [];
+    foreach ($accounts as $account) {
+        if ($account->student_number !== null && preg_match('/^(\d{4})-\d{2}-(\d{5})$/', (string) $account->student_number, $m) === 1) {
+            $held[(int) $m[1]][(int) $m[2]] = true;
+        }
+    }
+    $changed = [];
+    foreach (DB::select('SELECT year, last_value FROM student_number_sequences ORDER BY year') as $sequence) {
+        $value = (int) $sequence->last_value;
+        $from = $value;
+        while ($value > 0 && isset($held[(int) $sequence->year][$value])) {
+            $value--;
+        }
+        if ($value !== $from) {
+            DB::update('UPDATE student_number_sequences SET last_value = ?, updated_at = ? WHERE year = ?', [$value, date('Y-m-d H:i:s'), $sequence->year]);
+            $changed[(int) $sequence->year] = ['from' => $from, 'to' => $value];
+            pr_out(sprintf('  %d counter: %d -> %d', $sequence->year, $from, $value));
+        }
+    }
+    if ($changed === []) {
+        pr_out('  (no counter was holding a number of a deleted account)');
+    }
+
+    return $changed;
+}
+
+/**
+ * Queue cycles opened since the archive that hold no ticket any more (the purge removed the tickets) are deleted.
+ * If that leaves no open cycle, the latest cycle that was open before the archive and closed after it (closed by
+ * the first claim of the rehearsal) is opened again. Returns that cycle's id, and adds the deleted ids to the
+ * audit clean-up list.
+ *
+ * @param  array<string, int>  $report
+ * @param  array<string, list<int>>  $auditTargets
+ */
+function pr_cleanQueueCycles(string $since, array &$report, array &$auditTargets): ?int
+{
+    $emptyIds = pr_ids('SELECT c.id FROM queue_cycles c WHERE c.created_at >= ? AND NOT EXISTS (SELECT 1 FROM queue_tickets t WHERE t.queue_cycle_id = c.id) ORDER BY c.id', [$since]);
+    if ($emptyIds !== []) {
+        $report['queue_cycles'] = DB::delete('DELETE FROM queue_cycles WHERE id IN ('.pr_placeholders($emptyIds).')', $emptyIds);
+        $auditTargets['queue_cycle'] = $emptyIds;
+        pr_out('  empty cycles opened since the archive deleted: #'.implode(', #', $emptyIds));
+    } else {
+        pr_out('  (no empty cycle was opened since the archive)');
+    }
+
+    $reopened = null;
+    if ((int) DB::selectOne('SELECT COUNT(*) n FROM queue_cycles WHERE closed_at IS NULL')->n === 0) {
+        $cycle = DB::selectOne('SELECT id FROM queue_cycles WHERE created_at < ? AND closed_at >= ? ORDER BY id DESC LIMIT 1', [$since, $since]);
+        if ($cycle !== null) {
+            DB::update('UPDATE queue_cycles SET closed_at = NULL, updated_at = ? WHERE id = ?', [date('Y-m-d H:i:s'), $cycle->id]);
+            $reopened = (int) $cycle->id;
+            pr_out("  cycle #{$reopened} was closed by the rehearsal's first claim -> open again");
+        }
+    }
+
+    return $reopened;
+}
+
 function pr_maskEmail(?string $email): string
 {
     if ($email === null || ! str_contains($email, '@')) {
@@ -191,6 +313,8 @@ function pr_run(array $o): int
         pr_guard($target !== null, "target term {$o['year']} · {$o['sem']} exists", $target ? "id {$target->id}, status {$target->status}" : '');
         $targetId = (int) $target->id;
         $archivedAt = $target->archived_at;
+        // Everything the rehearsal did starts a little before the archive (the Registrar Head acts, then archives).
+        $since = $archivedAt === null ? null : date('Y-m-d H:i:s', strtotime((string) $archivedAt) - 120);
 
         $aheadIds = pr_ids('SELECT id FROM academic_terms WHERE school_year > ? ORDER BY id', [$o['year']]);
         $keepIds = pr_ids('SELECT id FROM academic_terms WHERE school_year <= ? ORDER BY id', [$o['year']]);
@@ -299,9 +423,36 @@ function pr_run(array $o): int
             pr_out('  (no test accounts)');
         }
 
+        // ---------------------------------------------------------------- 4b-4d. what the rehearsal changed on rows that stay
+        $flipAuditIds = [];
+        $reopenedCycleId = null;
+        pr_out("\n4b. PUT BACK THE CATEGORIES THE REHEARSAL FLIPPED ON REAL STUDENTS");
+        if ($since === null) {
+            pr_out('  (the target term was not archived: nothing to put back)');
+        } else {
+            pr_putBackCategories($since, (int) $o['max-category-reverts'], $flipAuditIds);
+        }
+        pr_out("\n4c. GIVE BACK THE STUDENT NUMBERS THE TEST ACCOUNTS TOOK");
+        pr_giveBackStudentNumbers($accounts);
+        pr_out("\n4d. QUEUE CYCLES THE REHEARSAL OPENED OR CLOSED");
+        if ($since === null) {
+            pr_out('  (the target term was not archived: nothing to clean)');
+        } else {
+            $reopenedCycleId = pr_cleanQueueCycles($since, $report, $auditTargets);
+        }
+
         // ---------------------------------------------------------------- 5. audit clean-up
         pr_out("\n5. AUDIT ROWS THAT ONLY DESCRIBE THE DELETED THINGS");
         $auditDeleted = 0;
+        foreach (array_chunk($flipAuditIds, 500) as $chunk) {
+            $auditDeleted += DB::delete('DELETE FROM audit_logs WHERE id IN ('.pr_placeholders($chunk).')', $chunk);
+        }
+        if ($reopenedCycleId !== null && $since !== null) {
+            $auditDeleted += DB::delete(
+                "DELETE FROM audit_logs WHERE auditable_type = 'queue_cycle' AND auditable_id = ? AND action = 'queue_cycle.closed' AND created_at >= ?",
+                [$reopenedCycleId, $since],
+            );
+        }
         foreach ($auditTargets as $type => $idList) {
             if ($idList === []) {
                 continue;
@@ -353,6 +504,12 @@ function pr_run(array $o): int
         $studentsAfter = (int) DB::selectOne('SELECT COUNT(*) n FROM student_profiles')->n;
         pr_guard($usersBefore - $usersAfter === count($accountUserIds), 'only the test accounts were removed from users', "{$usersBefore} -> {$usersAfter}");
         pr_guard($studentsBefore - $studentsAfter === count($accountStudentIds), 'only the test accounts were removed from student_profiles', "{$studentsBefore} -> {$studentsAfter}");
+        if ($since !== null) {
+            $emptyCyclesLeft = (int) DB::selectOne('SELECT COUNT(*) n FROM queue_cycles c WHERE c.created_at >= ? AND NOT EXISTS (SELECT 1 FROM queue_tickets t WHERE t.queue_cycle_id = c.id)', [$since])->n;
+            pr_guard($emptyCyclesLeft === 0, 'no empty queue cycle opened since the archive remains', "{$emptyCyclesLeft} left");
+            $flipsLeft = (int) DB::selectOne("SELECT COUNT(*) n FROM audit_logs WHERE action = 'student_profile.enrollment_category_reclassified' AND created_at >= ?", [$since])->n;
+            pr_guard($flipsLeft === 0, 'no category flip since the archive remains in the audit trail', "{$flipsLeft} left");
+        }
         $leftTickets = (int) DB::selectOne('SELECT COUNT(*) n FROM queue_tickets')->n;
         pr_out("  info: queue tickets left: {$leftTickets}; payments left: ".DB::selectOne('SELECT COUNT(*) n FROM payments')->n);
 
