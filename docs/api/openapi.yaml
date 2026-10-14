@@ -6428,6 +6428,89 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/ched-reports/{report}:
+    get:
+      operationId: getChedReport
+      summary: Preview a CHED / NSTP report for a term
+      description: >
+        Registrar Head only (ADR 0049). `enrollment-list` is the CHED NCR Enrollment List; `nstp-enrollment`
+        and `nstp-graduates` are NSTP Form 2-B lists; `nstp-summary` is NSTP Form 2-A for the school year of
+        the term (one fixed grid, no paging). Students flagged as demo accounts are never listed. The first
+        page of a preview writes a `ched_report.viewed` audit row. `report.missing_gender` counts listed
+        students with no gender on file and `report.demo_populated` those carrying generated details.
+      security: [{ bearerAuth: [] }]
+      tags: [CHED reports]
+      parameters:
+        - { name: report, in: path, required: true, schema: { type: string, enum: [enrollment-list, nstp-enrollment, nstp-graduates, nstp-summary] } }
+        - { name: academic_term_id, in: query, required: true, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: A page of rows (or the summary grid) with the report description.
+          headers: { Cache-Control: { $ref: "#/components/headers/NoStore" } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, report]
+                properties:
+                  data:
+                    description: Rows keyed by the column keys of `report.columns`; for `nstp-summary` an object with campus, classification, academic_year, enrollment (1st, 2nd, summer), graduates and missing_gender, each component holding m / f counts.
+                  meta:
+                    type: object
+                    properties:
+                      current_page: { type: integer }
+                      last_page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer }
+                  report:
+                    type: object
+                    required: [key, title, term_label, school_year, columns, missing_gender, demo_populated]
+                    properties:
+                      key: { type: string }
+                      title: { type: string }
+                      term_label: { type: string }
+                      school_year: { type: string }
+                      columns:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            key: { type: string }
+                            label: { type: string }
+                      missing_gender: { type: integer }
+                      demo_populated: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Unknown report }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/ched-reports/{report}/export:
+    get:
+      operationId: exportChedReport
+      summary: Download a CHED / NSTP report as CSV or as the filled CHED template (Excel)
+      description: >
+        Registrar Head only (ADR 0049). `xlsx` is the owner's CHED template with the rows filled in (layout,
+        merged cells and logo unchanged); `csv` is the template's column headers and the rows, UTF-8 with a
+        byte-order mark. Every download writes a `ched_report.exported` audit row (report, term, format, row
+        count). The response is `private, no-store`.
+      security: [{ bearerAuth: [] }]
+      tags: [CHED reports]
+      parameters:
+        - { name: report, in: path, required: true, schema: { type: string, enum: [enrollment-list, nstp-enrollment, nstp-graduates, nstp-summary] } }
+        - { name: academic_term_id, in: query, required: true, schema: { type: integer } }
+        - { name: format, in: query, required: true, schema: { type: string, enum: [csv, xlsx] } }
+      responses:
+        "200":
+          description: The file.
+          headers: { Cache-Control: { $ref: "#/components/headers/NoStore" } }
+          content:
+            text/csv: { schema: { type: string } }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Unknown report }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /api/v1/notifications/{notification}/read:
     patch:
       operationId: patchNotificationRead

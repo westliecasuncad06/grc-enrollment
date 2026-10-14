@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\V1\Billing\PaymentDiscountSettingController;
 use App\Http\Controllers\Api\V1\CashierPaymentCandidateController;
 use App\Http\Controllers\Api\V1\CashierStudentLookupController;
 use App\Http\Controllers\Api\V1\CashierTransactionController;
+use App\Http\Controllers\Api\V1\ChedReportController;
 use App\Http\Controllers\Api\V1\ClassRosterController;
 use App\Http\Controllers\Api\V1\CurrentCurriculumSubjectController;
 use App\Http\Controllers\Api\V1\CurriculumController;
@@ -599,6 +600,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             ->name('sections.professor.update');
 
         Route::middleware('role:registrar_head')->group(function (): void {
+            // ADR 0049: the CHED Enrollment List and the NSTP forms 2-B / 2-A, previewed and downloaded
+            // as CSV or as CHED's own template filled in. A named student list: Registrar Head only.
+            Route::get('/ched-reports/{report}', [ChedReportController::class, 'show'])
+                ->whereIn('report', ['enrollment-list', 'nstp-enrollment', 'nstp-graduates', 'nstp-summary'])
+                ->name('ched-reports.show');
+            Route::get('/ched-reports/{report}/export', [ChedReportController::class, 'export'])
+                ->whereIn('report', ['enrollment-list', 'nstp-enrollment', 'nstp-graduates', 'nstp-summary'])
+                ->name('ched-reports.export');
             // A professor's teaching profile: terms taught, sections, timetable data, and
             // grade-submission counts. Counts only, no student is named.
             Route::get('/faculty-members/{professor}/profile', FacultyProfileController::class)

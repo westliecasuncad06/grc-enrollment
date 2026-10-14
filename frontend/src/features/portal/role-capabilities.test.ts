@@ -68,7 +68,7 @@ const expectedModuleIds = {
     "enrollment-requests",
     "attrition-analytics",
     "registrar-analytics",
-    "compliance-reports",
+    "ched-reports",
     "enrollment-dashboard",
     "payment-discount",
     "audit-logs",

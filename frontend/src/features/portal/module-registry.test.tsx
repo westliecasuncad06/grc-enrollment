@@ -73,6 +73,7 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "it-control-faculty": "IT Control faculty accounts",
   "it-control-enrollment-override": "Enrollment overrides",
   graduates: "Graduates directory",
+  "ched-reports": "CHED Reports",
   "professor-information": "My Information",
   "freshman-enrollees": "Freshmen enrollees",
 }

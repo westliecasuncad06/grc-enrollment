@@ -316,6 +316,14 @@ final class AuditAction
 
     public const USER_ACCOUNT_LIST_VIEWED = 'user_account.list_viewed';
 
+    public const STUDENT_DEMOGRAPHICS_POPULATED = 'student_demographics.populated';
+
+    public const STUDENT_DEMOGRAPHICS_WIPED = 'student_demographics.wiped';
+
+    public const CHED_REPORT_VIEWED = 'ched_report.viewed';
+
+    public const CHED_REPORT_EXPORTED = 'ched_report.exported';
+
     /**
      * @return list<string>
      */
@@ -478,6 +486,10 @@ final class AuditAction
             self::USER_ACCOUNT_PASSWORD_RESET_SENT,
             self::USER_ACCOUNT_DELETED,
             self::USER_ACCOUNT_LIST_VIEWED,
+            self::STUDENT_DEMOGRAPHICS_POPULATED,
+            self::STUDENT_DEMOGRAPHICS_WIPED,
+            self::CHED_REPORT_VIEWED,
+            self::CHED_REPORT_EXPORTED,
         ];
     }
 }

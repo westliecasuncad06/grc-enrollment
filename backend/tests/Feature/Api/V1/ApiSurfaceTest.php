@@ -55,6 +55,8 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/cashier-payment-candidates',
             'GET|HEAD api/v1/cashier-student-lookup',
             'GET|HEAD api/v1/cashier-transactions',
+            'GET|HEAD api/v1/ched-reports/{report}',
+            'GET|HEAD api/v1/ched-reports/{report}/export',
             'GET|HEAD api/v1/class-rosters',
             'GET|HEAD api/v1/curricula',
             'GET|HEAD api/v1/curricula/{curriculum}/migration-preview',
@@ -260,6 +262,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.analytics.attrition',
             'api.v1.audit-logs.actors',
             'api.v1.audit-logs.index',
+            'api.v1.ched-reports.show',
+            'api.v1.ched-reports.export',
             'api.v1.class-rosters.index',
             'api.v1.notifications.index',
             'api.v1.notifications.read',
@@ -470,6 +474,17 @@ final class ApiSurfaceTest extends TestCase
         $readRoute = Route::getRoutes()->getByName('api.v1.academic-terms.index');
         $this->assertNotNull($readRoute);
         $this->assertNotContains('role:registrar_head', $readRoute->gatherMiddleware());
+    }
+
+    public function test_ched_reports_are_gated_to_the_registrar_head_role(): void
+    {
+        foreach (['api.v1.ched-reports.show', 'api.v1.ched-reports.export'] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains('auth:sanctum', $route->gatherMiddleware());
+            $this->assertContains('role:registrar_head', $route->gatherMiddleware());
+        }
     }
 
     public function test_staff_invitations_are_gated_to_the_registrar_head_role(): void

@@ -260,6 +260,10 @@ const GraduatesWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/graduates-workspace"),
   "GraduatesWorkspace",
 )
+const ChedReportsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/ched-reports-workspace"),
+  "ChedReportsWorkspace",
+)
 const CashierCorRecordsWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/cashier-cor-records-workspace"),
   "CashierCorRecordsWorkspace",
@@ -345,6 +349,7 @@ export type ConnectedModuleId =
   | "attrition-analytics"
   | "honors"
   | "graduates"
+  | "ched-reports"
   | "professor-information"
   | "advance-payment"
   | "statement-of-account"
@@ -410,6 +415,7 @@ export const connectedModuleIds = [
   "attrition-analytics",
   "honors",
   "graduates",
+  "ched-reports",
   "professor-information",
   "freshman-enrollees",
 ] as const satisfies readonly ConnectedModuleId[]
@@ -550,6 +556,7 @@ export const connectedModuleRegistry: Readonly<
   "attrition-analytics": AttritionAnalyticsWorkspace,
   honors: HonorsWorkspace,
   graduates: GraduatesWorkspace,
+  "ched-reports": ChedReportsWorkspace,
   "professor-information": ProfessorInformationWorkspace,
   "irregular-enrollments": ProgramChairIrregularEnrollmentsWorkspace,
   "freshman-enrollees": RegistrarFreshmanEnrolleesWorkspace,

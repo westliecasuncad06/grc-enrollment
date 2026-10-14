@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\FinancialStatus;
+use App\Domain\Identity\Gender;
 use App\Domain\Identity\StudentType;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
@@ -29,6 +30,14 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property AcademicStanding $academic_standing
  * @property ?FinancialStatus $financial_status
  * @property ?string $address
+ * @property ?Gender $gender
+ * @property ?CarbonImmutable $birth_date
+ * @property ?string $citizenship
+ * @property ?string $contact_number
+ * @property ?string $street_barangay
+ * @property ?string $town_city
+ * @property ?string $province
+ * @property ?list<string> $demographics_demo_fields
  * @property ?CarbonImmutable $requirements_verified_at
  * @property ?int $requirements_verified_by
  * @property ?CarbonImmutable $freshman_payment_confirmed_at
@@ -62,6 +71,14 @@ final class StudentProfile extends Model
         'academic_standing',
         'financial_status',
         'address',
+        'gender',
+        'birth_date',
+        'citizenship',
+        'contact_number',
+        'street_barangay',
+        'town_city',
+        'province',
+        'demographics_demo_fields',
         'requirements_verified_at',
         'requirements_verified_by',
         'freshman_payment_confirmed_at',
@@ -82,6 +99,9 @@ final class StudentProfile extends Model
             'admission_status' => AdmissionStatus::class,
             'academic_standing' => AcademicStanding::class,
             'financial_status' => FinancialStatus::class,
+            'gender' => Gender::class,
+            'birth_date' => 'immutable_date',
+            'demographics_demo_fields' => 'array',
             'requirements_verified_at' => 'immutable_datetime',
             'freshman_payment_confirmed_at' => 'immutable_datetime',
             'enrollment_deadline_at' => 'immutable_datetime',

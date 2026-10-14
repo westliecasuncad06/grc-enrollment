@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   FileCheck2,
   FileClock,
+  FileSpreadsheet,
   FileText,
   FileSearch,
   Gauge,
@@ -388,10 +389,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         BarChart3,
       ),
       portalModule(
-        "compliance-reports",
-        "Compliance Reports",
-        "See where governed compliance exports will be prepared.",
-        ScrollText,
+        "ched-reports",
+        "CHED Reports",
+        "Preview and download the CHED Enrollment List and the NSTP forms as CSV or in CHED's Excel template.",
+        FileSpreadsheet,
       ),
       portalModule(
         "enrollment-dashboard",

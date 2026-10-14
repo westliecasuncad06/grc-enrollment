@@ -93,6 +93,10 @@ final class AuditableType
     /** Role-agnostic — login applies to every role, unlike the role-specific *_ACCOUNT constants above. */
     public const USER_ACCOUNT = 'user_account';
 
+    public const STUDENT_DEMOGRAPHICS = 'student_demographics';
+
+    public const CHED_REPORT = 'ched_report';
+
     /**
      * @return list<string>
      */
@@ -143,6 +147,8 @@ final class AuditableType
             self::FACULTY_LOAD_LIMIT,
             self::FACULTY_LOAD_OVERRIDE,
             self::USER_ACCOUNT,
+            self::STUDENT_DEMOGRAPHICS,
+            self::CHED_REPORT,
         ];
     }
 }

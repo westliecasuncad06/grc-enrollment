@@ -61,12 +61,12 @@ test.describe("cross-role authorization", () => {
     ).toBeVisible()
   })
 
-  test("journey 15 (partial) — a Student is denied the Registrar Head's compliance-reports route", async ({
+  test("journey 15 (partial) — a Student is denied the Registrar Head's CHED reports route", async ({
     page,
     request,
   }) => {
     await authenticateViaApi(page, request, "student")
-    await page.goto("/portal/compliance-reports")
+    await page.goto("/portal/ched-reports")
 
     await expect(
       page.getByRole("heading", { name: "Portal module not found" }),

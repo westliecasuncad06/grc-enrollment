@@ -202,6 +202,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 - Perform logged override or void actions for authorized edge cases.
 - View predictive attrition analytics.
 - Generate government compliance reports.
+- Preview and download, as CSV or as CHED's own template filled in (Excel), the CHED Enrollment List and the NSTP Form 2-B (enrollment and graduates) and Form 2-A (summary) for a term; every view and download is audited (ADR 0049).
 - View audit logs and daily control reports.
 - Configure approved Registrar-controlled policy values where the product supports configuration. The fee schedule is no longer one of them: it moved to Accounting Staff (ADR 0035); the Registrar Head can still read it.
 
@@ -511,7 +512,7 @@ Sub-processes retained from the manuscript-aligned scope:
 - **FR-ANL-004:** Produce attrition risk indicators for Registrar Head use.
 - **FR-ANL-005:** Explain major contributing factors in plain, non-punitive language where technically feasible.
 - **FR-ANL-006:** Evaluate honors using approved deterministic academic rules, not an opaque prediction.
-- **FR-ANL-007:** Generate approved government or CHED-style reports.
+- **FR-ANL-007:** Generate approved government or CHED-style reports. The CHED Enrollment List and NSTP Forms 2-B / 2-A are built from CHED's own templates and downloaded as CSV or Excel by the Registrar Head (ADR 0049); the official report fields and sign-off remain an open decision in §17.
 - **FR-ANL-008:** Cache the latest successful result and degrade gracefully when prediction is unavailable.
 - **FR-ANL-009:** Store model version, feature schema version, run status, metrics, and generated time.
 - **FR-ANL-010:** Restrict student-level attrition data to explicitly authorized roles.
@@ -886,6 +887,8 @@ POST   /api/v1/sections/{section}/grades/submit
 GET    /api/v1/analytics/section-demand
 GET    /api/v1/analytics/attrition
 GET    /api/v1/reports/honors
+GET    /api/v1/ched-reports/{report}
+GET    /api/v1/ched-reports/{report}/export
 POST   /api/v1/reports/compliance-exports
 
 GET    /api/v1/notifications
@@ -1031,7 +1034,7 @@ All names use Laravel/MySQL conventions. The final schema must be represented by
   - `year_level`
   - `admission_status`
   - `academic_standing`
-  - approved contact fields
+  - approved contact fields, including the details the CHED forms ask for: `gender`, `birth_date`, `citizenship`, `contact_number`, `street_barangay`, `town_city`, `province` (ADR 0049)
   - timestamps
 
 - `student_number_sequences`

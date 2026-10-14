@@ -6,6 +6,7 @@ use App\Domain\Academic\PrerequisiteEvaluator;
 use App\Models\PersonalAccessToken;
 use App\Policies\AcademicRecordPolicy;
 use App\Policies\AttritionReportPolicy;
+use App\Policies\ChedReportPolicy;
 use App\Policies\DashboardPolicy;
 use App\Policies\EligibleSubjectPolicy;
 use App\Policies\FacultyMemberPolicy;
@@ -87,6 +88,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-attrition-report', [AttritionReportPolicy::class, 'view']);
         Gate::define('view-honors-report', [HonorsReportPolicy::class, 'view']);
         Gate::define('view-graduates', [GraduatePolicy::class, 'viewAny']);
+        Gate::define('view-ched-reports', [ChedReportPolicy::class, 'view']);
         Gate::define('view-section-grade-submission', [SectionPolicy::class, 'viewGradeSubmission']);
         Gate::define('view-any-user-account', [UserAccountPolicy::class, 'viewAny']);
         Gate::define('invite-user-account', [UserAccountPolicy::class, 'invite']);
