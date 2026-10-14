@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Actions\Academic\EvaluateCreditMappingStatus;
 use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
@@ -13,6 +14,7 @@ use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Notifications\NotificationType;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
@@ -22,6 +24,7 @@ use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Notification;
 use App\Models\Program;
+use App\Models\QueueTicket;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\Subject;
@@ -58,7 +61,7 @@ final class TransfereeCreditReclassificationTest extends TestCase
         $this->term = $withTerm ? AcademicTerm::create([
             'school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing,
         ]) : null;
-        $program = Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active]);
+        $program = Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Ccs]);
         $curriculum = Curriculum::create([
             'program_id' => $program->id, 'name' => 'BSCS Curriculum',
             'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active,
@@ -104,6 +107,28 @@ final class TransfereeCreditReclassificationTest extends TestCase
         ]);
     }
 
+    private function pendingCreditForThePrerequisite(): TransfereeCredit
+    {
+        return TransfereeCredit::create([
+            'student_id' => $this->student->id, 'source_institution' => 'Other University',
+            'source_subject_code' => 'IT 100', 'source_subject_title' => 'Intro to Computing', 'source_grade' => '1.75',
+            'credited_units' => 3, 'subject_id' => $this->prerequisite->id, 'status' => TransfereeCreditStatus::Pending,
+        ]);
+    }
+
+    private function asChair(): static
+    {
+        $chair = User::create([
+            'name' => 'Program Chair', 'email' => 'chair@grc.test', 'password' => self::PASSWORD,
+            'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
+            'college' => CollegeCode::Ccs,
+        ]);
+        $token = (string) $this->postJson('/api/v1/auth/login', ['email' => $chair->email, 'password' => self::PASSWORD])->json('data.token');
+        $this->app['auth']->forgetGuards();
+
+        return $this->withToken($token);
+    }
+
     private function asHead(): static
     {
         $head = User::create([
@@ -147,6 +172,73 @@ final class TransfereeCreditReclassificationTest extends TestCase
 
         self::assertSame('irregular', $this->student->fresh()->enrollment_category);
         self::assertSame(0, AuditLog::query()->where('action', AuditAction::STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED)->count());
+    }
+
+    /**
+     * Owner, 2026-10-15: once the Program Chair has passed the credits to the Registrar Head the
+     * student enrols on them, so a credit that is only endorsed already counts for Regular / Irregular
+     * and for the queue number; the Head's approval no longer has to come first.
+     */
+    public function test_the_chair_passing_the_credits_on_makes_an_irregular_transferee_regular_and_gives_the_queue_number(): void
+    {
+        $this->world();
+        $this->pendingCreditForThePrerequisite();
+
+        $this->asChair()->postJson("/api/v1/student-profiles/{$this->student->id}/transferee-credits/submit-to-registrar-head")->assertOk();
+
+        self::assertSame('regular', $this->student->fresh()->enrollment_category);
+        self::assertSame(1, QueueTicket::query()->where('student_profile_id', $this->student->id)->count());
+        self::assertSame(1, Notification::query()->where('user_id', $this->student->user_id)->where('type', NotificationType::TransfereeQueueNumberIssued)->count());
+    }
+
+    public function test_endorsing_the_last_pending_credit_one_by_one_does_the_same(): void
+    {
+        $this->world();
+        $credit = $this->pendingCreditForThePrerequisite();
+
+        $this->asChair()->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'endorse'])->assertOk();
+
+        self::assertSame('regular', $this->student->fresh()->enrollment_category);
+        self::assertSame(1, QueueTicket::query()->where('student_profile_id', $this->student->id)->count());
+    }
+
+    public function test_the_registrar_head_rejecting_an_endorsed_credit_takes_the_provisional_credit_back(): void
+    {
+        $this->world();
+        $this->pendingCreditForThePrerequisite();
+        $this->asChair()->postJson("/api/v1/student-profiles/{$this->student->id}/transferee-credits/submit-to-registrar-head")->assertOk();
+        self::assertSame('regular', $this->student->fresh()->enrollment_category);
+        $credit = TransfereeCredit::query()->where('student_id', $this->student->id)->sole();
+
+        $this->asHead()->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'reject', 'reason' => 'Not on the transcript.'])->assertOk();
+
+        self::assertSame('irregular', $this->student->fresh()->enrollment_category);
+        self::assertSame(1, QueueTicket::query()->where('student_profile_id', $this->student->id)->count(), 'the number was issued once and stays');
+    }
+
+    public function test_the_registrar_head_returning_an_endorsed_credit_to_the_chair_takes_it_back_and_holds_enrolment_again(): void
+    {
+        $this->world();
+        $this->pendingCreditForThePrerequisite();
+        $this->asChair()->postJson("/api/v1/student-profiles/{$this->student->id}/transferee-credits/submit-to-registrar-head")->assertOk();
+        $credit = TransfereeCredit::query()->where('student_id', $this->student->id)->sole();
+
+        $this->asHead()->patchJson("/api/v1/transferee-credits/{$credit->id}", ['action' => 'return', 'reason' => 'Check the units.'])->assertOk();
+
+        self::assertSame('irregular', $this->student->fresh()->enrollment_category);
+        self::assertFalse((new EvaluateCreditMappingStatus)->execute($this->student->fresh())->isCompleted);
+    }
+
+    public function test_the_head_approving_what_the_chair_passed_on_keeps_the_student_regular_and_adds_no_second_number(): void
+    {
+        $this->world();
+        $this->pendingCreditForThePrerequisite();
+        $this->asChair()->postJson("/api/v1/student-profiles/{$this->student->id}/transferee-credits/submit-to-registrar-head")->assertOk();
+
+        $this->asHead()->postJson("/api/v1/student-profiles/{$this->student->id}/transferee-credits/approve-all")->assertOk();
+
+        self::assertSame('regular', $this->student->fresh()->enrollment_category);
+        self::assertSame(1, QueueTicket::query()->where('student_profile_id', $this->student->id)->count());
     }
 
     public function test_an_approval_with_no_term_in_progress_still_succeeds_and_changes_no_category(): void

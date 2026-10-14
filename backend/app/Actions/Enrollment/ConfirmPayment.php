@@ -17,6 +17,7 @@ use App\Models\EnrollmentDocument;
 use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\QueueTicket;
+use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use Illuminate\Support\Facades\DB;
@@ -50,6 +51,12 @@ use Illuminate\Validation\ValidationException;
  *
  * ADR 0046: `payment_type` `full` (with the `quoted_amount` the Cashier was shown) takes the
  * full-payment discount, when one applies, before the payment row and the COR are written.
+ *
+ * ADR 0048, amended 2026-10-15: this is also where a new Transferee's or Returnee's 7-day
+ * enrollment deadline ends. The student keeps the restricted portal and the deactivation notice
+ * until the enrollment is finished AND paid, i.e. until it becomes `enrolled` here (a
+ * pay-first student's Registrar approval reaches this through `SettleEnrollmentFromAdvanceCredit`).
+ * The profile is therefore locked before the enrollment, the order used everywhere else.
  */
 final readonly class ConfirmPayment
 {
@@ -95,6 +102,10 @@ final readonly class ConfirmPayment
         bool $freshmanFirstPayment = false,
     ): array {
         return DB::transaction(function () use ($enrollment, $validated, $actor, $context, $freshmanFirstPayment): array {
+            // PROFILE -> ENROLLMENT -> SECTIONS: the student's profile first, so ending the deadline below
+            // cannot deadlock with a step that locks the profile before the enrollment.
+            $lockedStudent = StudentProfile::query()->whereKey($enrollment->student_id)->lockForUpdate()->first();
+
             $lockedEnrollment = Enrollment::query()
                 ->whereKey($enrollment->id)
                 ->lockForUpdate()
@@ -167,6 +178,12 @@ final readonly class ConfirmPayment
                 'enrolled_at' => $confirmedAt,
             ]);
             $lockedEnrollment->refresh();
+
+            // Finished and paid: the student has all their options for good and the 7-day
+            // deactivation no longer applies (ADR 0048, amended 2026-10-15).
+            if ($lockedStudent?->enrollment_deadline_at !== null) {
+                $lockedStudent->forceFill(['enrollment_deadline_at' => null])->save();
+            }
 
             QueueTicket::query()
                 ->where('enrollment_id', $lockedEnrollment->id)

@@ -513,7 +513,8 @@ describe("PortalShell", () => {
     })
   })
 
-  // A newly created Transferee or Returnee sees only Enrollment until the Registrar approves it (ADR 0048).
+  // A newly created Transferee or Returnee sees only Enrollment and Grades until they are enrolled and have paid
+  // (ADR 0048, amended by ADR 0050).
   describe("a student with an enrollment deadline", () => {
     const studentProfile = {
       type: "student_profile",
@@ -594,7 +595,7 @@ describe("PortalShell", () => {
       )
     }
 
-    it("shows Enrollment alone in the sidebar, with no home link and none of the other options", async () => {
+    it("shows Enrollment and Grades in the sidebar, with no home link and none of the other options", async () => {
       serveProfile(inTwoAndAHalfDays())
       renderAt("/portal/enrollment", "enrollment")
 
@@ -608,14 +609,16 @@ describe("PortalShell", () => {
       )
 
       const links = within(navigation).getAllByRole("link")
-      expect(links).toHaveLength(1)
-      expect(links[0]).toHaveAttribute("href", "/portal/enrollment")
+      expect(links.map((link) => link.getAttribute("href"))).toEqual([
+        "/portal/enrollment",
+        "/portal/grades",
+      ])
       expect(
         within(navigation).queryByRole("link", { name: "GRC Connect" }),
       ).not.toBeInTheDocument()
     })
 
-    it("tells them the account will be deactivated unless the enrollment is finished", async () => {
+    it("tells them the account will be deactivated unless the enrollment is finished and paid", async () => {
       serveProfile(inTwoAndAHalfDays())
       renderAt("/portal/enrollment", "enrollment")
 
@@ -626,12 +629,21 @@ describe("PortalShell", () => {
 
     it("sends them to Enrollment when they open any other page, without showing it", async () => {
       serveProfile(inTwoAndAHalfDays())
-      renderAt("/portal/grades", "grades")
+      renderAt("/portal/schedule", "schedule")
 
       await waitFor(() =>
         expect(routerMock.replace).toHaveBeenCalledWith("/portal/enrollment"),
       )
       expect(screen.queryByText("Page content")).not.toBeInTheDocument()
+    })
+
+    it("lets them open Grades, where the Prospectus and the credited grades are", async () => {
+      serveProfile(inTwoAndAHalfDays())
+      renderAt("/portal/grades", "grades")
+
+      await screen.findByRole("status")
+      expect(routerMock.replace).not.toHaveBeenCalled()
+      expect(screen.getByText("Page content")).toBeInTheDocument()
     })
 
     it("sends them from the GRC Connect home to Enrollment", async () => {

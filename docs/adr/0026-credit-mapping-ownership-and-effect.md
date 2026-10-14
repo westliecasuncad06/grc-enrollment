@@ -7,6 +7,8 @@
 - The Registrar-Staff-only reading documented in `TransfereeCreditPolicy` and `docs/data-dictionary/enrollment-records.md`.
 - The earlier decision that an approved `TransfereeCredit` is record-only and must never feed `BuildEligibleSubjectPool` (PROGRESS.md Phase 7b notes). **PRD §17's open item — the official cross-institution grade equivalence — is not resolved by this ADR** (see decision 4).
 
+**Amended 2026-10-15 (ADR 0050):** an `endorsed` credit (passed by the Program Chair, awaiting the Registrar Head) counts for the student's enrolment provisionally and no longer blocks enrolment; only a `pending` credit does. Promotion and the Chair's suggestions still read approved credits only.
+
 ## Context
 
 Stakeholder feedback (Google Doc "WESTLIE", 2026-09-24) said credit mapping belongs to

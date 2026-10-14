@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Actions\Academic\IssueTransfereeQueueTicket;
 use App\Actions\Enrollment\SubmitEnrollment;
 use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Identity\StudentType;
@@ -24,6 +26,7 @@ use App\Models\Payment;
 use App\Models\QueueTicket;
 use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\Subject;
 use App\Models\TransfereeCredit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -232,24 +235,86 @@ final class TransfereePayFirstJourneyTest extends TestCase
         self::assertSame(1, QueueTicket::query()->count());
     }
 
-    public function test_approving_credits_one_by_one_issues_the_number_only_with_the_last_one(): void
+    /**
+     * Owner, 2026-10-15: the number comes when the Program Chair has passed the LAST pending credit
+     * on to the Registrar Head, not when the Head approves.
+     */
+    public function test_the_chair_endorsing_credits_one_by_one_issues_the_number_only_with_the_last_pending_one(): void
+    {
+        Mail::fake();
+        $profile = $this->transferee(withClosedCredit: false);
+        $profile->program->update(['college' => CollegeCode::Ccs]);
+        User::create([
+            'name' => 'Test chair', 'email' => 'chair@grc.test', 'password' => self::FRESHMAN_TEST_PASSWORD,
+            'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
+            'college' => CollegeCode::Ccs,
+        ]);
+        $subject = Subject::create(['code' => 'CS101', 'title' => 'Intro', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $first = $this->credit($profile, TransfereeCreditStatus::Pending);
+        $second = $this->credit($profile, TransfereeCreditStatus::Pending);
+        $first->forceFill(['subject_id' => $subject->id])->save();
+        $second->forceFill(['subject_id' => $subject->id])->save();
+
+        $this->asUser('chair@grc.test')
+            ->patchJson("/api/v1/transferee-credits/{$first->id}", ['action' => 'endorse'])->assertOk();
+
+        self::assertSame(0, QueueTicket::query()->count(), 'one credit is still with the Program Chair');
+        Mail::assertNothingSent();
+
+        $this->asUser('chair@grc.test')
+            ->patchJson("/api/v1/transferee-credits/{$second->id}", ['action' => 'endorse'])->assertOk();
+
+        self::assertSame(1, QueueTicket::query()->where('student_profile_id', $profile->id)->count());
+        Mail::assertSent(TransfereeQueueTicketMail::class, 1);
+    }
+
+    public function test_the_registrar_heads_approval_adds_no_second_number_once_the_chair_has_passed_the_credits_on(): void
     {
         Mail::fake();
         $profile = $this->transferee(withClosedCredit: false);
         $first = $this->credit($profile, TransfereeCreditStatus::Endorsed);
         $second = $this->credit($profile, TransfereeCreditStatus::Endorsed);
+        $this->app->make(IssueTransfereeQueueTicket::class)->whenMappingCloses(
+            $profile,
+            $this->staffUser(UserRole::RegistrarHead, 'head@grc.test'),
+            new AuditRequestContext('test-close', null),
+        );
+        self::assertSame(1, QueueTicket::query()->where('student_profile_id', $profile->id)->count());
 
-        $this->asStaff(UserRole::RegistrarHead, 'head@grc.test')
+        $this->asUser('head@grc.test')
             ->patchJson("/api/v1/transferee-credits/{$first->id}", ['action' => 'approve'])->assertOk();
-
-        self::assertSame(0, QueueTicket::query()->count());
-        Mail::assertNothingSent();
-
         $this->asUser('head@grc.test')
             ->patchJson("/api/v1/transferee-credits/{$second->id}", ['action' => 'reject', 'reason' => 'Not in the transcript.'])->assertOk();
 
         self::assertSame(1, QueueTicket::query()->where('student_profile_id', $profile->id)->count());
-        Mail::assertSent(TransfereeQueueTicketMail::class, 1);
+    }
+
+    public function test_a_transferee_whose_credits_the_chair_passed_on_can_already_submit_a_block(): void
+    {
+        $profile = $this->transferee(withClosedCredit: false);
+        $this->credit($profile, TransfereeCreditStatus::Endorsed);
+        $term = $this->ongoingTerm();
+        $plan = $this->yearOnePlan($term, $profile->curriculum);
+        $this->blockSection($term, $plan, 'IT101', 'ITP1');
+
+        $this->asUser($profile->user->email)
+            ->postJson('/api/v1/enrollments', ['academic_term_id' => $term->id, 'block_code' => 'IT101'])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'awaiting_first_payment');
+    }
+
+    public function test_a_transferee_with_a_credit_still_with_the_program_chair_cannot_submit_a_block_yet(): void
+    {
+        $profile = $this->transferee(withClosedCredit: false);
+        $this->credit($profile, TransfereeCreditStatus::Pending);
+        $term = $this->ongoingTerm();
+        $plan = $this->yearOnePlan($term, $profile->curriculum);
+        $this->blockSection($term, $plan, 'IT101', 'ITP1');
+
+        $this->asUser($profile->user->email)
+            ->postJson('/api/v1/enrollments', ['academic_term_id' => $term->id, 'block_code' => 'IT101'])
+            ->assertUnprocessable()
+            ->assertJsonStructure(['error' => ['errors' => ['academic_term_id']]]);
     }
 
     public function test_the_program_chair_declining_the_last_pending_credit_issues_the_number(): void
@@ -553,6 +618,7 @@ final class TransfereePayFirstJourneyTest extends TestCase
         Mail::fake();
         $profile = $this->transferee(withClosedCredit: false);
         $this->credit($profile, TransfereeCreditStatus::Endorsed);
+        $profile->forceFill(['enrollment_deadline_at' => now()->addDays(5)])->save();
         $term = $this->ongoingTerm();
         $section = $this->blockSection($term, $this->yearOnePlan($term, $profile->curriculum), 'IT101', 'ITP1');
 
@@ -571,10 +637,16 @@ final class TransfereePayFirstJourneyTest extends TestCase
         $this->payAtTheCashier($profile)->assertCreated()->assertJsonPath('data.outcome', 'awaiting_registrar_approval');
         self::assertSame(QueueTicketStatus::Served, $ticket->fresh()->status);
 
+        // Paid, but not enrolled yet: the portal stays restricted and the deactivation notice stays.
+        self::assertNotNull($profile->fresh()->enrollment_deadline_at);
+
         // 4. Registrar Staff approve: enrolled from the held payment, COR issued, one enrolled email.
         $this->asStaff(UserRole::RegistrarStaff, 'registrar@grc.test')
             ->patchJson("/api/v1/enrollments/{$enrollmentId}", ['action' => 'registrar_approve'])
             ->assertOk()->assertJsonPath('data.status', 'enrolled');
+
+        // Enrolled and paid: now the other options open and the deadline is gone (owner, 2026-10-15).
+        self::assertNull($profile->fresh()->enrollment_deadline_at);
 
         self::assertSame(EnrollmentStatus::Enrolled, Enrollment::query()->findOrFail($enrollmentId)->status);
         self::assertSame($enrollmentId, AccountPayment::query()->sole()->enrollment_id);
@@ -600,15 +672,19 @@ final class TransfereePayFirstJourneyTest extends TestCase
         self::assertSame(1, TransfereeCredit::query()->where('student_id', $profile->id)->where('status', TransfereeCreditStatus::Approved)->count());
     }
 
-    public function test_the_registrars_approval_removes_the_enrollment_deadline(): void
+    public function test_the_registrars_approval_alone_keeps_the_enrollment_deadline_until_the_student_is_enrolled_and_paid(): void
     {
+        // Paid, but no payment is held as credit, so the approval leaves the enrollment awaiting payment.
         ['profile' => $profile, 'enrollmentId' => $enrollmentId] = $this->submittedBlock(paid: true);
-        $profile->forceFill(['enrollment_deadline_at' => now()->addDays(3)])->save();
+        $deadline = now()->addDays(3)->startOfSecond();
+        $profile->forceFill(['enrollment_deadline_at' => $deadline])->save();
 
         $this->asStaff(UserRole::RegistrarStaff, 'registrar@grc.test')
-            ->patchJson("/api/v1/enrollments/{$enrollmentId}", ['action' => 'registrar_approve'])->assertOk();
+            ->patchJson("/api/v1/enrollments/{$enrollmentId}", ['action' => 'registrar_approve'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_payment');
 
-        self::assertNull($profile->fresh()->enrollment_deadline_at, 'approval unlocks the portal for good');
+        self::assertEquals($deadline, $profile->fresh()->enrollment_deadline_at, 'not enrolled yet: still restricted');
     }
 
     public function test_the_registrars_rejection_keeps_the_enrollment_deadline(): void

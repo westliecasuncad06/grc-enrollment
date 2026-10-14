@@ -14,6 +14,17 @@ export const prospectusPrerequisiteSchema = z
   })
   .strict()
 
+export const prospectusEntryCreditSchema = z
+  .object({
+    source_institution: z.string().min(1),
+    source_subject_title: z.string().min(1),
+    source_grade: z.string().nullable(),
+    status: z.enum(["approved", "endorsed"]),
+    status_label: z.string().min(1),
+    awaiting_registrar_head_approval: z.boolean(),
+  })
+  .strict()
+
 export const prospectusEntrySchema = z
   .object({
     subject_id: z.number().int().positive(),
@@ -31,6 +42,10 @@ export const prospectusEntrySchema = z
     academic_term_id: z.number().int().positive().nullable(),
     term_label: z.string().nullable(),
     attempt_count: z.number().int().nonnegative(),
+    // The previous school's grade for a subject credited to this one (ADR 0050): "approved" once the
+    // Registrar Head approved it, "endorsed" while the Program Chair has passed it on and the Head has
+    // yet to decide. Null when nothing is credited to the subject (and for a server that predates it).
+    credit: prospectusEntryCreditSchema.nullable().default(null),
     prerequisites: z.array(prospectusPrerequisiteSchema),
   })
   .strict()
@@ -108,6 +123,11 @@ export const prospectusSchema = z
             source_semester: z.string().nullable(),
             target_code: z.string().nullable(),
             target_title: z.string().nullable(),
+            // "approved" (credited) or "endorsed" (passed on by the Program Chair, awaiting the
+            // Registrar Head, ADR 0050); defaults for a server that predates the fields.
+            status: z.enum(["approved", "endorsed"]).default("approved"),
+            status_label: z.string().min(1).default("Credited"),
+            awaiting_registrar_head_approval: z.boolean().default(false),
           })
           .strict(),
       )

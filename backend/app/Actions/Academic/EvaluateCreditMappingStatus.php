@@ -9,6 +9,15 @@ use App\Models\CurriculumMigration;
 use App\Models\StudentProfile;
 use App\Models\TransfereeCredit;
 
+/**
+ * Whether a Transferee's or Returnee's credit mapping still holds enrolment back.
+ *
+ * Owner's rule, 2026-10-15 (amends ADR 0026 / 0043): only a credit that is still with the Program
+ * Chair (`pending`) holds the student back. Once the Chair has passed the credits to the Registrar
+ * Head (`endorsed`) the student may go on to enrol; the Head's approval no longer gates enrolment.
+ * An endorsed credit counts for the student provisionally (`ResolveCreditedSubjectIds`) and the
+ * Prospectus marks it as awaiting the Head, who still approves or rejects it afterwards.
+ */
 final readonly class EvaluateCreditMappingStatus
 {
     private const SUBMIT_HINT = 'You have subjects saved but not yet sent. Submit your list to your Program Head to start credit mapping.';
@@ -62,11 +71,11 @@ final readonly class EvaluateCreditMappingStatus
                 );
             }
 
-            if ($pendingCredits > 0 || $endorsedCredits > 0) {
+            if ($pendingCredits > 0) {
                 return new CreditMappingStatusResult(
                     isCompleted: false,
                     requiresCreditMapping: true,
-                    reason: 'Credit mapping is currently in progress. Please wait for the Program Head and Registrar Head to finalize your credit evaluation.',
+                    reason: 'Credit mapping is currently in progress. Please wait for the Program Head to map your credits and send them to the Registrar Head.',
                     totalCredits: $totalCredits,
                     pendingCredits: $pendingCredits,
                     endorsedCredits: $endorsedCredits,
@@ -90,11 +99,11 @@ final readonly class EvaluateCreditMappingStatus
         }
 
         // Returnee logic (remaining case)
-        if ($pendingCredits > 0 || $endorsedCredits > 0) {
+        if ($pendingCredits > 0) {
             return new CreditMappingStatusResult(
                 isCompleted: false,
                 requiresCreditMapping: true,
-                reason: 'Credit mapping is currently in progress. Please wait for the evaluation to be finalized.',
+                reason: 'Credit mapping is currently in progress. Please wait for the Program Head to send your credits to the Registrar Head.',
                 totalCredits: $totalCredits,
                 pendingCredits: $pendingCredits,
                 endorsedCredits: $endorsedCredits,
@@ -104,7 +113,7 @@ final readonly class EvaluateCreditMappingStatus
             );
         }
 
-        if ($hasCurriculumMigration || $approvedCredits > 0) {
+        if ($hasCurriculumMigration || $approvedCredits > 0 || $endorsedCredits > 0) {
             return new CreditMappingStatusResult(
                 isCompleted: true,
                 requiresCreditMapping: true,

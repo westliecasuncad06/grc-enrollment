@@ -4,8 +4,10 @@ import type { TransfereeCreditStatus } from "@/features/schemas/transferee-credi
  * Whether a transferee's credit mapping still blocks enrollment. It mirrors the
  * API's `EvaluateCreditMappingStatus`: a draft is the student's own unsent list,
  * so it counts for nothing until it is submitted. With no sent credit the
- * mapping has not started; while any sent credit is pending or endorsed it is
- * still in progress.
+ * mapping has not started; while any sent credit is still `pending` (with the
+ * Program Chair) it is in progress. A credit the Chair has passed to the
+ * Registrar Head (`endorsed`) no longer blocks (ADR 0050): the student may enroll
+ * while the Head's approval is still to come.
  */
 export function isCreditMappingIncomplete(
   credits: readonly { status: TransfereeCreditStatus }[],
@@ -14,9 +16,7 @@ export function isCreditMappingIncomplete(
 
   if (sent.length === 0) return true
 
-  return sent.some(
-    (credit) => credit.status === "pending" || credit.status === "endorsed",
-  )
+  return sent.some((credit) => credit.status === "pending")
 }
 
 /**

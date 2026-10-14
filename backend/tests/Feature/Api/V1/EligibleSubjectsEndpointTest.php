@@ -329,7 +329,7 @@ final class EligibleSubjectsEndpointTest extends TestCase
             ->assertJsonPath('data.0.reasons.0.message', "This subject was credited from the student's previous school.");
     }
 
-    public function test_a_transferee_credit_that_is_not_approved_credits_nothing(): void
+    public function test_a_transferee_credit_still_with_the_program_chair_or_turned_down_credits_nothing(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -337,8 +337,8 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $this->placeSubject($curriculum, $subject);
         $this->makeSection($term, $subject);
         $student = $this->makeStudent($curriculum);
-        // Still in the workflow, or turned down: none of them credits the subject.
-        foreach ([TransfereeCreditStatus::Pending, TransfereeCreditStatus::Endorsed, TransfereeCreditStatus::Rejected] as $status) {
+        // Not yet passed on by the Program Chair, or turned down: neither credits the subject.
+        foreach ([TransfereeCreditStatus::Pending, TransfereeCreditStatus::Rejected] as $status) {
             $this->makeTransfereeCredit($student, $subject, $status);
         }
 
@@ -346,6 +346,51 @@ final class EligibleSubjectsEndpointTest extends TestCase
             ->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
 
         $response->assertOk()->assertJsonPath('data.0.is_eligible', true);
+    }
+
+    /**
+     * Owner, 2026-10-15: a credit the Program Chair passed to the Registrar Head already credits the
+     * subject for enrolment, and says the Head has yet to approve it.
+     */
+    public function test_a_transferee_credit_the_chair_passed_on_credits_the_subject_provisionally(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS-XFER');
+        $this->placeSubject($curriculum, $subject);
+        $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $this->makeTransfereeCredit($student, $subject, TransfereeCreditStatus::Endorsed);
+
+        $response = $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.is_eligible', false)
+            ->assertJsonPath('data.0.reasons.0.code', 'completed');
+        self::assertStringContainsString('Registrar Head has yet to approve', (string) $response->json('data.0.reasons.0.message'));
+    }
+
+    public function test_a_transferee_credit_the_chair_passed_on_satisfies_a_prerequisite_too(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $intro = $this->makeSubject('CS101');
+        $advanced = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $intro);
+        $placement = $this->placeSubject($curriculum, $advanced, 2);
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $intro->id, 'minimum_grade' => '3.00',
+        ]);
+        $this->makeSection($term, $advanced);
+        $student = $this->makeStudent($curriculum);
+        $this->makeTransfereeCredit($student, $intro, TransfereeCreditStatus::Endorsed);
+
+        $response = $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $advancedEntry = collect($response->json('data'))->firstWhere('code', 'CS201');
+        self::assertTrue($advancedEntry['is_eligible']);
     }
 
     public function test_an_approved_transferee_credit_satisfies_a_prerequisite(): void

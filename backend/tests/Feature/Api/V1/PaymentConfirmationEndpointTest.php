@@ -36,6 +36,7 @@ use App\Models\StudentProfile;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
@@ -205,6 +206,78 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $response->assertUnprocessable();
         self::assertSame('200.00', $tuition->refresh()->unit_amount);
         self::assertSame('600.00', $assessment->refresh()->total_amount);
+    }
+
+    /**
+     * Owner, 2026-10-15: a new Transferee or Returnee keeps the restricted portal and the 7-day
+     * deactivation notice until the enrollment is finished AND paid, so the payment that makes the
+     * student `enrolled` is what removes the deadline (it used to go at the Registrar's approval).
+     */
+    public function test_the_payment_that_enrols_the_student_removes_the_enrollment_deadline(): void
+    {
+        Mail::fake();
+        $student = $this->makeStudent($this->makeCurriculum());
+        $enrollment = $this->makeEnrollment($student, $this->makeTerm());
+        $student->forceFill(['enrollment_deadline_at' => now()->addDays(3)])->save();
+
+        $this->withToken($this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.deadline@grc.test'))
+            ->postJson("/api/v1/enrollments/{$enrollment->id}/payment", ['amount' => 1500.00])
+            ->assertCreated();
+
+        self::assertNull($student->fresh()->enrollment_deadline_at, 'finished and paid: the portal opens for good');
+    }
+
+    public function test_the_registrars_approval_of_an_unpaid_enrollment_keeps_the_enrollment_deadline(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum());
+        $enrollment = $this->makeEnrollment($student, $this->makeTerm(), EnrollmentStatus::PendingRegistrarApproval);
+        $deadline = now()->addDays(3)->startOfSecond();
+        $student->forceFill(['enrollment_deadline_at' => $deadline])->save();
+
+        $this->withToken($this->tokenForNewUser(UserRole::RegistrarStaff, 'registrar.deadline@grc.test'))
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_payment');
+
+        self::assertEquals($deadline, $student->fresh()->enrollment_deadline_at, 'approved but not yet paid: still restricted');
+    }
+
+    public function test_a_payment_with_no_deadline_to_remove_changes_nothing_on_the_profile(): void
+    {
+        Mail::fake();
+        $student = $this->makeStudent($this->makeCurriculum());
+        $enrollment = $this->makeEnrollment($student, $this->makeTerm());
+
+        $this->withToken($this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.nodeadline@grc.test'))
+            ->postJson("/api/v1/enrollments/{$enrollment->id}/payment", ['amount' => 1500.00])
+            ->assertCreated();
+
+        self::assertNull($student->fresh()->enrollment_deadline_at);
+    }
+
+    public function test_the_payment_takes_the_profile_lock_before_the_enrollment_lock(): void
+    {
+        Mail::fake();
+        $student = $this->makeStudent($this->makeCurriculum());
+        $enrollment = $this->makeEnrollment($student, $this->makeTerm());
+        $student->forceFill(['enrollment_deadline_at' => now()->addDays(3)])->save();
+        $cashier = $this->withToken($this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.locks@grc.test'));
+
+        $locks = [];
+        DB::listen(function ($query) use (&$locks): void {
+            $sql = strtolower($query->sql);
+            if (! str_contains($sql, 'for update')) {
+                return;
+            }
+            if (str_contains($sql, '`student_profiles`')) {
+                $locks[] = 'profile';
+            } elseif (str_contains($sql, '`enrollments`')) {
+                $locks[] = 'enrollment';
+            }
+        });
+        $cashier->postJson("/api/v1/enrollments/{$enrollment->id}/payment", ['amount' => 1500.00])->assertCreated();
+
+        self::assertSame(['profile', 'enrollment'], array_slice(array_values(array_unique($locks)), 0, 2));
     }
 
     public function test_confirming_payment_transitions_enrollment_and_generates_cor(): void

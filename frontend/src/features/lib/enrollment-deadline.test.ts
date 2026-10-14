@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import {
   enrollmentDeadlineNotice,
+  isPathOpenWhileRestricted,
   isPortalRestricted,
   RESTRICTED_STUDENT_MODULE_ID,
+  RESTRICTED_STUDENT_MODULE_IDS,
 } from "@/features/lib/enrollment-deadline"
 
 const DAY = 24 * 60 * 60 * 1000
@@ -21,8 +23,26 @@ describe("isPortalRestricted", () => {
     expect(isPortalRestricted(null)).toBe(false)
   })
 
-  it("leaves Enrollment as the one module a restricted student can open", () => {
+  it("lands a restricted student on Enrollment and lets them open Enrollment and Grades only (ADR 0050)", () => {
     expect(RESTRICTED_STUDENT_MODULE_ID).toBe("enrollment")
+    expect(RESTRICTED_STUDENT_MODULE_IDS).toEqual(["enrollment", "grades"])
+  })
+})
+
+describe("isPathOpenWhileRestricted", () => {
+  it("is true for Enrollment and Grades", () => {
+    expect(isPathOpenWhileRestricted("/portal/enrollment")).toBe(true)
+    expect(isPathOpenWhileRestricted("/portal/grades")).toBe(true)
+  })
+
+  it("is false for every other page, the GRC Connect home included", () => {
+    expect(isPathOpenWhileRestricted("/portal")).toBe(false)
+    expect(isPathOpenWhileRestricted("/portal/schedule")).toBe(false)
+    expect(isPathOpenWhileRestricted("/portal/statement-of-account")).toBe(
+      false,
+    )
+    expect(isPathOpenWhileRestricted("/portal/gradesheet")).toBe(false)
+    expect(isPathOpenWhileRestricted("/login")).toBe(false)
   })
 })
 

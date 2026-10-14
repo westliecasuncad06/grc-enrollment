@@ -38,7 +38,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/features/components/ui/al
 import { StudentCreditMappingDialog } from "@/features/components/portal/student-credit-mapping-dialog"
 import { useTransfereeCreditsQuery } from "@/features/hooks/use-transferee-credits"
 import { isCreditMappingIncomplete } from "@/features/lib/credit-mapping"
-import { isPortalRestricted } from "@/features/lib/enrollment-deadline"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -711,7 +710,7 @@ export function EnrollmentWorkspace() {
 
     if (creditMappingBlocked) {
       setFieldErrors([
-        "Credit mapping must be completed and approved by the Program Chair and Registrar Head before you can submit your enrollment.",
+        "Your Program Chair must finish mapping your credits and pass them to the Registrar Head before you can submit your enrollment.",
       ])
       return
     }
@@ -983,26 +982,24 @@ export function EnrollmentWorkspace() {
                 {studentProfileQuery.data?.student_type_label ??
                   (isReturnee ? "Returnee" : "Transferee")}
               </span>{" "}
-              student, your credit mapping must be completed and approved by the Program Chair and Registrar Head before you can select subjects and enroll. This ensures that completed subjects and prerequisites from your previous school are officially credited.
+              student, your Program Chair must finish mapping your credits and pass them to the Registrar Head before you can select subjects and enroll. This ensures that completed subjects and prerequisites from your previous school are credited.
             </p>
             <p>
               Upload your Transcript of Records (TOR) and add the subjects you
               took in your previous school to your list, then submit it. Your
-              Program Chair reads the TOR, maps each subject to your curriculum,
-              and the Registrar Head approves it. Once that is done you can enroll.
+              Program Chair reads the TOR and maps each subject to your
+              curriculum. Once your Program Chair has passed the mapping to the
+              Registrar Head you can enroll; your Prospectus shows the credits as
+              awaiting the Registrar Head&apos;s approval until they decide.
             </p>
             {(isTransferee || isReturnee) && (
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <StudentCreditMappingDialog />
-                {/* Academic Records is not in the sidebar of a student who still has an enrollment
-                    deadline (ADR 0048), so the page could not be opened from here. */}
-                {!isPortalRestricted(studentProfileQuery.data) && (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/portal/academic-records">
-                      View Academic Records
-                    </Link>
-                  </Button>
-                )}
+                {/* Grades holds the Prospectus with the credited grades; a student who still has an
+                    enrollment deadline can open it (ADR 0050). */}
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/portal/grades">View Grades and Prospectus</Link>
+                </Button>
               </div>
             )}
           </AlertDescription>

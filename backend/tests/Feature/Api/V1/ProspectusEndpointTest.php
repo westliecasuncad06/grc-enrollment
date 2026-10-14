@@ -231,30 +231,79 @@ final class ProspectusEndpointTest extends TestCase
             ->assertJsonPath('data.curriculum_transition.credits.0.target_code', 'CS-NEW');
     }
 
-    public function test_an_approved_transferee_credit_is_listed_and_others_are_not(): void
+    /**
+     * @return array{student: StudentProfile, credited: Subject, notYet: Subject}
+     */
+    private function transfereeWithCredits(): array
     {
         $curriculum = $this->makeCurriculum();
         $credited = $this->makeSubject('CS-XFER');
         $notYet = $this->makeSubject('CS-LATER');
-        $this->placeSubject($curriculum, $credited, 1);
-        $this->placeSubject($curriculum, $notYet, 1);
+        $withTheChair = $this->makeSubject('CS-CHAIR');
+        $turnedDown = $this->makeSubject('CS-NO');
+        foreach ([$credited, $notYet, $withTheChair, $turnedDown] as $subject) {
+            $this->placeSubject($curriculum, $subject, 1);
+        }
         $student = $this->makeStudent($curriculum, 'transferee.prospectus@grc.test');
-        foreach ([[$credited, TransfereeCreditStatus::Approved], [$notYet, TransfereeCreditStatus::Endorsed]] as [$subject, $status]) {
+        foreach ([
+            [$credited, TransfereeCreditStatus::Approved, '1.75'],
+            [$notYet, TransfereeCreditStatus::Endorsed, '2.00'],
+            [$withTheChair, TransfereeCreditStatus::Pending, '2.25'],
+            [$turnedDown, TransfereeCreditStatus::Rejected, '3.00'],
+        ] as [$subject, $status, $grade]) {
             TransfereeCredit::create([
                 'student_id' => $student->id, 'source_institution' => 'Other University',
                 'source_subject_code' => 'EXT101', 'source_subject_title' => 'Programming',
+                'source_grade' => $grade,
                 'credited_units' => 3, 'source_school_year' => '2023-2024', 'source_semester' => '1st',
                 'subject_id' => $subject->id, 'status' => $status,
             ]);
         }
 
+        return ['student' => $student, 'credited' => $credited, 'notYet' => $notYet];
+    }
+
+    /**
+     * Owner, 2026-10-15: what the Registrar Head approved is recorded; what only the Program Chair
+     * passed on is listed too, marked as still needing the Head's approval. A credit still with the
+     * Chair, or turned down, is not on the Prospectus.
+     */
+    public function test_approved_and_chair_passed_transferee_credits_are_listed_and_the_rest_are_not(): void
+    {
+        ['student' => $student] = $this->transfereeWithCredits();
+
         $this->withToken($this->tokenFor($student->user))
             ->getJson('/api/v1/prospectus')
             ->assertOk()
-            ->assertJsonCount(1, 'data.transferee_credits')
+            ->assertJsonCount(2, 'data.transferee_credits')
             ->assertJsonPath('data.transferee_credits.0.target_code', 'CS-XFER')
             ->assertJsonPath('data.transferee_credits.0.source_institution', 'Other University')
-            ->assertJsonPath('data.transferee_credits.0.source_school_year', '2023-2024');
+            ->assertJsonPath('data.transferee_credits.0.source_school_year', '2023-2024')
+            ->assertJsonPath('data.transferee_credits.0.source_grade', '1.75')
+            ->assertJsonPath('data.transferee_credits.0.status', 'approved')
+            ->assertJsonPath('data.transferee_credits.0.awaiting_registrar_head_approval', false)
+            ->assertJsonPath('data.transferee_credits.1.target_code', 'CS-LATER')
+            ->assertJsonPath('data.transferee_credits.1.status', 'endorsed')
+            ->assertJsonPath('data.transferee_credits.1.status_label', 'Awaiting Registrar Head approval')
+            ->assertJsonPath('data.transferee_credits.1.awaiting_registrar_head_approval', true);
+    }
+
+    public function test_a_credited_subject_carries_its_previous_school_grade_on_its_own_curriculum_row(): void
+    {
+        ['student' => $student] = $this->transfereeWithCredits();
+
+        $response = $this->withToken($this->tokenFor($student->user))->getJson('/api/v1/prospectus')->assertOk();
+
+        $entries = collect($response->json('data.semesters'))->flatMap(fn (array $semester): array => $semester['entries'])->keyBy('code');
+        self::assertSame('approved', $entries['CS-XFER']['credit']['status']);
+        self::assertSame('1.75', $entries['CS-XFER']['credit']['source_grade']);
+        self::assertSame('Other University', $entries['CS-XFER']['credit']['source_institution']);
+        self::assertFalse($entries['CS-XFER']['credit']['awaiting_registrar_head_approval']);
+        self::assertSame('endorsed', $entries['CS-LATER']['credit']['status']);
+        self::assertTrue($entries['CS-LATER']['credit']['awaiting_registrar_head_approval']);
+        // Still with the Chair, or turned down: nothing is recorded against the subject.
+        self::assertNull($entries['CS-CHAIR']['credit']);
+        self::assertNull($entries['CS-NO']['credit']);
     }
 
     public function test_a_student_cannot_view_another_students_prospectus(): void

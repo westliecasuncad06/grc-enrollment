@@ -737,18 +737,16 @@ describe("EnrollmentWorkspace", () => {
 
   it.each([
     {
-      name: "hides the link to Academic Records from a returnee who has an enrollment deadline",
+      name: "shows the link to the Prospectus and grades to a returnee who has an enrollment deadline",
       deadline: "2026-10-21T10:00:00Z",
-      linkShown: false,
     },
     {
-      name: "shows the link to Academic Records to a returnee without an enrollment deadline",
+      name: "shows the link to the Prospectus and grades to a returnee without an enrollment deadline",
       deadline: null,
-      linkShown: true,
     },
   ])(
     "$name",
-    async ({ deadline, linkShown }) => {
+    async ({ deadline }) => {
       fetchMock.mockImplementation((input, init) => {
         const target = url(input)
         if (target.endsWith("/student-profile"))
@@ -795,9 +793,13 @@ describe("EnrollmentWorkspace", () => {
       })
 
       await screen.findByText("Credit Mapping Required Before Enrollment")
-      // Their sidebar offers Enrollment alone while the deadline is set, so that page could not be opened.
-      const link = screen.queryByRole("link", { name: "View Academic Records" })
-      expect(link !== null, "the Academic Records link is shown").toBe(linkShown)
+      // Grades holds the Prospectus with the credited grades, and a restricted student can open it (ADR 0050).
+      expect(
+        screen.getByRole("link", { name: "View Grades and Prospectus" }),
+      ).toHaveAttribute("href", "/portal/grades")
+      expect(
+        screen.queryByRole("link", { name: "View Academic Records" }),
+      ).not.toBeInTheDocument()
     },
   )
 

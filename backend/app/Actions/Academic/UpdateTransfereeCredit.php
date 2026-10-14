@@ -26,7 +26,11 @@ use Illuminate\Validation\ValidationException;
  *   - No `action`: the Program Chair corrects or maps a credit (`subject_id`,
  *     units, the source details). Only while it is `pending`.
  *   - `endorse` (Program Chair, `pending` → `endorsed`): needs a mapped
- *     subject, which the same request may set. Tells the Registrar Head.
+ *     subject, which the same request may set. Tells the Registrar Head. From here
+ *     the credit counts for the student's enrolment, provisionally; when it was the
+ *     student's last pending credit the student gets their queue number. From here
+ *     the credit counts for the student's enrolment, provisionally; when it was the
+ *     student's last pending credit the student gets their queue number.
  *   - `decline` (Program Chair, `pending` → `rejected`): needs a reason.
  *     Tells the Student.
  *   - `approve` / `reject` (Registrar Head, `endorsed` → `approved` /
@@ -162,13 +166,15 @@ final readonly class UpdateTransfereeCredit
 
             $this->notify($lockedCredit, $action, $reason);
 
-            // An approved credit counts as completed, so the student's Regular/Irregular category may change.
-            if ($action === 'approve') {
+            // An approved credit counts as completed, and so does one the Chair passed on, until the Head
+            // decides (owner, 2026-10-15). A step that adds a counted credit (endorse, approve) or takes
+            // one back (reject, return) may therefore change the student's Regular/Irregular category.
+            if (in_array($action, ['endorse', 'approve', 'reject', 'return'], true)) {
                 $this->reclassifyAfterApproval->execute($lockedCredit->student, $actor, $context);
             }
 
-            // A decision that closes the student's last open row gives them their queue number.
-            if (in_array($action, ['approve', 'reject', 'decline'], true)) {
+            // A step that leaves nothing with the Program Chair gives the student their queue number.
+            if (in_array($action, ['endorse', 'approve', 'reject', 'decline'], true)) {
                 $this->issueQueueTicket->whenMappingCloses($lockedCredit->student, $actor, $context, $outbox);
             }
 

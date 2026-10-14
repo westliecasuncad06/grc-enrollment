@@ -26,13 +26,13 @@ class EvaluateCreditMappingStatusTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->action = new EvaluateCreditMappingStatus();
+        $this->action = new EvaluateCreditMappingStatus;
     }
 
     private function createStudent(StudentType $type): StudentProfile
     {
         $program = Program::query()->first() ?? Program::create([
-            'code' => 'BSIT-' . uniqid(),
+            'code' => 'BSIT-'.uniqid(),
             'name' => 'BS Information Technology',
             'status' => 'active',
         ]);
@@ -46,7 +46,7 @@ class EvaluateCreditMappingStatusTest extends TestCase
 
         $user = User::create([
             'name' => 'Credit Test Student',
-            'email' => 'credit.test.' . uniqid() . '@grc.test',
+            'email' => 'credit.test.'.uniqid().'@grc.test',
             'password' => bcrypt('password'),
             'role' => UserRole::Student,
             'status' => UserStatus::Active,
@@ -54,7 +54,7 @@ class EvaluateCreditMappingStatusTest extends TestCase
 
         return StudentProfile::create([
             'user_id' => $user->id,
-            'student_number' => 'STU-' . uniqid(),
+            'student_number' => 'STU-'.uniqid(),
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
             'student_type' => $type->value,
@@ -67,7 +67,7 @@ class EvaluateCreditMappingStatusTest extends TestCase
     private function getOrCreateSubject(): Subject
     {
         return Subject::query()->first() ?? Subject::create([
-            'code' => 'SUBJ-' . uniqid(),
+            'code' => 'SUBJ-'.uniqid(),
             'title' => 'Test Subject Title',
             'units' => 3,
             'status' => 'active',
@@ -201,7 +201,7 @@ class EvaluateCreditMappingStatusTest extends TestCase
         $student = $this->createStudent(StudentType::Returnee);
         $targetCurriculum = Curriculum::query()->where('id', '!=', $student->curriculum_id)->first() ?? Curriculum::create([
             'program_id' => $student->program_id,
-            'name' => 'Target Curriculum ' . uniqid(),
+            'name' => 'Target Curriculum '.uniqid(),
             'effective_school_year' => '2026-2027',
             'status' => 'active',
         ]);
@@ -235,12 +235,59 @@ class EvaluateCreditMappingStatusTest extends TestCase
     {
         $student = $this->createStudent(StudentType::Returnee);
         $subject = $this->getOrCreateSubject();
-        $this->createCredit($student, $subject, TransfereeCreditStatus::Endorsed);
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Pending);
 
         $result = $this->action->execute($student);
 
         $this->assertFalse($result->isCompleted);
         $this->assertTrue($result->requiresCreditMapping);
-        $this->assertEquals(1, $result->endorsedCredits);
+        $this->assertEquals(1, $result->pendingCredits);
+    }
+
+    /**
+     * The owner's rule (2026-10-15): once the Program Chair has passed the credits to the Registrar Head,
+     * the student may go on to enrol; the Head's approval no longer holds enrolment back.
+     */
+    public function test_transferee_whose_credits_the_chair_passed_to_the_registrar_head_may_enrol(): void
+    {
+        $student = $this->createStudent(StudentType::Transferee);
+        $subject = $this->getOrCreateSubject();
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Endorsed);
+
+        $result = $this->action->execute($student);
+
+        $this->assertTrue($result->isCompleted);
+        $this->assertTrue($result->requiresCreditMapping);
+        $this->assertNull($result->reason);
+        $this->assertSame(1, $result->endorsedCredits);
+        $this->assertSame(0, $result->pendingCredits);
+    }
+
+    public function test_returnee_whose_credits_the_chair_passed_to_the_registrar_head_may_enrol(): void
+    {
+        $student = $this->createStudent(StudentType::Returnee);
+        $subject = $this->getOrCreateSubject();
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Endorsed);
+
+        $result = $this->action->execute($student);
+
+        $this->assertTrue($result->isCompleted);
+        $this->assertNull($result->reason);
+        $this->assertSame(1, $result->endorsedCredits);
+    }
+
+    public function test_a_credit_still_with_the_program_chair_holds_enrolment_back_even_when_another_was_passed_on(): void
+    {
+        $student = $this->createStudent(StudentType::Transferee);
+        $subject = $this->getOrCreateSubject();
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Endorsed);
+        $this->createCredit($student, $subject, TransfereeCreditStatus::Pending);
+
+        $result = $this->action->execute($student);
+
+        $this->assertFalse($result->isCompleted);
+        $this->assertStringContainsString('Program Head', (string) $result->reason);
+        $this->assertSame(1, $result->pendingCredits);
+        $this->assertSame(1, $result->endorsedCredits);
     }
 }

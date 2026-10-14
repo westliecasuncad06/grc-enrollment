@@ -219,11 +219,9 @@ final class TransitionEnrollment
             $lockedEnrollment->update($attributes);
             $lockedEnrollment->refresh();
 
-            // The Registrar approved: the account has all its options for good, and the 7-day
-            // deactivation no longer applies (ADR 0048).
-            if ($action === 'registrar_approve' && $lockedStudent?->enrollment_deadline_at !== null) {
-                $lockedStudent->forceFill(['enrollment_deadline_at' => null])->save();
-            }
+            // The 7-day deactivation (ADR 0048) does not end at the Registrar's approval any more: it ends
+            // when the enrollment is finished and paid, in `ConfirmPayment` (owner, 2026-10-15). For a student
+            // who paid first, the approval settles the payment and so reaches it in the same request.
 
             if ($action === 'student_accept_revision' || $action === 'student_decline_revision') {
                 $this->answerRevision($lockedEnrollment, $action === 'student_accept_revision', $reason);

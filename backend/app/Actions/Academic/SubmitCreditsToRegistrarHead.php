@@ -6,6 +6,7 @@ use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Enrollment\QueueLinkOutbox;
 use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Models\StudentProfile;
@@ -30,20 +31,29 @@ use Illuminate\Validation\ValidationException;
  * student's pending credits are locked first, so a repeat finds none, changes
  * nothing, notifies nobody and returns an empty collection. Who may call this is
  * `TransfereeCreditPolicy::manageStudent`.
+ *
+ * Owner, 2026-10-15: from here the student may enrol. The endorsed credits count for them
+ * provisionally (their Regular/Irregular category is re-derived) and, with nothing left
+ * `pending`, they get their queue number; the Registrar Head's approval comes after.
  */
 final readonly class SubmitCreditsToRegistrarHead
 {
     public function __construct(
         private AuditRecorder $auditRecorder,
         private NotificationRecorder $notificationRecorder,
+        private IssueTransfereeQueueTicket $issueQueueTicket,
+        private ReclassifyAfterCreditApproval $reclassifyAfterApproval,
     ) {}
 
     /**
+     * `$outbox` collects the queue-number link this step issued, for the caller to email after
+     * commit (`SendQueueLinks`); a caller that does not send emails may leave it out.
+     *
      * @return Collection<int, TransfereeCredit> the credits this call endorsed (empty on a repeat)
      */
-    public function execute(StudentProfile $student, User $chair, AuditRequestContext $context): Collection
+    public function execute(StudentProfile $student, User $chair, AuditRequestContext $context, ?QueueLinkOutbox $outbox = null): Collection
     {
-        return DB::transaction(function () use ($student, $chair, $context): Collection {
+        return DB::transaction(function () use ($student, $chair, $context, $outbox): Collection {
             $pending = TransfereeCredit::query()
                 ->where('student_id', $student->id)
                 ->where('status', TransfereeCreditStatus::Pending->value)
@@ -103,6 +113,11 @@ final readonly class SubmitCreditsToRegistrarHead
                     $count === 1 ? 'was' : 'were',
                 ),
             );
+
+            // The endorsed credits count for the student now, so their category may change, and with
+            // nothing left pending they get their queue number.
+            $this->reclassifyAfterApproval->execute($student, $chair, $context);
+            $this->issueQueueTicket->whenMappingCloses($student, $chair, $context, $outbox);
 
             return $pending->load(['student.user', 'subject']);
         });

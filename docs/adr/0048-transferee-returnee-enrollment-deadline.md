@@ -4,6 +4,8 @@
 **Date:** 2026-10-14
 **Related:** ADR 0026 (credit mapping), ADR 0030 (Registrar approval), ADR 0037 (Admission checklist), ADR 0043 (pay-first enrollment).
 
+**Amended 2026-10-15 (ADR 0050):** decision 2 is replaced: the deadline is cleared when the enrolment is finished and paid (`ConfirmPayment`), not at the Registrar's approval, and a restricted student sees Enrollment and Grades (not Enrollment alone).
+
 ## Context
 
 The owner asked that a newly created Transferee or Returnee account does not show every portal option. Until the Registrar approves their enrollment they can only do the things that lead to it: credit mapping, choosing subjects, the queue number and the payment, all of which sit inside the Enrollment page. The page also has to say that the account is deactivated in 7 days if the credit mapping and the enrollment, through payment, are not finished. The deactivation is real. The other options appear once the Registrar approves the enrollment, which is the last step. A deactivated student is reactivated by going through Admission again: a new setup, the same process as creating the account.

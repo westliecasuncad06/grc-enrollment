@@ -20,9 +20,10 @@ use Tests\TestCase;
 
 /**
  * A transferee gets their queue number the moment their credit mapping has nothing
- * left open (ADR 0043, amended 2026-10-05): no row `pending` or `endorsed`, at least
- * one submitted row. The ticket belongs to the student profile, like a freshman's, and
- * is issued once.
+ * left with the Program Chair (ADR 0043, amended 2026-10-05 and again 2026-10-15): no
+ * row `pending`, at least one submitted row. A row the Chair passed to the Registrar Head
+ * (`endorsed`) no longer holds the number back. The ticket belongs to the student profile,
+ * like a freshman's, and is issued once.
  */
 final class IssueTransfereeQueueTicketTest extends TestCase
 {
@@ -81,18 +82,30 @@ final class IssueTransfereeQueueTicketTest extends TestCase
         self::assertSame('transferee_credit_mapping_closed', AuditLog::query()->where('auditable_id', $ticket->id)->latest('id')->first()->after_values['source']);
     }
 
-    public function test_it_does_nothing_while_any_credit_is_still_pending_or_endorsed(): void
+    public function test_it_does_nothing_while_any_credit_is_still_with_the_program_chair(): void
     {
-        foreach ([TransfereeCreditStatus::Pending, TransfereeCreditStatus::Endorsed] as $open) {
-            $profile = $this->transferee();
-            $this->credit($profile, TransfereeCreditStatus::Approved);
-            $this->credit($profile, $open);
-            $outbox = new QueueLinkOutbox;
+        $profile = $this->transferee();
+        $this->credit($profile, TransfereeCreditStatus::Approved);
+        $this->credit($profile, TransfereeCreditStatus::Endorsed);
+        $this->credit($profile, TransfereeCreditStatus::Pending);
+        $outbox = new QueueLinkOutbox;
 
-            self::assertNull($this->whenClosed($profile, $outbox), $open->value);
-            self::assertSame([], $outbox->drain());
-            self::assertSame(0, QueueTicket::query()->where('student_profile_id', $profile->id)->count());
-        }
+        self::assertNull($this->whenClosed($profile, $outbox));
+        self::assertSame([], $outbox->drain());
+        self::assertSame(0, QueueTicket::query()->where('student_profile_id', $profile->id)->count());
+    }
+
+    public function test_credits_the_chair_passed_to_the_registrar_head_are_enough_for_the_number(): void
+    {
+        $profile = $this->transferee();
+        $this->credit($profile, TransfereeCreditStatus::Endorsed);
+
+        $issued = $this->whenClosed($profile, new QueueLinkOutbox);
+
+        self::assertNotNull($issued);
+        self::assertSame(1, QueueTicket::query()->where('student_profile_id', $profile->id)->count());
+        $notice = Notification::query()->where('user_id', $profile->user_id)->where('type', NotificationType::TransfereeQueueNumberIssued)->sole();
+        self::assertStringContainsString('Registrar Head', $notice->message);
     }
 
     public function test_it_does_nothing_for_a_transferee_with_no_submitted_credit_even_with_drafts(): void

@@ -143,7 +143,15 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
                         {credit.target_code} — {credit.target_title}
                       </TableCell>
                       <TableCell>
-                        <Badge>Credited</Badge>
+                        <Badge
+                          variant={
+                            credit.awaiting_registrar_head_approval
+                              ? "secondary"
+                              : "default"
+                          }
+                        >
+                          {credit.status_label}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -153,6 +161,16 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
                 Grades are shown as the previous school gave them, for
                 information only. They are not converted and carry no GRC grade.
               </p>
+              {prospectus.transferee_credits.some(
+                (credit) => credit.awaiting_registrar_head_approval,
+              ) && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Credits marked &ldquo;Awaiting Registrar Head approval&rdquo;
+                  were passed on by your Program Chair. They count toward your
+                  enrollment now and become final once the Registrar Head
+                  approves them.
+                </p>
+              )}
             </div>
           )}
 
@@ -276,7 +294,11 @@ function ProspectusYears({
       0,
     )
     const completedEntries = semesters.reduce(
-      (sum, s) => sum + s.entries.filter((e) => e.mark !== null).length,
+      (sum, s) =>
+        sum +
+        s.entries.filter(
+          (e) => e.mark !== null || e.credit?.status === "approved",
+        ).length,
       0,
     )
     const totalEntries = semesters.reduce((sum, s) => sum + s.entries.length, 0)
@@ -428,13 +450,31 @@ function SemesterTable({
                       : "—")}
                 </TableCell>
                 <TableCell data-label="Units">{entry.units}</TableCell>
-                <TableCell data-label="Grade">{entry.mark ?? "—"}</TableCell>
-                <TableCell data-label="Status">
-                  {detailsShown && (
-                    <Badge variant={markToneBadgeVariant(tone)}>
-                      {entry.status_label ?? "Not taken"}
-                    </Badge>
+                <TableCell data-label="Grade">
+                  {entry.mark ?? entry.credit?.source_grade ?? "—"}
+                  {entry.mark === null && entry.credit?.source_grade && (
+                    <span className="block text-xs text-muted-foreground">
+                      previous school
+                    </span>
                   )}
+                </TableCell>
+                <TableCell data-label="Status">
+                  {detailsShown &&
+                    (entry.mark === null && entry.credit ? (
+                      <Badge
+                        variant={
+                          entry.credit.awaiting_registrar_head_approval
+                            ? "secondary"
+                            : "default"
+                        }
+                      >
+                        {entry.credit.status_label}
+                      </Badge>
+                    ) : (
+                      <Badge variant={markToneBadgeVariant(tone)}>
+                        {entry.status_label ?? "Not taken"}
+                      </Badge>
+                    ))}
                 </TableCell>
               </TableRow>
             )

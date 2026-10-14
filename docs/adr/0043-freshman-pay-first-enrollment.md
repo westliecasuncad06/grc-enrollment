@@ -5,6 +5,8 @@
 **Amends:** ADR 0030 (Registrar approval for every enrollment, now not for freshmen), ADR 0041 (what Admission does when it creates a freshman), ADR 0023 and 0027 (the Cashier queue only held enrollments)
 **Related:** ADR 0044 (the public live-queue link), ADR 0042 (student numbers), ADR 0025 (Payee/Scholar), ADR 0028 (promotion and back subjects)
 
+**Amended 2026-10-15 (ADR 0050):** a Transferee gets the queue number when no credit is left `pending` (the Program Chair has passed the credits on), not when the Registrar Head has decided the last one.
+
 ## Context
 
 Until now Admission created a freshman's account and immediately emailed the account setup code. The freshman could not reach the Cashier before logging in, submitting an enrollment, and getting the Registrar's approval. The stakeholder revision ("Changes sa system for revision", 2026-10-04) reverses that order for a **freshman**: they pay first, and the account and the enrollment follow the payment.

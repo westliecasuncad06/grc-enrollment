@@ -2,15 +2,35 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const MANILA_TIME_ZONE = "Asia/Manila"
 
 /**
- * The one module a newly created Transferee or Returnee can open until the Registrar approves their
- * enrollment (ADR 0048): credit mapping, subject selection, payment and the queue number all live inside it.
+ * Where a restricted student lands: Enrollment, where credit mapping, subject selection, payment and the
+ * queue number all live (ADR 0048).
  */
 export const RESTRICTED_STUDENT_MODULE_ID = "enrollment"
 
 /**
- * While the student profile carries an enrollment deadline the student has not had an enrollment
- * approved by the Registrar yet. Accounts that existed before the rule, and every other student type,
- * have none, and an unknown profile (still loading, or failed) never restricts anyone.
+ * The modules a newly created Transferee or Returnee can open until they are enrolled and have paid
+ * (ADR 0048, amended by ADR 0050): Enrollment, and Grades, which holds their Prospectus and the credited
+ * grades that decide whether they enroll as Regular or Irregular.
+ */
+export const RESTRICTED_STUDENT_MODULE_IDS = ["enrollment", "grades"] as const
+
+/** Whether a restricted student may open this portal page (`/portal/<module>`, with any sub-path). */
+export function isPathOpenWhileRestricted(pathname: string): boolean {
+  const [, portal, moduleId] = pathname.split("/")
+
+  return (
+    portal === "portal" &&
+    (RESTRICTED_STUDENT_MODULE_IDS as readonly string[]).includes(
+      moduleId ?? "",
+    )
+  )
+}
+
+/**
+ * While the student profile carries an enrollment deadline the student is not enrolled and paid yet
+ * (the deadline ends when the Cashier confirms the payment that enrolls them, ADR 0050). Accounts that
+ * existed before the rule, and every other student type, have none, and an unknown profile (still
+ * loading, or failed) never restricts anyone.
  */
 export function isPortalRestricted(
   profile: { enrollment_deadline_at: string | null } | null | undefined,

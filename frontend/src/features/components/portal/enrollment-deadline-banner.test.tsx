@@ -18,10 +18,10 @@ describe("EnrollmentDeadlineBanner", () => {
       "This account will be deactivated in 7 days (October 21, 2026)",
     )
     expect(banner).toHaveTextContent(
-      "unless your credit mapping is done and your enrollment is completed through payment",
+      "unless your enrollment is completed and paid",
     )
     expect(banner).toHaveTextContent(
-      "The other options unlock once the Registrar approves your enrollment.",
+      "The other options unlock once you are enrolled and have paid.",
     )
   })
 

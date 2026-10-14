@@ -53,16 +53,27 @@ final class ProspectusResource extends JsonResource
             ->latest('migrated_at')
             ->first();
 
-        // Subjects credited from another school (approved, and mapped to a
-        // GRC subject). Listed beside the curriculum transition: like it, they
-        // carry no GRC grade (ADR 0026).
+        // Subjects credited from another school and mapped to a GRC subject: the ones the Registrar
+        // Head approved, and the ones the Program Chair passed on that the Head has yet to decide
+        // (owner, 2026-10-15), marked as such. A credit still with the Chair, or turned down, is not
+        // shown. Listed beside the curriculum transition: like it, they carry no GRC grade (ADR 0026).
         $transfereeCredits = TransfereeCredit::query()
             ->where('student_id', $student->id)
-            ->where('status', TransfereeCreditStatus::Approved->value)
+            ->whereIn('status', [TransfereeCreditStatus::Approved->value, TransfereeCreditStatus::Endorsed->value])
             ->whereNotNull('subject_id')
             ->with('subject')
             ->orderBy('id')
             ->get();
+
+        // One credit per subject for the curriculum rows; an approved one wins over an endorsed one.
+        /** @var array<int, TransfereeCredit> $creditBySubject */
+        $creditBySubject = [];
+        foreach ($transfereeCredits as $credit) {
+            $existing = $creditBySubject[$credit->subject_id] ?? null;
+            if ($existing === null || ($existing->status !== TransfereeCreditStatus::Approved && $credit->status === TransfereeCreditStatus::Approved)) {
+                $creditBySubject[(int) $credit->subject_id] = $credit;
+            }
+        }
 
         return [
             'type' => 'prospectus',
@@ -114,10 +125,11 @@ final class ProspectusResource extends JsonResource
                     'source_semester' => $credit->source_semester,
                     'target_code' => $credit->subject?->code,
                     'target_title' => $credit->subject?->title,
+                    ...self::creditStatus($credit),
                 ])
                 ->all()),
             'semesters' => array_map(
-                fn (ProspectusSemester $semester): array => $this->semesterToArray($semester),
+                fn (ProspectusSemester $semester): array => $this->semesterToArray($semester, $creditBySubject),
                 $this->resource->semesters,
             ),
             'unplaced_entries' => array_map(
@@ -128,22 +140,41 @@ final class ProspectusResource extends JsonResource
     }
 
     /**
+     * What the Prospectus says about the standing of a credit: approved by the Registrar Head, or
+     * passed on by the Program Chair and still waiting for the Head.
+     *
+     * @return array{status: string, status_label: string, awaiting_registrar_head_approval: bool}
+     */
+    private static function creditStatus(TransfereeCredit $credit): array
+    {
+        $awaiting = $credit->status === TransfereeCreditStatus::Endorsed;
+
+        return [
+            'status' => $credit->status->value,
+            'status_label' => $awaiting ? 'Awaiting Registrar Head approval' : 'Credited',
+            'awaiting_registrar_head_approval' => $awaiting,
+        ];
+    }
+
+    /**
+     * @param  array<int, TransfereeCredit>  $creditBySubject
      * @return array{year_level: int, semester: string, semester_label: string, entries: list<mixed>}
      */
-    private function semesterToArray(ProspectusSemester $semester): array
+    private function semesterToArray(ProspectusSemester $semester, array $creditBySubject): array
     {
         return [
             'year_level' => $semester->yearLevel,
             'semester' => $semester->semester->value,
             'semester_label' => $semester->semester->label(),
             'entries' => array_map(
-                fn (ProspectusEntry $entry): array => $this->entryToArray($entry),
+                fn (ProspectusEntry $entry): array => $this->entryToArray($entry, $creditBySubject),
                 $semester->entries,
             ),
         ];
     }
 
     /**
+     * @param  array<int, TransfereeCredit>  $creditBySubject
      * @return array{
      *     subject_id: int,
      *     code: string,
@@ -160,10 +191,11 @@ final class ProspectusResource extends JsonResource
      *     academic_term_id: ?int,
      *     term_label: ?string,
      *     attempt_count: int,
+     *     credit: ?array<string, mixed>,
      *     prerequisites: list<array{subject_id: int, code: string, title: string, minimum_grade: string}>
      * }
      */
-    private function entryToArray(ProspectusEntry $entry): array
+    private function entryToArray(ProspectusEntry $entry, array $creditBySubject): array
     {
         $subject = $entry->placement->subject;
         $grade = $entry->latestGrade();
@@ -185,6 +217,16 @@ final class ProspectusResource extends JsonResource
             'academic_term_id' => $grade?->academic_term_id,
             'term_label' => $term !== null ? "{$term->school_year} · {$term->semester}" : null,
             'attempt_count' => count($entry->attempts),
+            // The previous school's grade for a subject credited to this one, with whether the
+            // Registrar Head has approved it yet; null when nothing is credited to the subject.
+            'credit' => isset($creditBySubject[$subject->id])
+                ? [
+                    'source_institution' => $creditBySubject[$subject->id]->source_institution,
+                    'source_subject_title' => $creditBySubject[$subject->id]->source_subject_title,
+                    'source_grade' => $creditBySubject[$subject->id]->source_grade,
+                    ...self::creditStatus($creditBySubject[$subject->id]),
+                ]
+                : null,
             'prerequisites' => array_values($entry->placement->prerequisites
                 ->map(fn (SubjectPrerequisite $prerequisite): array => [
                     'subject_id' => $prerequisite->prerequisiteSubject->id,

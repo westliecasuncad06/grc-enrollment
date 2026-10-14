@@ -68,12 +68,18 @@ final class StudentCreditMappingController extends Controller
         Request $request,
         StudentProfile $studentProfile,
         SubmitCreditsToRegistrarHead $submitter,
+        SendQueueLinks $sendQueueLinks,
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $actor = $this->authenticatedUser($request);
         $this->authorize('manageStudent', [TransfereeCredit::class, $studentProfile]);
 
-        $credits = $submitter->execute($studentProfile, $actor, $contextFactory->fromRequest($request));
+        $context = $contextFactory->fromRequest($request);
+        $outbox = new QueueLinkOutbox;
+        $credits = $submitter->execute($studentProfile, $actor, $context, $outbox);
+
+        // After commit: passing the last pending credits on issued the student's queue number.
+        $sendQueueLinks->handle($outbox, $actor, $context);
 
         return $this->cachePrivateResponse(TransfereeCreditResource::collection($credits)->response($request));
     }

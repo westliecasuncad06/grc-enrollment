@@ -545,9 +545,18 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         self::assertTrue($this->studentWithACreditedBacklogSubject(TransfereeCreditStatus::Approved)->isRegular());
     }
 
-    public function test_a_transferee_credit_that_is_only_endorsed_does_not_clear_a_backlog_subject(): void
+    /**
+     * Owner, 2026-10-15: a credit the Program Chair passed to the Registrar Head counts for the student
+     * already, provisionally, so they can enrol on it; the Head's approval only makes it final.
+     */
+    public function test_a_transferee_credit_the_chair_passed_on_already_clears_a_backlog_subject_provisionally(): void
     {
-        self::assertFalse($this->studentWithACreditedBacklogSubject(TransfereeCreditStatus::Endorsed)->isRegular());
+        self::assertTrue($this->studentWithACreditedBacklogSubject(TransfereeCreditStatus::Endorsed)->isRegular());
+    }
+
+    public function test_a_transferee_credit_still_with_the_program_chair_does_not_clear_a_backlog_subject(): void
+    {
+        self::assertFalse($this->studentWithACreditedBacklogSubject(TransfereeCreditStatus::Pending)->isRegular());
     }
 
     public function test_classify_many_batches_across_students_sharing_curriculum_and_year_level(): void

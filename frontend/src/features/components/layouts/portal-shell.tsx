@@ -43,8 +43,10 @@ import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
 import { useOwnStudentProfileQuery } from "@/features/hooks/use-student-records"
 import {
+  isPathOpenWhileRestricted,
   isPortalRestricted,
   RESTRICTED_STUDENT_MODULE_ID,
+  RESTRICTED_STUDENT_MODULE_IDS,
 } from "@/features/lib/enrollment-deadline"
 import { cn } from "@/features/lib/utils"
 import {
@@ -68,7 +70,7 @@ import {
 interface PortalNavigationProps {
   definition: RolePortalDefinition
   mobile?: boolean
-  /** A newly created Transferee or Returnee: Enrollment is the only option until the Registrar approves it. */
+  /** A newly created Transferee or Returnee: Enrollment and Grades are the only options until they are enrolled and paid. */
   restricted?: boolean
 }
 
@@ -215,7 +217,11 @@ function PortalNavigation({
       {definition.modules
         .filter((module) => isConnectedModuleId(module.id))
         .filter(
-          (module) => !restricted || module.id === RESTRICTED_STUDENT_MODULE_ID,
+          (module) =>
+            !restricted ||
+            (RESTRICTED_STUDENT_MODULE_IDS as readonly string[]).includes(
+              module.id,
+            ),
         )
         .map((module) => {
           const Icon = module.icon
@@ -274,8 +280,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
   })
   const router = useRouter()
   const pathname = usePathname()
-  // A newly created Transferee or Returnee sees Enrollment alone until the Registrar approves their
-  // enrollment (ADR 0048). Until the profile has loaded, or if it cannot be read, nobody is restricted.
+  // A newly created Transferee or Returnee sees Enrollment and Grades only until they are enrolled and have
+  // paid (ADR 0048, amended by ADR 0050). Until the profile has loaded, or if it cannot be read, nobody is
+  // restricted.
   const ownProfileQuery = useOwnStudentProfileQuery()
   const enrollmentDeadlineAt =
     session?.role === "student"
@@ -284,8 +291,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const restricted = isPortalRestricted({
     enrollment_deadline_at: enrollmentDeadlineAt,
   })
-  const mustOpenEnrollment =
-    restricted && pathname !== `/portal/${RESTRICTED_STUDENT_MODULE_ID}`
+  const mustOpenEnrollment = restricted && !isPathOpenWhileRestricted(pathname)
 
   useEffect(() => {
     if (mustOpenEnrollment) {

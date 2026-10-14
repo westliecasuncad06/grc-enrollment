@@ -82,6 +82,30 @@ final class ResolveCreditedSubjectIdsTest extends TestCase
         self::assertSame([$approved->id => true], $result[$student->id]);
     }
 
+    public function test_an_endorsed_credit_counts_only_when_asked_for_as_provisional(): void
+    {
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'resolver.d@grc.test', '2026-0004');
+        $approved = $this->makeSubject('CS101');
+        $endorsed = $this->makeSubject('CS103');
+        $pending = $this->makeSubject('CS102');
+        $this->credit($student, $approved, TransfereeCreditStatus::Approved);
+        $this->credit($student, $endorsed, TransfereeCreditStatus::Endorsed);
+        $this->credit($student, $pending, TransfereeCreditStatus::Pending);
+        // Endorsed but never mapped to a GRC subject: credits nothing.
+        $this->credit($student, null, TransfereeCreditStatus::Endorsed);
+        $resolver = new ResolveCreditedSubjectIds;
+
+        self::assertSame([$endorsed->id => true], $resolver->fromEndorsedTransfereeCredits([$student->id])[$student->id]);
+        // By default only the Registrar Head's approved credits count (promotion, mapping suggestions).
+        self::assertSame([$approved->id => true], $resolver->forStudents([$student->id], $curriculum->id)[$student->id]);
+        // Enrolment counts what the Chair has passed on, until the Head decides.
+        self::assertSame(
+            [$approved->id => true, $endorsed->id => true],
+            $resolver->forStudents([$student->id], $curriculum->id, includeEndorsed: true)[$student->id],
+        );
+    }
+
     public function test_credits_are_kept_per_student(): void
     {
         $curriculum = $this->makeCurriculum();

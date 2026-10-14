@@ -4,9 +4,9 @@ import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { enrollmentDeadlineNotice } from "@/features/lib/enrollment-deadline"
 
 /**
- * What a newly created Transferee or Returnee sees on every page they can reach (ADR 0048): the account
- * is deactivated when the deadline passes unless the Registrar has approved their enrollment, and the
- * other portal options appear only after that approval.
+ * What a newly created Transferee or Returnee sees on every page they can reach (ADR 0048, amended by
+ * ADR 0050): the account is deactivated when the deadline passes unless their enrollment is finished and
+ * paid, and the other portal options appear only once they are enrolled and have paid.
  */
 export function EnrollmentDeadlineBanner({
   deadlineAt,
@@ -24,9 +24,8 @@ export function EnrollmentDeadlineBanner({
         <strong>
           This account will be deactivated {countdown} ({dateLabel})
         </strong>{" "}
-        unless your credit mapping is done and your enrollment is completed
-        through payment. The other options unlock once the Registrar approves
-        your enrollment.
+        unless your enrollment is completed and paid. The other options unlock
+        once you are enrolled and have paid.
       </AlertDescription>
     </Alert>
   )

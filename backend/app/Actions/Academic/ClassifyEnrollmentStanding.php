@@ -359,8 +359,10 @@ final readonly class ClassifyEnrollmentStanding
     private function creditedSubjectIdsByStudent(array $studentIds, int $curriculumId): array
     {
         // Curriculum-migration credits and approved transferee credits alike
-        // (ADR 0026): neither carries a GRC grade.
-        return (new ResolveCreditedSubjectIds)->forStudents($studentIds, $curriculumId);
+        // (ADR 0026): neither carries a GRC grade. A credit the Program Chair passed to the
+        // Registrar Head counts too, provisionally (owner, 2026-10-15): the student enrols on it
+        // before the Head decides, and the Head's rejection takes it back (`UpdateTransfereeCredit`).
+        return (new ResolveCreditedSubjectIds)->forStudents($studentIds, $curriculumId, includeEndorsed: true);
     }
 
     /**

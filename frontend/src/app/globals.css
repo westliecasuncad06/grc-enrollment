@@ -1378,6 +1378,8 @@
 }
 
 .portal-storage-alert {
+  /* The Alert is `w-full`; with side margins that pushed it past the page and made it scroll sideways. */
+  width: auto;
   margin: 1rem clamp(1.25rem, 3vw, 3rem) 0;
   border-color: color-mix(
     in srgb,

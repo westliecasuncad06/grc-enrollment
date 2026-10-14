@@ -17,7 +17,7 @@ describe("isCreditMappingIncomplete", () => {
     ).toBe(true)
   })
 
-  it("is incomplete while any sent credit is pending or endorsed", () => {
+  it("is incomplete while any sent credit is still pending with the Program Chair", () => {
     expect(
       isCreditMappingIncomplete([
         { status: "approved" },
@@ -26,10 +26,21 @@ describe("isCreditMappingIncomplete", () => {
     ).toBe(true)
     expect(
       isCreditMappingIncomplete([
-        { status: "approved" },
         { status: "endorsed" },
+        { status: "pending" },
       ]),
     ).toBe(true)
+  })
+
+  it("is complete once the Program Chair has passed every credit to the Registrar Head (ADR 0050)", () => {
+    expect(isCreditMappingIncomplete([{ status: "endorsed" }])).toBe(false)
+    expect(
+      isCreditMappingIncomplete([
+        { status: "endorsed" },
+        { status: "approved" },
+        { status: "rejected" },
+      ]),
+    ).toBe(false)
   })
 
   it("is complete once every sent credit is decided, whatever drafts remain", () => {

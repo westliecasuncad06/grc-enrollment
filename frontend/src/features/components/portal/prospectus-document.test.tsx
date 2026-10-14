@@ -328,6 +328,158 @@ describe("ProspectusDocument", () => {
     expect(screen.getByText(/not converted/i)).toBeInTheDocument()
   })
 
+  it("marks a credit the Program Chair passed on as awaiting the Registrar Head, and says what that means", async () => {
+    const credit = {
+      source_institution: "Technological Institute of the Philippines",
+      source_subject_code: "CS 101",
+      source_subject_title: "Intro to Computing",
+      source_grade: "1.50",
+      credited_units: 3,
+      source_school_year: "2023-2024",
+      source_semester: "1st",
+      target_code: "IT-NEW",
+      target_title: "Foundations of Programming",
+    }
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(
+          prospectusFixture({
+            transferee_credits: [
+              {
+                ...credit,
+                status: "endorsed",
+                status_label: "Awaiting Registrar Head approval",
+                awaiting_registrar_head_approval: true,
+              },
+              {
+                ...credit,
+                source_subject_code: "MAT 101",
+                source_subject_title: "College Algebra",
+                target_code: "MATH101",
+                target_title: "College Algebra",
+                status: "approved",
+                status_label: "Credited",
+                awaiting_registrar_head_approval: false,
+              },
+            ],
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    await screen.findByText("Credited from a previous school")
+    expect(
+      screen.getByText("Awaiting Registrar Head approval"),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Credited")).toBeInTheDocument()
+    expect(
+      screen.getByText(/become final once the Registrar Head approves them/),
+    ).toBeInTheDocument()
+  })
+
+  it("does not talk about the Registrar Head's approval when every credit is already approved", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(
+          prospectusFixture({
+            transferee_credits: [
+              {
+                source_institution: "Other University",
+                source_subject_code: "CS 101",
+                source_subject_title: "Intro to Computing",
+                source_grade: "1.50",
+                credited_units: 3,
+                source_school_year: null,
+                source_semester: null,
+                target_code: "IT-NEW",
+                target_title: "Foundations of Programming",
+              },
+            ],
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    await screen.findByText("Credited from a previous school")
+    expect(
+      screen.queryByText(/become final once the Registrar Head approves them/),
+    ).not.toBeInTheDocument()
+  })
+
+  it("records a credited subject's previous-school grade on its own curriculum row, with whether it is final", async () => {
+    const credited = {
+      ...untakenEntry,
+      subject_id: 31,
+      code: "IT-APPROVED",
+      title: "Approved Credit",
+      credit: {
+        source_institution: "Other University",
+        source_subject_title: "Intro",
+        source_grade: "1.75",
+        status: "approved",
+        status_label: "Credited",
+        awaiting_registrar_head_approval: false,
+      },
+    }
+    const awaiting = {
+      ...untakenEntry,
+      subject_id: 32,
+      code: "IT-AWAITING",
+      title: "Awaiting Credit",
+      credit: {
+        source_institution: "Other University",
+        source_subject_title: "Basics",
+        source_grade: "2.00",
+        status: "endorsed",
+        status_label: "Awaiting Registrar Head approval",
+        awaiting_registrar_head_approval: true,
+      },
+    }
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(
+          prospectusFixture({
+            semesters: [
+              {
+                year_level: 1,
+                semester: "1st",
+                semester_label: "1st Semester",
+                entries: [credited, awaiting, untakenEntry],
+              },
+            ],
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    const approvedRow = (await screen.findByText("IT-APPROVED")).closest("tr")
+    const awaitingRow = screen.getByText("IT-AWAITING").closest("tr")
+    expect(approvedRow).not.toBeNull()
+    expect(awaitingRow).not.toBeNull()
+    expect(
+      within(approvedRow as HTMLElement).getByText("1.75"),
+    ).toBeInTheDocument()
+    expect(
+      within(approvedRow as HTMLElement).getByText("Credited"),
+    ).toBeInTheDocument()
+    expect(
+      within(awaitingRow as HTMLElement).getByText("2.00"),
+    ).toBeInTheDocument()
+    expect(
+      within(awaitingRow as HTMLElement).getByText(
+        "Awaiting Registrar Head approval",
+      ),
+    ).toBeInTheDocument()
+    // A subject with no credit still reads as not taken.
+    expect(screen.getByText("Not taken")).toBeInTheDocument()
+  })
+
   it("shows no previous-school table when nothing was credited from one", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify(prospectusFixture())),

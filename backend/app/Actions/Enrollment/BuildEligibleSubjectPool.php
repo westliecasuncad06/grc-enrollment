@@ -111,6 +111,11 @@ final readonly class BuildEligibleSubjectPool
         // credit for a subject taken at another school (ADR 0026).
         $credits = new ResolveCreditedSubjectIds;
         $creditedSubjectIds = [];
+        // A credit the Program Chair passed to the Registrar Head is credited for enrolment already
+        // (owner, 2026-10-15); the approved ones below overwrite it.
+        foreach (array_keys($credits->fromEndorsedTransfereeCredits([$student->id])[$student->id] ?? []) as $subjectId) {
+            $creditedSubjectIds[$subjectId] = 'previous_school_pending';
+        }
         foreach (array_keys($credits->fromApprovedTransfereeCredits([$student->id])[$student->id] ?? []) as $subjectId) {
             $creditedSubjectIds[$subjectId] = 'previous_school';
         }
@@ -141,7 +146,7 @@ final readonly class BuildEligibleSubjectPool
     }
 
     /**
-     * @param  array<int, string>  $creditedSubjectIds  subject id => where the credit came from ('curriculum' or 'previous_school')
+     * @param  array<int, string>  $creditedSubjectIds  subject id => where the credit came from ('curriculum', 'previous_school', or 'previous_school_pending' while the Registrar Head has not approved it)
      * @param  array<int, true>  $waivedSubjectIds  subject id => a Registrar Head prerequisite waiver is active for this student and term
      */
     private function evaluatePlacement(
@@ -170,9 +175,11 @@ final readonly class BuildEligibleSubjectPool
 
         $ownGrade = $this->latestLockedGrade($student->id, $siblingSubjectIds);
         if (isset($creditedSubjectIds[$placement->subject_id])) {
-            $reasons[] = ['code' => 'completed', 'message' => $creditedSubjectIds[$placement->subject_id] === 'previous_school'
-                ? 'This subject was credited from the student\'s previous school.'
-                : 'This subject was credited from the student\'s prior curriculum.'];
+            $reasons[] = ['code' => 'completed', 'message' => match ($creditedSubjectIds[$placement->subject_id]) {
+                'previous_school' => 'This subject was credited from the student\'s previous school.',
+                'previous_school_pending' => 'This subject is credited from the student\'s previous school; the Registrar Head has yet to approve the credit.',
+                default => 'This subject was credited from the student\'s prior curriculum.',
+            }];
             $excluded = true;
         } elseif ($this->verdictFor($ownGrade, (string) config('enrollment.grading.passing_grade'))->isSatisfied()) {
             $reasons[] = ['code' => 'completed', 'message' => 'This subject has already been completed with a passing grade.'];
