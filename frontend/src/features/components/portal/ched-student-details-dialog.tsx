@@ -53,7 +53,7 @@ export function ChedStudentDetailsDialog({
       }}
     >
       <DialogContent
-        className="sm:max-w-4xl"
+        className="gap-3 sm:max-w-5xl"
         onCloseAutoFocus={(event) => {
           if (triggerRef.current) {
             event.preventDefault()
@@ -69,7 +69,7 @@ export function ChedStudentDetailsDialog({
                 {`${report.title} · ${report.term_label}`}
               </DialogDescription>
             </DialogHeader>
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
               {report.columns
                 .filter((column) => column.key !== SUBJECTS_KEY)
                 .map((column) => {
@@ -123,7 +123,7 @@ function SubjectsList({
   const subjects = parseChedSubjects(String(row[SUBJECTS_KEY] ?? ""))
 
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-1.5">
       <h3 id={headingId} className="text-xs text-muted-foreground">
         {column.label}
       </h3>
@@ -137,7 +137,7 @@ function SubjectsList({
           {subjects.map((subject, index) => (
             <li
               key={`${index}-${subject.title}`}
-              className="flex items-baseline justify-between gap-3 border-b py-1"
+              className="flex items-baseline justify-between gap-3 border-b py-0.5"
             >
               <span>{subject.title}</span>
               {subject.units !== "" && (

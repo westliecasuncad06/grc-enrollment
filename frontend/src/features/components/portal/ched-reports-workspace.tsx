@@ -416,13 +416,13 @@ function countCells(block: ChedNstpComponents, keyPrefix: string) {
   return COMPONENTS.flatMap(([key]) => [
     <TableCell
       key={`${keyPrefix}-${key}-m`}
-      className="text-center tabular-nums"
+      className="px-0.5 text-center tabular-nums"
     >
       {block[key].m}
     </TableCell>,
     <TableCell
       key={`${keyPrefix}-${key}-f`}
-      className="text-center tabular-nums"
+      className="px-0.5 text-center tabular-nums"
     >
       {block[key].f}
     </TableCell>,
@@ -471,19 +471,37 @@ function SummaryPanel({
                     </AlertDescription>
                   </Alert>
                 )}
-                <Table aria-label="NSTP Form 2-A summary of enrollment and graduates, by semester, component and gender">
+                <Table
+                  className="table-fixed text-xs"
+                  aria-label="NSTP Form 2-A summary of enrollment and graduates, by semester, component and gender"
+                >
+                  <colgroup>
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "9%" }} />
+                    {Array.from({ length: 24 }, (_, index) => (
+                      <col key={index} style={{ width: `${69 / 24}%` }} />
+                    ))}
+                  </colgroup>
                   <TableHeader>
                     <TableRow>
-                      <TableHead rowSpan={4} scope="col">
+                      <TableHead
+                        rowSpan={4}
+                        scope="col"
+                        className="px-1 whitespace-normal"
+                      >
                         Name of HEI/Campus
                       </TableHead>
-                      <TableHead rowSpan={4} scope="col">
+                      <TableHead
+                        rowSpan={4}
+                        scope="col"
+                        className="px-1 whitespace-normal"
+                      >
                         Classification (Private/Public)
                       </TableHead>
                       <TableHead
                         colSpan={18}
                         scope="colgroup"
-                        className="text-center"
+                        className="px-0.5 text-center"
                       >
                         Enrollment
                       </TableHead>
@@ -491,7 +509,7 @@ function SummaryPanel({
                         colSpan={6}
                         rowSpan={2}
                         scope="colgroup"
-                        className="text-center"
+                        className="px-0.5 text-center"
                       >
                         Graduates
                       </TableHead>
@@ -502,7 +520,7 @@ function SummaryPanel({
                           key={label}
                           colSpan={6}
                           scope="colgroup"
-                          className="text-center"
+                          className="px-0.5 text-center"
                         >
                           {label}
                         </TableHead>
@@ -515,7 +533,7 @@ function SummaryPanel({
                             key={`${blockIndex}-${key}`}
                             colSpan={2}
                             scope="colgroup"
-                            className="text-center"
+                            className="px-0.5 text-center"
                           >
                             {label}
                           </TableHead>
@@ -528,14 +546,14 @@ function SummaryPanel({
                           <TableHead
                             key={`${blockIndex}-${key}-m`}
                             scope="col"
-                            className="text-center"
+                            className="px-0.5 text-center"
                           >
                             M
                           </TableHead>,
                           <TableHead
                             key={`${blockIndex}-${key}-f`}
                             scope="col"
-                            className="text-center"
+                            className="px-0.5 text-center"
                           >
                             F
                           </TableHead>,
@@ -545,16 +563,18 @@ function SummaryPanel({
                   </TableHeader>
                   <TableBody>
                     <TableRow>
-                      <TableCell className="font-medium">
+                      <TableCell className="px-1 font-medium whitespace-normal">
                         {data.campus}
                       </TableCell>
-                      <TableCell>{data.classification}</TableCell>
+                      <TableCell className="px-1 whitespace-normal">
+                        {data.classification}
+                      </TableCell>
                       {blocks.flatMap((block, index) =>
                         countCells(block, `school-${index}`),
                       )}
                     </TableRow>
                     <TableRow className="font-semibold">
-                      <TableCell>TOTAL</TableCell>
+                      <TableCell className="px-1">TOTAL</TableCell>
                       <TableCell>1</TableCell>
                       {blocks.flatMap((block, index) =>
                         countCells(block, `total-${index}`),

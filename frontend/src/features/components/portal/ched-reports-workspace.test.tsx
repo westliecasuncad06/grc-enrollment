@@ -290,7 +290,7 @@ describe("ChedReportsWorkspace", () => {
     // What is empty reads as a dash, like the table.
     const major = within(dialog).getByText("Major", { selector: "dt" })
     expect(major.nextElementSibling).toHaveTextContent("—")
-    expect(dialog.className).toContain("sm:max-w-4xl")
+    expect(dialog.className).toContain("sm:max-w-5xl")
   })
 
   it("lists the subjects one by one, with their units, and keeps a title with commas whole", async () => {
