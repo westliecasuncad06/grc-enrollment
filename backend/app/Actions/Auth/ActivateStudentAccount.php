@@ -38,6 +38,15 @@ final class ActivateStudentAccount
             $this->invalidCode();
         }
 
+        // A Transferee or Returnee whose 7 days ran out cannot finish setting up an account the
+        // overdue command would only deactivate again; Admission admits them again first (ADR 0048).
+        $deadline = $candidate->studentProfile?->enrollment_deadline_at;
+        if ($deadline !== null && $deadline->lessThanOrEqualTo(now())) {
+            throw ValidationException::withMessages([
+                'code' => 'The 7-day enrollment window for this account has ended. Please visit Admission to be admitted again.',
+            ]);
+        }
+
         // A wrong guess is committed inside attempt(), so it still counts
         // against the code when this method then throws.
         if (! $this->setupCodes->attempt($candidate, $code)) {

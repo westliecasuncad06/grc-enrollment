@@ -126,6 +126,10 @@ final class ProvisionStudent
                 'address' => $data['address'],
                 'requirements_verified_at' => $requirementsComplete ? now() : null,
                 'requirements_verified_by' => $requirementsComplete ? $actor->id : null,
+                // A Transferee or Returnee has 7 days to get the enrollment approved (ADR 0048).
+                'enrollment_deadline_at' => $studentType->hasEnrollmentDeadline()
+                    ? now()->addDays(StudentType::ENROLLMENT_DEADLINE_DAYS)
+                    : null,
             ]);
             $profile->refresh();
 

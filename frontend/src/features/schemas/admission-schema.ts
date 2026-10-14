@@ -167,6 +167,10 @@ export const studentProfileSchema = z
     invitation_delivery_status: z.enum(["not_sent", "sent", "failed"]),
     // Set when the Cashier confirms the freshman's first payment; null for everyone else.
     freshman_payment_confirmed_at: z.iso.datetime().nullable().default(null),
+    // A newly created Transferee or Returnee has until this moment to get an enrollment approved by the
+    // Registrar; while it is set they see only Enrollment and the account is then deactivated (ADR 0048).
+    // Null for every other student and for accounts that existed before the rule.
+    enrollment_deadline_at: z.iso.datetime().nullable().default(null),
     // Where a freshman is in the pay-first flow; null for every other student. `awaiting_section`:
     // the payment is held because every section was full and no enrollment exists yet.
     freshman_status: z

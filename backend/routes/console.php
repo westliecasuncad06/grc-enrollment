@@ -9,5 +9,6 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('enrollments:auto-void')->hourly();
+Schedule::command('students:deactivate-overdue')->hourly();
 Schedule::command('academic:promote-year-levels')->daily();
 

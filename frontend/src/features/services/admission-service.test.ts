@@ -58,6 +58,7 @@ const profile = {
   account_setup_status: "pending",
   invitation_delivery_status: "sent",
   freshman_payment_confirmed_at: null,
+  enrollment_deadline_at: "2026-09-02T08:00:00Z",
   freshman_status: null,
   advance_payment_held: false,
   queue_ticket_number: null,
@@ -160,6 +161,7 @@ describe("admission-service", () => {
     delete older.freshman_payment_confirmed_at
     delete older.freshman_status
     delete older.advance_payment_held
+    delete older.enrollment_deadline_at
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ data: older }), { status: 201 }),
     )
@@ -170,6 +172,7 @@ describe("admission-service", () => {
       freshman_payment_confirmed_at: null,
       freshman_status: null,
       advance_payment_held: false,
+      enrollment_deadline_at: null,
     })
   })
 

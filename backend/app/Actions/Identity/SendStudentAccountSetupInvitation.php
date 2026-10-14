@@ -5,6 +5,7 @@ namespace App\Actions\Identity;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Identity\StudentType;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Mail\StudentAccountSetupMail;
@@ -90,13 +91,27 @@ final class SendStudentAccountSetupInvitation
                 'account_setup_invitation_failed_at' => null,
             ])->save();
 
+            // A student whose 7 days ran out is admitted again by Admission, the same step as creating
+            // the account: a fresh 7 days. A deadline still in the future is never extended by a resend,
+            // and an account without one (it predates the rule) never gets one (ADR 0048).
+            $deadlineRestarted = $profile->enrollment_deadline_at !== null
+                && $profile->enrollment_deadline_at->lessThanOrEqualTo(now());
+            if ($deadlineRestarted) {
+                $profile->forceFill([
+                    'enrollment_deadline_at' => now()->addDays(StudentType::ENROLLMENT_DEADLINE_DAYS),
+                ])->save();
+            }
+
             $this->auditRecorder->record(
                 $actor,
                 AuditAction::STUDENT_ACCOUNT_SETUP_INVITATION_SENT,
                 AuditableType::STUDENT_PROFILE,
                 $profile->id,
                 null,
-                ['delivery_status' => 'sent'],
+                [
+                    'delivery_status' => 'sent',
+                    ...($deadlineRestarted ? ['enrollment_deadline_restarted' => true] : []),
+                ],
                 null,
                 $context,
             );

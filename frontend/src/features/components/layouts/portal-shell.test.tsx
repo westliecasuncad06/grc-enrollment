@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -510,6 +510,177 @@ describe("PortalShell", () => {
       expect(
         screen.getByRole("button", { name: "Expand sidebar" }),
       ).toHaveAttribute("aria-expanded", "false")
+    })
+  })
+
+  // A newly created Transferee or Returnee sees only Enrollment until the Registrar approves it (ADR 0048).
+  describe("a student with an enrollment deadline", () => {
+    const studentProfile = {
+      type: "student_profile",
+      id: 31,
+      user_id: 41,
+      student_number: "2026-10-00031",
+      name: "Tina Transferee",
+      first_name: "Tina",
+      middle_initial: null,
+      last_name: "Transferee",
+      suffix: null,
+      email: "tina@grc.test",
+      address: "Caloocan City",
+      program_id: 11,
+      program_code: "BSIT",
+      program_name: "Bachelor of Science in Information Technology",
+      curriculum_id: 22,
+      entry_year: 2026,
+      curriculum_name: "BSIT 2026 Curriculum",
+      curriculum_effective_school_year: "2026-2027",
+      year_level: 1,
+      enrollment_category: "regular",
+      student_type: "transferee",
+      student_type_label: "Transferee",
+      admission_status: "admitted",
+      admission_status_label: "Admitted",
+      academic_standing: "good",
+      academic_standing_label: "Good Standing",
+      financial_status: null,
+      financial_status_label: null,
+      requirements_verified_at: "2026-10-14T08:00:00Z",
+      academic_setup_editable: true,
+      account_setup_status: "active",
+      invitation_delivery_status: "sent",
+      freshman_payment_confirmed_at: null,
+      freshman_status: null,
+      advance_payment_held: false,
+      queue_ticket_number: null,
+      queue_link_delivery_status: null,
+    }
+
+    /** Serves the student's own profile; everything else never answers. */
+    function serveProfile(enrollmentDeadlineAt: string | null | Error) {
+      fetchMock.mockImplementation((input) => {
+        if (!requestUrl(input).endsWith("/api/v1/student-profile")) {
+          return new Promise<Response>(() => undefined)
+        }
+
+        return Promise.resolve(
+          enrollmentDeadlineAt instanceof Error
+            ? new Response("{}", { status: 500 })
+            : new Response(
+                JSON.stringify({
+                  data: {
+                    ...studentProfile,
+                    enrollment_deadline_at: enrollmentDeadlineAt,
+                  },
+                }),
+                { status: 200 },
+              ),
+        )
+      })
+    }
+
+    const inTwoAndAHalfDays = () =>
+      new Date(Date.now() + 2.5 * 24 * 60 * 60 * 1000).toISOString()
+
+    function renderAt(route: string, moduleId?: string) {
+      return renderWithSession(
+        <PortalShell>
+          <p>Page content</p>
+        </PortalShell>,
+        {
+          route,
+          routeParams: moduleId ? { moduleId } : {},
+          session: sessionFor("student"),
+        },
+      )
+    }
+
+    it("shows Enrollment alone in the sidebar, with no home link and none of the other options", async () => {
+      serveProfile(inTwoAndAHalfDays())
+      renderAt("/portal/enrollment", "enrollment")
+
+      const navigation = screen.getByRole("navigation", {
+        name: "Role portal navigation",
+      })
+      await waitFor(() =>
+        expect(
+          within(navigation).queryByRole("link", { name: "Schedule" }),
+        ).not.toBeInTheDocument(),
+      )
+
+      const links = within(navigation).getAllByRole("link")
+      expect(links).toHaveLength(1)
+      expect(links[0]).toHaveAttribute("href", "/portal/enrollment")
+      expect(
+        within(navigation).queryByRole("link", { name: "GRC Connect" }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("tells them the account will be deactivated unless the enrollment is finished", async () => {
+      serveProfile(inTwoAndAHalfDays())
+      renderAt("/portal/enrollment", "enrollment")
+
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        /This account will be deactivated in 3 days/,
+      )
+    })
+
+    it("sends them to Enrollment when they open any other page, without showing it", async () => {
+      serveProfile(inTwoAndAHalfDays())
+      renderAt("/portal/grades", "grades")
+
+      await waitFor(() =>
+        expect(routerMock.replace).toHaveBeenCalledWith("/portal/enrollment"),
+      )
+      expect(screen.queryByText("Page content")).not.toBeInTheDocument()
+    })
+
+    it("sends them from the GRC Connect home to Enrollment", async () => {
+      serveProfile(inTwoAndAHalfDays())
+      renderAt("/portal")
+
+      await waitFor(() =>
+        expect(routerMock.replace).toHaveBeenCalledWith("/portal/enrollment"),
+      )
+    })
+
+    it("lets them stay on Enrollment", async () => {
+      serveProfile(inTwoAndAHalfDays())
+      renderAt("/portal/enrollment", "enrollment")
+
+      await screen.findByRole("status")
+      expect(routerMock.replace).not.toHaveBeenCalled()
+      expect(screen.getByText("Page content")).toBeInTheDocument()
+    })
+
+    it("shows every student option and no banner once the deadline is gone", async () => {
+      serveProfile(null)
+      renderAt("/portal/grades", "grades")
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+      const navigation = screen.getByRole("navigation", {
+        name: "Role portal navigation",
+      })
+      expect(
+        within(navigation).getByRole("link", { name: "Schedule" }),
+      ).toBeInTheDocument()
+      expect(
+        within(navigation).getByRole("link", { name: "GRC Connect" }),
+      ).toBeInTheDocument()
+      expect(screen.queryByRole("status")).not.toBeInTheDocument()
+      expect(routerMock.replace).not.toHaveBeenCalled()
+    })
+
+    it("does not lock a student out when the profile cannot be read", async () => {
+      serveProfile(new Error("profile unavailable"))
+      renderAt("/portal/grades", "grades")
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+      expect(
+        within(
+          screen.getByRole("navigation", { name: "Role portal navigation" }),
+        ).getByRole("link", { name: "Schedule" }),
+      ).toBeInTheDocument()
+      expect(routerMock.replace).not.toHaveBeenCalled()
     })
   })
 })

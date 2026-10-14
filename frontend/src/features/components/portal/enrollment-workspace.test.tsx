@@ -735,6 +735,72 @@ describe("EnrollmentWorkspace", () => {
     },
   )
 
+  it.each([
+    {
+      name: "hides the link to Academic Records from a returnee who has an enrollment deadline",
+      deadline: "2026-10-21T10:00:00Z",
+      linkShown: false,
+    },
+    {
+      name: "shows the link to Academic Records to a returnee without an enrollment deadline",
+      deadline: null,
+      linkShown: true,
+    },
+  ])(
+    "$name",
+    async ({ deadline, linkShown }) => {
+      fetchMock.mockImplementation((input, init) => {
+        const target = url(input)
+        if (target.endsWith("/student-profile"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: {
+                  ...ownProfile(30),
+                  student_type: "returnee",
+                  student_type_label: "Returnee",
+                  enrollment_deadline_at: deadline,
+                },
+              }),
+            ),
+          )
+        if (target.includes("/eligible-subjects"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: [
+                  {
+                    ...eligibleSubject,
+                    is_eligible: false,
+                    reasons: [
+                      {
+                        code: "credit_mapping_pending",
+                        message: "Credit mapping is not complete yet.",
+                      },
+                    ],
+                  },
+                ],
+              }),
+            ),
+          )
+        return mockRoutes()(input, init)
+      })
+      renderWithSession(<EnrollmentWorkspace />, {
+        session: {
+          userId: "1",
+          displayName: "Student",
+          role: "student",
+          signedInAt: "2026-07-30T00:00:00Z",
+        },
+      })
+
+      await screen.findByText("Credit Mapping Required Before Enrollment")
+      // Their sidebar offers Enrollment alone while the deadline is set, so that page could not be opened.
+      const link = screen.queryByRole("link", { name: "View Academic Records" })
+      expect(link !== null, "the Academic Records link is shown").toBe(linkShown)
+    },
+  )
+
   it("keeps the selected section after navigating away and back", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockRoutes())

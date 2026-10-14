@@ -175,7 +175,11 @@ final class TransitionEnrollment
             // `SubmitEnrollment` take. A review that routes by payment status therefore locks the student's
             // profile before the enrollment, so it cannot deadlock with the Cashier confirming that very
             // student's payment (the reverse order was a real InnoDB deadlock, found in review).
-            $lockedStudent = in_array($action, ['program_head_approve', 'student_accept_revision'], true)
+            $routesByPayment = in_array($action, ['program_head_approve', 'student_accept_revision'], true);
+            // The Registrar's approval also takes the profile first: it ends a Transferee's or
+            // Returnee's 7-day enrollment deadline (ADR 0048), and a profile write after the enrollment
+            // lock would be the reverse of the order above.
+            $lockedStudent = $routesByPayment || $action === 'registrar_approve'
                 ? StudentProfile::query()->whereKey($enrollment->student_id)->lockForUpdate()->firstOrFail()
                 : null;
 
@@ -202,7 +206,7 @@ final class TransitionEnrollment
             // stamps neither. A student accepting the Program Chair's changes
             // completes the Program Head stage (the Chair proposed them), so that
             // moment is stamped; declining leaves the stage open.
-            $attributes = ['status' => $this->targetStatus($action, $lockedStudent)];
+            $attributes = ['status' => $this->targetStatus($action, $routesByPayment ? $lockedStudent : null)];
             if (str_starts_with($action, 'program_head_') || $action === 'student_accept_revision') {
                 $attributes['program_head_decided_at'] = now();
             } elseif (! in_array($action, ['student_cancel', 'student_decline_revision'], true)) {
@@ -214,6 +218,12 @@ final class TransitionEnrollment
 
             $lockedEnrollment->update($attributes);
             $lockedEnrollment->refresh();
+
+            // The Registrar approved: the account has all its options for good, and the 7-day
+            // deactivation no longer applies (ADR 0048).
+            if ($action === 'registrar_approve' && $lockedStudent?->enrollment_deadline_at !== null) {
+                $lockedStudent->forceFill(['enrollment_deadline_at' => null])->save();
+            }
 
             if ($action === 'student_accept_revision' || $action === 'student_decline_revision') {
                 $this->answerRevision($lockedEnrollment, $action === 'student_accept_revision', $reason);

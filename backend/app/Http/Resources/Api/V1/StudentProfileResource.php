@@ -52,6 +52,7 @@ final class StudentProfileResource extends JsonResource
      *     account_setup_status: 'awaiting_payment'|'pending'|'active',
      *     invitation_delivery_status: 'not_sent'|'sent'|'failed',
      *     freshman_payment_confirmed_at: ?string,
+     *     enrollment_deadline_at: ?string,
      *     freshman_status: 'awaiting_payment'|'awaiting_section'|'enrolling'|null,
      *     advance_payment_held: bool,
      *     queue_ticket_number: ?string,
@@ -114,6 +115,9 @@ final class StudentProfileResource extends JsonResource
                 default => 'not_sent',
             },
             'freshman_payment_confirmed_at' => $this->resource->freshman_payment_confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            // While set, a Transferee or Returnee sees only Enrollment and is deactivated at this moment
+            // unless the Registrar has approved their enrollment (ADR 0048).
+            'enrollment_deadline_at' => $this->resource->enrollment_deadline_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'freshman_status' => $this->freshmanStatus(),
             'advance_payment_held' => $this->advancePaymentHeld(),
             'queue_ticket_number' => $queueTicket?->ticket_number,

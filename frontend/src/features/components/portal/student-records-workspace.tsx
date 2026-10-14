@@ -9,6 +9,7 @@ import { z } from "zod"
 
 import { AdmissionIntakeRequirements } from "@/features/components/portal/admission-intake-requirements"
 import { AdmissionRequirementsChecklist } from "@/features/components/portal/admission-requirements-checklist"
+import { InvitationStatusBadge } from "@/features/components/portal/invitation-status-badge"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import {
   DataTable,
@@ -95,23 +96,6 @@ import {
 
 const YEAR_LEVEL_OPTIONS = [1, 2, 3, 4] as const
 type CreateValues = z.infer<typeof provisionStudentSchema>
-
-function InvitationStatus({ profile }: { profile: StudentProfile }) {
-  if (profile.account_setup_status === "active") {
-    return <Badge variant="success">Activated</Badge>
-  }
-  // A freshman pays the Cashier first; the setup email follows the first payment.
-  if (profile.account_setup_status === "awaiting_payment") {
-    return <Badge variant="warning">Awaiting payment</Badge>
-  }
-  if (profile.invitation_delivery_status === "failed") {
-    return <Badge variant="destructive">Delivery failed</Badge>
-  }
-  if (profile.invitation_delivery_status === "sent") {
-    return <Badge variant="warning">Awaiting setup</Badge>
-  }
-  return <Badge variant="outline">Pending delivery</Badge>
-}
 
 /**
  * Sends a freshman's "view the live queue" link again — the old link stops
@@ -712,7 +696,7 @@ function CreateAccountPanel() {
                 <p className="text-sm text-muted-foreground">
                   {created.student_number}
                 </p>
-                <InvitationStatus profile={created} />
+                <InvitationStatusBadge profile={created} />
                 <QueueTicketSummary profile={created} />
                 {created.account_setup_status === "awaiting_payment" &&
                   created.queue_ticket_number !== null && (
@@ -840,7 +824,7 @@ function StudentRecordDialog({
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline">{profile.student_number}</Badge>
               <Badge variant="secondary">{profile.program_code}</Badge>
-              <InvitationStatus profile={profile} />
+              <InvitationStatusBadge profile={profile} />
             </div>
             <FieldGroup className="grid gap-4 md:grid-cols-2">
               <Field>
@@ -1155,7 +1139,7 @@ function StudentDirectoryPanel() {
     {
       key: "account",
       header: "Account",
-      render: (profile) => <InvitationStatus profile={profile} />,
+      render: (profile) => <InvitationStatusBadge profile={profile} />,
     },
     {
       key: "action",

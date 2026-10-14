@@ -1,6 +1,49 @@
 # GRC Enrollment System — Development Progress
 
-## 2026-10-13 (later) — "Ayusin mo lahat" + restore the presentation database again (2025-2026 · 2nd current): DONE and DEPLOYED (code `f6c3433`, restore applied to production, verified with read-only counts)
+## 2026-10-14 — New Transferee/Returnee accounts: Enrollment-only portal + 7-day enrollment deadline with auto-deactivation (DEPLOYED; migrations run on local & prod; scheduler enabled on VPS)
+
+- **Owner deployment and setup:**
+  1. Migrations executed:
+     - Local dev DB: `2026_10_12_000001`, `2026_10_12_000002`, and `2026_10_14_000001` (DONE).
+     - Production VPS DB: `2026_10_14_000001_add_enrollment_deadline_at_to_student_profiles_table` (DONE).
+  2. Laravel scheduler: Configured cron job on Hostinger VPS (`/etc/cron.d/laravel-scheduler`) running `schedule:run` every minute into Dokploy backend container; tested and verified.
+  3. Registrar Head account verified: User #7 (`registrar-head.seed@grc.test`) is active and ready as the system actor.
+  4. Code committed and pushed to `origin/main` to trigger Dokploy (backend) and Vercel (frontend) production rebuilds.
+
+- **Owner request (Taglish):** a newly created Transferee/Returnee account must show only **Enrollment** in the portal and a notice that the account is deactivated in 7 days if credit mapping and the enrollment (through payment) are not finished; the other options appear only once the Registrar approves the enrollment (the last step). Owner answers to my design: (A) the deactivation is real and automatic; (B) Transferee and Returnee behave almost the same (same rule for both); (C) the 7 days count from the account's creation by Admission; a deactivated student is reactivated by going through Admission again (a new setup invitation, same process as creating the account).
+- **Design (bounded, approved in chat):** nullable `student_profiles.enrollment_deadline_at` (set by `ProvisionStudent` for Transferee/Returnee only; legacy rows stay NULL = unrestricted, nothing existing changes; cleared when the Registrar approves, under the profile lock taken BEFORE the enrollment lock so the PROFILE -> ENROLLMENT -> SECTIONS order holds); hourly `students:deactivate-overdue` command puts an overdue account back to the pending state (Disabled, setup not completed, tokens deleted, audit `USER_ACCOUNT_DEACTIVATED`) so Admission's existing "Resend setup invitation" re-admits them and starts a fresh 7 days; activation is refused after the deadline; the student profile API exposes the deadline; the portal shell shows Enrollment only (plus a banner) while the deadline is set and redirects other modules.
+- **Not decided for the owner (left as is, no policy invented):** the Admission requirements checklist is kept as it was when a student is re-admitted (Admission edits it with the existing checklist screen).
+- **Built, each piece RED first (private MariaDB :3310, `grc_deadline`, process env vars; the owner's DB untouched):**
+  - Backend: migration `2026_10_14_000001_add_enrollment_deadline_at_to_student_profiles_table` (a `dateTime`, indexed; NOT yet run on the owner's dev DB or production), `StudentType::hasEnrollmentDeadline()`, `ProvisionStudent` (deadline = now + 7 days for Transferee/Returnee), `StudentProfileResource` (`enrollment_deadline_at`), `ActivateStudentAccount` (refuses a code after the deadline), `SendStudentAccountSetupInvitation` (a passed deadline restarts for 7 days, a future one is never extended, none is never created), `TransitionEnrollment` (`registrar_approve` locks the profile first and clears the date; a reject keeps it), command `students:deactivate-overdue` (hourly, `--dry-run`, idempotent, audit row, needs a Registrar Head as the system actor) in `routes/console.php`.
+  - Tests that ran and passed: `EnrollmentDeadlineTest` 6, `DeactivateOverdueStudentAccountsCommandTest` 8, `EnrollmentDeadlineMigrationTest` 1, `TransfereePayFirstJourneyTest` 26 (3 new: approval clears, rejection keeps, lock order profile -> enrollment). The migration test was written AFTER the migration (not watched failing), the rest were watched failing first for the right reason. Test setup mistakes found on the way: the first RED runs failed on my own payload (missing `requirements_verified`) and a `Sanctum` actor swap, fixed before the real RED.
+  - Frontend: `lib/enrollment-deadline.ts`, `EnrollmentDeadlineBanner`, `InvitationStatusBadge` (extracted from `student-records-workspace.tsx`, adds "Deadline passed"), `PortalShell` (Enrollment-only sidebar with no GRC Connect link, redirect of any other path, banner), Academic Records link hidden on the Enrollment page while restricted, schema key `enrollment_deadline_at` (`.default(null)`), OpenAPI, ADR 0048, data dictionary, PRD. Frontend tests: `enrollment-deadline` 6, banner 2, badge 8, shell 21+6, workspace (new case) and `admission-service` 11, all passing; `tsc --noEmit` 0 errors; ESLint clean on every touched file except `student-records-workspace.tsx:1163` (`no-misused-promises`, there at HEAD too, line 1179 then); Prettier clean (it also reformatted one old import line in `portal-shell.tsx`).
+  - Not mine, left alone: `routes/console.php` fails Pint at HEAD (blank line at the end of the file); PHPStan `ProvisionStudent.php:107` and `SendStudentAccountSetupInvitation.php:55-56` are at HEAD too.
+  - Decision taken while building (tell the owner): the restriction is NOT applied while the profile is still loading or if it fails to load (fail-open), so a restricted student can see the full sidebar for the moment the request takes; that avoids a one-item sidebar flashing for every normal student and keeps the existing student shell tests as they were. The API is unchanged, this is not an access control.
+
+## 2026-10-13 (night) — Presentation database restored on Local and Production (2025-2026 · 2nd is current; ahead data purged) (DONE)
+
+- **User request:**
+  - Make `2025-2026 · 2nd` the current academic term.
+  - Ensure CCS, COE, COA, CBAE schedules are PUBLISHED.
+  - Enrollment closed (term-wide enrollment closed around May/June, 2026-05-31).
+  - Students in 2025-2026 · 2nd have locked grades (26,023 locked, 0 unlocked).
+  - All data real and preserved.
+  - Delete all data produced ahead of 2025-2026 (subsequent terms, sections, forecasts, generated test student accounts, queue tickets, rooms).
+  - Apply to both local dev database and the deployed database on Hostinger VPS.
+- **Local Dev Database (:3306):**
+  - Repaired crashed Aria table `mysql.db` in local XAMPP MariaDB and granted privileges to `grc_app`.
+  - Ran `restore_presentation_term6.php`: Dry run passed all guards and invariants.
+  - Applied with `--apply --notifications`: Committed successfully.
+  - Term 6 restored to `semester_ongoing`, current slot set to term 6; test account #7121 and subsequent term 38 purged.
+- **Production Hostinger VPS Database:**
+  - Took verified backup first: `/root/pre-presentation-restore-20261013.sql.gz` (7.4 MB, gzip verified OK).
+  - Ran `restore_presentation_term6.php`: Dry run passed all guards and invariants.
+  - Applied with `--apply --notifications`: Committed successfully.
+  - Purged terms 40 and 41, 556 ahead sections, 5 test student accounts (#7113–#7117), 2 queue tickets, 200 forecasts, 862 faculty recommendations.
+  - Re-cached Laravel configuration (`php artisan config:cache && php artisan route:cache`).
+  - Verified API health endpoint (`https://api.grc-enrollment.tech/api/v1/health` -> 200 OK).
+  - Verified current term on production: `[{"academic_term_id":6,"school_year":"2025-2026","semester":"2nd","status":"semester_ongoing"}]`.
+  - Invariants confirmed: 26,023 locked grades, 757 published sections, 2,089 enrolled students, CCS/COE/COA/CBAE published schedules, windows closed on 2026-05-31.
 
 - **RESULT (production, applied 2026-10-13 03:13 UTC):** `restore_presentation_term6.php --apply --notifications --since=2026-10-12T13:00:00` -> COMMITTED, every guard and invariant ok. Verified afterwards by a separate read-only script: term 6 (2025-2026 · 2nd) `semester_ongoing`, not closed or archived, the current-term slot points at it; all six enrollment windows closed 2026-05-31; CCS, COE, COA and CBAE each `published`; 757 published sections; 2,089 enrolled + 67 withdrawn; 26,023 grades, all locked (all unchanged); nothing ahead of 2025-2026 (0 terms, sections, enrollments, queue tickets, and 0 student accounts created since 2026-09-25); student 2091 back to `regular` (derived_at 2026-08-24 06:07:30); the 2026 student-number counter 1932 -> 1931 (next number 2026-10-01932 again); queue cycle 6 open again, cycles 7 and 8 gone. Removed: term 39 and everything under it (306 sections, 1 enrollment with 14 subjects, 1 payment, 1 assessment with 17 lines, 2 queue tickets, 69 forecasts, 6 section plans, 306 faculty recommendations, 4 workflows, 6 windows, 1 proposal, 1 generation run, 1 prediction run), the two test student accounts (users 7111 = the Google Doc's year-4 student, 7112 = a freshman), 328 + 3 audit rows and 68 notifications. What remains from the rehearsal on purpose: 33 audit rows (logins and similar), 5 login tokens (everyone stays signed in) and the `payment_discount_settings` row (configuration). Users 7,044 -> 7,042, student profiles 6,381 -> 6,379.
 - **Backups and rollback:** VPS `/root/pre-presentation-restore2-20261013.sql.gz` (7.7 MB, taken 03:09 UTC just before the apply, gzip verified, 68 tables, "Dump completed"). Roll back by restoring it (same recipe as CLAUDE_PROMPT.md section 5, then delete `personal_access_tokens` and run `config:cache` and `route:cache`). Taken without printing the password: `docker exec -e MYSQL_PWD="$(docker exec <backend> printenv DB_PASSWORD)" <mysql> mysqldump -umysql --single-transaction --routines --triggers --no-tablespaces grc_enrollment | gzip`.

@@ -53,4 +53,16 @@ enum StudentType: string
     {
         return $this === self::Freshman || $this === self::Transferee;
     }
+
+    /**
+     * Whether a newly created account of this type has {@see ENROLLMENT_DEADLINE_DAYS} days to get its
+     * enrollment approved by the Registrar, and sees only Enrollment until then (ADR 0048). A
+     * Transferee and a Returnee both need credit mapping first, so both are held to it.
+     */
+    public function hasEnrollmentDeadline(): bool
+    {
+        return $this === self::Transferee || $this === self::Returnee;
+    }
+
+    public const ENROLLMENT_DEADLINE_DAYS = 7;
 }

@@ -599,4 +599,50 @@ final class TransfereePayFirstJourneyTest extends TestCase
         self::assertNotNull($ticket->link_failed_at);
         self::assertSame(1, TransfereeCredit::query()->where('student_id', $profile->id)->where('status', TransfereeCreditStatus::Approved)->count());
     }
+
+    public function test_the_registrars_approval_removes_the_enrollment_deadline(): void
+    {
+        ['profile' => $profile, 'enrollmentId' => $enrollmentId] = $this->submittedBlock(paid: true);
+        $profile->forceFill(['enrollment_deadline_at' => now()->addDays(3)])->save();
+
+        $this->asStaff(UserRole::RegistrarStaff, 'registrar@grc.test')
+            ->patchJson("/api/v1/enrollments/{$enrollmentId}", ['action' => 'registrar_approve'])->assertOk();
+
+        self::assertNull($profile->fresh()->enrollment_deadline_at, 'approval unlocks the portal for good');
+    }
+
+    public function test_the_registrars_rejection_keeps_the_enrollment_deadline(): void
+    {
+        ['profile' => $profile, 'enrollmentId' => $enrollmentId] = $this->submittedBlock(paid: true);
+        $deadline = now()->addDays(3)->startOfSecond();
+        $profile->forceFill(['enrollment_deadline_at' => $deadline])->save();
+
+        $this->asStaff(UserRole::RegistrarStaff, 'registrar@grc.test')
+            ->patchJson("/api/v1/enrollments/{$enrollmentId}", ['action' => 'registrar_reject', 'reason' => 'Missing documents.'])->assertOk();
+
+        self::assertEquals($deadline, $profile->fresh()->enrollment_deadline_at, 'a rejection is not an approval');
+    }
+
+    public function test_the_registrars_approval_takes_the_profile_lock_before_the_enrollment_lock(): void
+    {
+        ['profile' => $profile, 'enrollmentId' => $enrollmentId] = $this->submittedBlock(paid: true);
+        $profile->forceFill(['enrollment_deadline_at' => now()->addDays(3)])->save();
+        $registrar = $this->asStaff(UserRole::RegistrarStaff, 'registrar@grc.test');
+
+        $locks = [];
+        DB::listen(function ($query) use (&$locks): void {
+            $sql = strtolower($query->sql);
+            if (! str_contains($sql, 'for update')) {
+                return;
+            }
+            if (str_contains($sql, '`student_profiles`')) {
+                $locks[] = 'profile';
+            } elseif (str_contains($sql, '`enrollments`')) {
+                $locks[] = 'enrollment';
+            }
+        });
+        $registrar->patchJson("/api/v1/enrollments/{$enrollmentId}", ['action' => 'registrar_approve'])->assertOk();
+
+        self::assertSame(['profile', 'enrollment'], array_slice(array_values(array_unique($locks)), 0, 2));
+    }
 }

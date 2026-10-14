@@ -11209,6 +11209,7 @@ components:
         - account_setup_status
         - invitation_delivery_status
         - freshman_payment_confirmed_at
+        - enrollment_deadline_at
         - freshman_status
         - advance_payment_held
         - queue_ticket_number
@@ -11306,6 +11307,16 @@ components:
           type: [string, 'null']
           format: date-time
           description: Set once, when the Cashier confirms a freshman's first payment.
+        enrollment_deadline_at:
+          type: [string, 'null']
+          format: date-time
+          description: >
+            A newly created Transferee or Returnee has 7 days from Admission creating the account
+            (or admitting the student again with a new setup invitation) to get an enrollment
+            approved by the Registrar (ADR 0048). While this is set the student sees only
+            Enrollment; the hourly `students:deactivate-overdue` command deactivates the account
+            when it passes; the Registrar's approval clears it. Null for every other student and
+            for every account that existed before the rule.
         queue_ticket_number:
           type: [string, 'null']
           description: A freshman's queue number issued at Admission; null for every other student.

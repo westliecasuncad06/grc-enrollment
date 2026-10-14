@@ -10,7 +10,13 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useParams, usePathname, useRouter } from "next/navigation"
-import { startTransition, useEffect, useRef, useState, type ReactNode } from "react"
+import {
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { createPortal } from "react-dom"
 
 import { useAuth } from "@/features/auth/use-auth"
@@ -31,9 +37,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/features/components/ui/sheet"
+import { EnrollmentDeadlineBanner } from "@/features/components/portal/enrollment-deadline-banner"
 import { PortalNotificationSheet } from "@/features/components/portal/portal-notification-sheet"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
+import { useOwnStudentProfileQuery } from "@/features/hooks/use-student-records"
+import {
+  isPortalRestricted,
+  RESTRICTED_STUDENT_MODULE_ID,
+} from "@/features/lib/enrollment-deadline"
 import { cn } from "@/features/lib/utils"
 import {
   formatAcademicTerm,
@@ -56,6 +68,8 @@ import {
 interface PortalNavigationProps {
   definition: RolePortalDefinition
   mobile?: boolean
+  /** A newly created Transferee or Returnee: Enrollment is the only option until the Registrar approves it. */
+  restricted?: boolean
 }
 
 function NavigationLink({
@@ -174,6 +188,7 @@ function PortalNavigation({
   mobile = false,
   hasReturnedSchedule = false,
   collapsed = false,
+  restricted = false,
 }: PortalNavigationProps & {
   hasReturnedSchedule?: boolean
   collapsed?: boolean
@@ -185,18 +200,23 @@ function PortalNavigation({
         mobile ? "Mobile role portal navigation" : "Role portal navigation"
       }
     >
-      <NavigationLink
-        href="/portal"
-        mobile={mobile}
-        collapsed={collapsed}
-        label="GRC Connect"
-        icon={<LayoutDashboard data-icon="inline-start" aria-hidden="true" />}
-      >
-        <LayoutDashboard data-icon="inline-start" aria-hidden="true" />
-        <span>GRC Connect</span>
-      </NavigationLink>
+      {!restricted && (
+        <NavigationLink
+          href="/portal"
+          mobile={mobile}
+          collapsed={collapsed}
+          label="GRC Connect"
+          icon={<LayoutDashboard data-icon="inline-start" aria-hidden="true" />}
+        >
+          <LayoutDashboard data-icon="inline-start" aria-hidden="true" />
+          <span>GRC Connect</span>
+        </NavigationLink>
+      )}
       {definition.modules
         .filter((module) => isConnectedModuleId(module.id))
+        .filter(
+          (module) => !restricted || module.id === RESTRICTED_STUDENT_MODULE_ID,
+        )
         .map((module) => {
           const Icon = module.icon
           const isReturned =
@@ -254,6 +274,24 @@ export function PortalShell({ children }: { children: ReactNode }) {
   })
   const router = useRouter()
   const pathname = usePathname()
+  // A newly created Transferee or Returnee sees Enrollment alone until the Registrar approves their
+  // enrollment (ADR 0048). Until the profile has loaded, or if it cannot be read, nobody is restricted.
+  const ownProfileQuery = useOwnStudentProfileQuery()
+  const enrollmentDeadlineAt =
+    session?.role === "student"
+      ? (ownProfileQuery.data?.enrollment_deadline_at ?? null)
+      : null
+  const restricted = isPortalRestricted({
+    enrollment_deadline_at: enrollmentDeadlineAt,
+  })
+  const mustOpenEnrollment =
+    restricted && pathname !== `/portal/${RESTRICTED_STUDENT_MODULE_ID}`
+
+  useEffect(() => {
+    if (mustOpenEnrollment) {
+      router.replace(`/portal/${RESTRICTED_STUDENT_MODULE_ID}`)
+    }
+  }, [mustOpenEnrollment, router])
   const params = useParams<{ moduleId?: string }>()
   const reducedMotion = useReducedMotion()
   const sidebarRef = useRef<HTMLElement>(null)
@@ -367,6 +405,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           definition={definition}
           hasReturnedSchedule={hasReturnedSchedule}
           collapsed={sidebarCollapsed}
+          restricted={restricted}
         />
 
         <div className="portal-sidebar__footer">
@@ -420,6 +459,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
                     definition={definition}
                     mobile
                     hasReturnedSchedule={hasReturnedSchedule}
+                    restricted={restricted}
                   />
                 </div>
                 <SheetFooter className="portal-mobile-sheet__footer">
@@ -486,6 +526,10 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
         <SuperAdminBanner />
 
+        {enrollmentDeadlineAt !== null && (
+          <EnrollmentDeadlineBanner deadlineAt={enrollmentDeadlineAt} />
+        )}
+
         {!storageAvailable && (
           <Alert className="portal-storage-alert">
             <AlertDescription>
@@ -495,7 +539,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         )}
 
         <div id="portal-content" className="portal-content" tabIndex={-1}>
-          {children}
+          {mustOpenEnrollment ? null : children}
         </div>
       </div>
     </div>

@@ -38,6 +38,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/features/components/ui/al
 import { StudentCreditMappingDialog } from "@/features/components/portal/student-credit-mapping-dialog"
 import { useTransfereeCreditsQuery } from "@/features/hooks/use-transferee-credits"
 import { isCreditMappingIncomplete } from "@/features/lib/credit-mapping"
+import { isPortalRestricted } from "@/features/lib/enrollment-deadline"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -993,11 +994,15 @@ export function EnrollmentWorkspace() {
             {(isTransferee || isReturnee) && (
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <StudentCreditMappingDialog />
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/portal/academic-records">
-                    View Academic Records
-                  </Link>
-                </Button>
+                {/* Academic Records is not in the sidebar of a student who still has an enrollment
+                    deadline (ADR 0048), so the page could not be opened from here. */}
+                {!isPortalRestricted(studentProfileQuery.data) && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/portal/academic-records">
+                      View Academic Records
+                    </Link>
+                  </Button>
+                )}
               </div>
             )}
           </AlertDescription>

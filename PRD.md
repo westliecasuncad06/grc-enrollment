@@ -146,6 +146,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
   does not expose a claim action.
 - View grades and approved academic history.
 - Save the subjects completed at another school as a list, submit it for credit mapping, and follow its status.
+- A newly created Transferee or Returnee sees only Enrollment, with a notice that the account is deactivated 7 days after Admission created it unless the Registrar approves their enrollment by then; the other options appear after that approval. Admission's setup invitation admits a deactivated student again for another 7 days (ADR 0048).
 - Download or print the Digital COM after payment confirmation.
 - Manage permitted profile fields and password.
 - View notifications and enrollment history.
