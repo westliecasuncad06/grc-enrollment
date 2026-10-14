@@ -348,7 +348,7 @@ describe("ChedReportsWorkspace", () => {
     expect(await axe(document.body)).toHaveNoViolations()
   })
 
-  it("warns about students without a gender and about generated details", async () => {
+  it("warns about students without a gender, and no longer shows a note about generated details", async () => {
     list = listPayload("enrollment-list", {
       total: 40,
       missingGender: 3,
@@ -359,9 +359,11 @@ describe("ChedReportsWorkspace", () => {
     expect(
       await screen.findByText(/3 listed students have no gender on file/),
     ).toBeInTheDocument()
+    // The owner knows the details are not real (2026-10-15): the API still reports the count, the page does not.
     expect(
-      screen.getByText(/40 of the 40 listed students carry generated/),
-    ).toBeInTheDocument()
+      screen.queryByText(/Some details are generated, not real/),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/carry generated/)).not.toBeInTheDocument()
   })
 
   it("says so when no student is listed for the term", async () => {

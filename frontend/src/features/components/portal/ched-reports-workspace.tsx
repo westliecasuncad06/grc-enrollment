@@ -183,34 +183,21 @@ function DownloadButtons({
   )
 }
 
-function ReportNotices({
-  missingGender,
-  demoPopulated,
-  total,
-}: {
-  missingGender: number
-  demoPopulated: number
-  total: number
-}) {
+/**
+ * The one warning the Registrar Head still needs on the preview: students with no gender on file. The note
+ * about generated (demo) details was removed at the owner's request (2026-10-15); they know the details are
+ * not real.
+ */
+function ReportNotices({ missingGender }: { missingGender: number }) {
+  if (missingGender === 0) return null
+
   return (
-    <>
-      {missingGender > 0 && (
-        <Alert>
-          <AlertTitle>Gender missing</AlertTitle>
-          <AlertDescription>
-            {`${missingGender} listed ${plural(missingGender, "student has", "students have")} no gender on file, so their Gender cell is blank in the file.`}
-          </AlertDescription>
-        </Alert>
-      )}
-      {demoPopulated > 0 && (
-        <Alert>
-          <AlertTitle>Some details are generated, not real</AlertTitle>
-          <AlertDescription>
-            {`${demoPopulated} of the ${total} listed ${plural(total, "student carries", "students carry")} generated (demo) details such as birth date, contact number and address. Replace them with the real values before you submit this file to CHED.`}
-          </AlertDescription>
-        </Alert>
-      )}
-    </>
+    <Alert>
+      <AlertTitle>Gender missing</AlertTitle>
+      <AlertDescription>
+        {`${missingGender} listed ${plural(missingGender, "student has", "students have")} no gender on file, so their Gender cell is blank in the file.`}
+      </AlertDescription>
+    </Alert>
   )
 }
 
@@ -291,11 +278,7 @@ function ListReportPanel({
                     {`${meta.total} ${plural(meta.total, "student", "students")}`}
                   </Badge>
                 </div>
-                <ReportNotices
-                  missingGender={response.report.missing_gender}
-                  demoPopulated={response.report.demo_populated}
-                  total={meta.total}
-                />
+                <ReportNotices missingGender={response.report.missing_gender} />
                 <p className="text-xs text-muted-foreground">
                   Click a student to see every field that goes into the file.
                 </p>

@@ -25,8 +25,6 @@ const reportInfoSchema = z
     ),
     /** Listed students with no gender on file. */
     missing_gender: z.number().int().nonnegative(),
-    /** Listed students who carry generated (demo) details. */
-    demo_populated: z.number().int().nonnegative(),
   })
   .passthrough()
 
