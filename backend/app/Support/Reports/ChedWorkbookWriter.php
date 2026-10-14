@@ -16,6 +16,11 @@ use ZipArchive;
  *    as many as there are students (a list longer than the template simply gets more rows);
  *  - NSTP forms: the footer (sub total, grand total, signatures) moves down below the last row,
  *    its merged cells move with it, and its COUNTIF ranges and cached counts follow the rows;
+ *  - the data cells get the headings' font (Calibri 10) instead of the workbook default, the columns are
+ *    widened to hold a whole program name, address or e-mail, and on the Enrollment List a long subject
+ *    list wraps inside its cell and makes its row taller; the NSTP forms' logo is anchored again at its
+ *    own size so it keeps its place beside the centred title when the columns grow (owner's review of
+ *    the first Excel files, 2026-10-15);
  *  - text is written as inline strings (no shared-string table to keep in step);
  *  - `calcChain.xml` is dropped and the workbook is told to recalculate on open, so Excel rebuilds
  *    its formula chain itself.
@@ -39,6 +44,36 @@ final class ChedWorkbookWriter
     /** Form 2-A: the order of the three NSTP components, two columns (M, F) each, from column C. */
     private const COMPONENTS = ['rotc', 'cwts', 'lts'];
 
+    /** Column widths of a filled list, by column number, in the file's own units; a column not named keeps the template's width. */
+    private const ENROLLMENT_LIST_WIDTHS = [
+        2 => 48.0, 4 => 18.0, 5 => 16.0, 6 => 14.0, 7 => 18.0, 9 => 11.0, 10 => 9.0, 11 => 10.0, 12 => 72.0, 13 => 14.0,
+    ];
+
+    private const NSTP_LIST_WIDTHS = [
+        3 => 20.0, 4 => 18.0, 5 => 12.0, 6 => 64.0, 7 => 9.5, 9 => 40.0, 10 => 25.0, 11 => 18.0, 12 => 16.0, 13 => 36.0,
+    ];
+
+    /** How a data cell is laid out, by column letter; a column not named is left-aligned. `wrap` also wraps the text. */
+    private const ENROLLMENT_LIST_ALIGNMENT = ['J' => 'center', 'K' => 'center', 'L' => 'wrap', 'M' => 'center'];
+
+    private const NSTP_LIST_ALIGNMENT = ['G' => 'center', 'H' => 'center'];
+
+    /** The heading font of the NSTP forms, used for every data cell of a list. */
+    private const DATA_FONT = '<font><sz val="10"/><name val="Calibri"/><family val="2"/></font>';
+
+    /** Characters of a subject list that fit on one line of its (wrapped) column, and the height of a line, in points. */
+    private const SUBJECT_CHARACTERS_PER_LINE = 78;
+
+    /** The template's own row height, and the height of one more line of its 10 pt Tahoma. */
+    private const ROW_HEIGHT = 14.4;
+
+    private const LINE_HEIGHT = 13.2;
+
+    private const MAXIMUM_ROW_HEIGHT = 409.5;
+
+    /** NSTP forms: the logo's centre-to-title distance in the template, in EMU, kept when the columns are widened. */
+    private const LOGO_RIGHT_EDGE_TO_TITLE_CENTRE = 2470000;
+
     public function __construct(private readonly ?string $templateDirectory = null) {}
 
     /**
@@ -48,10 +83,17 @@ final class ChedWorkbookWriter
     {
         $zip = $this->openCopyOf($report, $path);
         $sheet = $this->sheetOf($zip);
+        $styles = (string) $zip->getFromName('xl/styles.xml');
 
         $sheet = $report === ChedReport::EnrollmentList
-            ? $this->fillEnrollmentList($sheet, $rows, $header)
-            : $this->fillNstpList($sheet, $rows, $header);
+            ? $this->fillEnrollmentList($sheet, $rows, $header, $styles)
+            : $this->fillNstpList($sheet, $rows, $header, $styles);
+
+        $zip->addFromString('xl/styles.xml', $styles, ZipArchive::FL_OVERWRITE);
+
+        if ($report !== ChedReport::EnrollmentList) {
+            $this->anchorLogoBesideTitle($zip, $sheet);
+        }
 
         $this->save($zip, $sheet);
     }
@@ -98,7 +140,7 @@ final class ChedWorkbookWriter
     /**
      * @param  list<array<string, int|string>>  $rows
      */
-    private function fillEnrollmentList(string $sheet, array $rows, ChedReportHeader $header): string
+    private function fillEnrollmentList(string $sheet, array $rows, ChedReportHeader $header, string &$styles): string
     {
         $columns = [
             'A' => 'no', 'B' => 'program', 'C' => 'major', 'D' => 'student_number', 'E' => 'first_name',
@@ -110,12 +152,20 @@ final class ChedWorkbookWriter
         $byNumber = $this->rowsByNumber($rowsXml);
         $first = 8;
         $kept = $this->rowsAbove($byNumber, $first);
-        $generated = $this->dataRows($byNumber[$first], $first, $rows, $columns);
+        $generated = $this->dataRows(
+            $byNumber[$first],
+            $first,
+            $rows,
+            $columns,
+            $this->dataStyles($styles, $byNumber[$first], self::ENROLLMENT_LIST_ALIGNMENT, withDataFont: false),
+            static fn (array $row): ?float => self::subjectsRowHeight((string) ($row['subjects'] ?? '')),
+        );
 
         $lastRow = $first + max(count($rows), 1) - 1;
         $sheet = $before.$kept.implode('', $generated).$after;
         $sheet = $this->setDimension($sheet, "A1:N{$lastRow}");
         $sheet = $this->tidyView($sheet);
+        $sheet = $this->setColumnWidths($sheet, self::ENROLLMENT_LIST_WIDTHS);
 
         $sheet = $this->setText($sheet, 'B1', $header->schoolName);
         $sheet = $this->setText($sheet, 'B2', $header->schoolAddress);
@@ -126,7 +176,7 @@ final class ChedWorkbookWriter
     /**
      * @param  list<array<string, int|string>>  $rows
      */
-    private function fillNstpList(string $sheet, array $rows, ChedReportHeader $header): string
+    private function fillNstpList(string $sheet, array $rows, ChedReportHeader $header, string &$styles): string
     {
         $columns = [
             'A' => 'no', 'B' => 'serial_no', 'C' => 'surname', 'D' => 'first_name', 'E' => 'middle_name',
@@ -142,7 +192,13 @@ final class ChedWorkbookWriter
         $delta = $count - ($footerStart - $first);
 
         $kept = $this->rowsAbove($byNumber, $first);
-        $generated = $this->dataRows($byNumber[$first], $first, $rows, $columns);
+        $generated = $this->dataRows(
+            $byNumber[$first],
+            $first,
+            $rows,
+            $columns,
+            $this->dataStyles($styles, $byNumber[$first], self::NSTP_LIST_ALIGNMENT, withDataFont: true),
+        );
         $lastData = $first + $count - 1;
         $genders = ['MALE' => 0, 'FEMALE' => 0];
         foreach ($rows as $row) {
@@ -171,6 +227,7 @@ final class ChedWorkbookWriter
         $sheet = $this->shiftMerges($sheet, $footerStart, $delta);
         $sheet = $this->setDimension($sheet, "A2:M{$lastRow}");
         $sheet = $this->tidyView($sheet);
+        $sheet = $this->setColumnWidths($sheet, self::NSTP_LIST_WIDTHS);
         $sheet = $this->widenNumberColumn($sheet, count($rows));
 
         $sheet = $this->setText($sheet, 'A7', "  {$header->semesterLabel} :    School Year :   {$header->schoolYear}");
@@ -187,9 +244,11 @@ final class ChedWorkbookWriter
      *
      * @param  list<array<string, int|string>>  $rows
      * @param  array<string, string>  $columns  column letter => row key
+     * @param  array<string, int>  $styles  column letter => the style a data cell gets instead of the template's
+     * @param  (callable(array<string, int|string>): ?float)|null  $height  a row's height in points, or null for the template's
      * @return list<string>
      */
-    private function dataRows(string $prototype, int $first, array $rows, array $columns): array
+    private function dataRows(string $prototype, int $first, array $rows, array $columns, array $styles = [], ?callable $height = null): array
     {
         $numeric = ['no', 'year_level', 'units'];
         $generated = [];
@@ -202,7 +261,7 @@ final class ChedWorkbookWriter
                     ? ['n', (string) $value]
                     : ['t', (string) $value];
             }
-            $generated[] = $this->cloneRow($prototype, $first + $index, $values);
+            $generated[] = $this->cloneRow($prototype, $first + $index, $values, $styles, $row === null || $height === null ? null : $height($row));
         }
 
         return $generated;
@@ -210,14 +269,20 @@ final class ChedWorkbookWriter
 
     /**
      * @param  array<string, array{0: string, 1: string}>  $values  column letter => [kind, text]
+     * @param  array<string, int>  $styles  column letter => replacement style
      */
-    private function cloneRow(string $prototype, int $number, array $values): string
+    private function cloneRow(string $prototype, int $number, array $values, array $styles = [], ?float $height = null): string
     {
         if (preg_match('#^<row\b([^>]*?)/?>#', $prototype, $open) !== 1) {
             throw new RuntimeException('The template data row is not a row element.');
         }
 
         $attributes = (string) preg_replace('/\br="\d+"/', 'r="'.$number.'"', $open[1]);
+
+        if ($height !== null && $height > self::ROW_HEIGHT) {
+            $attributes = (string) preg_replace('/\s(?:ht|customHeight)="[^"]*"/', '', $attributes);
+            $attributes .= ' ht="'.rtrim(rtrim(sprintf('%.2F', $height), '0'), '.').'" customHeight="1"';
+        }
 
         preg_match_all(self::CELL, $prototype, $cells, PREG_SET_ORDER);
         $out = '';
@@ -228,7 +293,9 @@ final class ChedWorkbookWriter
 
             preg_match('/\bs="(\d+)"/', $cell[1], $style);
             $letter = $ref[1];
-            $s = isset($style[1]) ? ' s="'.$style[1].'"' : '';
+            $s = isset($styles[$letter])
+                ? ' s="'.$styles[$letter].'"'
+                : (isset($style[1]) ? ' s="'.$style[1].'"' : '');
             [$kind, $text] = $values[$letter] ?? ['t', ''];
 
             $out .= match (true) {
@@ -388,6 +455,188 @@ final class ChedWorkbookWriter
         }
 
         return $letter;
+    }
+
+    // ---- look -------------------------------------------------------------------------------
+
+    /**
+     * The height of a row whose subject list wraps inside its cell, or null when one line is enough.
+     */
+    private static function subjectsRowHeight(string $subjects): ?float
+    {
+        $lines = max(1, (int) ceil(mb_strlen($subjects) / self::SUBJECT_CHARACTERS_PER_LINE));
+
+        return $lines === 1 ? null : min(self::MAXIMUM_ROW_HEIGHT, $lines * self::LINE_HEIGHT + 2.4);
+    }
+
+    /**
+     * Adds the styles a list's data cells use to the workbook's style part: a copy of each template data
+     * style (borders and fills unchanged) with the headings' font when asked, the column's alignment and
+     * the cell centred vertically.
+     *
+     * @param  array<string, string>  $alignment  column letter => 'center' | 'wrap'; any other column is left-aligned
+     * @return array<string, int> column letter => the new style, for every data column but the number column A
+     */
+    private function dataStyles(string &$styles, string $prototype, array $alignment, bool $withDataFont): array
+    {
+        if (preg_match('#<cellXfs count="(\d+)">(.*?)</cellXfs>#s', $styles, $block) !== 1
+            || preg_match_all('#<xf\b[^>]*?(?:/>|>.*?</xf>)#s', $block[2], $xfs) < 1
+            || preg_match('#<fonts count="(\d+)"#', $styles, $fontCount) !== 1) {
+            throw new RuntimeException('The template has no style table to extend.');
+        }
+
+        $fontId = $withDataFont ? (int) $fontCount[1] : null;
+        $existing = (int) $block[1];
+        $added = [];
+        $byLetter = [];
+
+        preg_match_all(self::CELL, $prototype, $cells, PREG_SET_ORDER);
+        foreach ($cells as $cell) {
+            if (preg_match('/\br="([A-Z]+)\d+"/', $cell[1], $ref) !== 1 || $ref[1] === 'A' || preg_match('/\bs="(\d+)"/', $cell[1], $style) !== 1) {
+                continue;
+            }
+
+            $kind = $alignment[$ref[1]] ?? 'left';
+            $xf = $this->restyleXf($xfs[0][(int) $style[1]], $fontId, $kind === 'wrap' ? 'left' : $kind, $kind === 'wrap');
+            $position = array_search($xf, $added, true);
+            if ($position === false) {
+                $added[] = $xf;
+                $position = array_key_last($added);
+            }
+
+            $byLetter[$ref[1]] = $existing + (int) $position;
+        }
+
+        $styles = str_replace($block[0], '<cellXfs count="'.($existing + count($added)).'">'.$block[2].implode('', $added).'</cellXfs>', $styles);
+
+        if ($withDataFont) {
+            $styles = (string) preg_replace('#<fonts count="\d+"([^>]*)>(.*?)</fonts>#s', '<fonts count="'.($fontId + 1).'"$1>$2'.self::DATA_FONT.'</fonts>', $styles, 1);
+        }
+
+        return $byLetter;
+    }
+
+    private function restyleXf(string $xf, ?int $fontId, string $horizontal, bool $wrap): string
+    {
+        if (preg_match('#^<xf\b([^>]*?)(?:/>|>(.*?)</xf>)$#s', $xf, $m) !== 1) {
+            throw new RuntimeException('A template cell style is not an xf element.');
+        }
+
+        $attributes = $m[1];
+        $inner = (string) preg_replace('#<alignment\b[^>]*?(?:/>|>.*?</alignment>)#s', '', $m[2] ?? '');
+
+        if ($fontId !== null) {
+            $attributes = $this->setAttribute($attributes, 'fontId', (string) $fontId);
+            $attributes = $this->setAttribute($attributes, 'applyFont', '1');
+        }
+        $attributes = $this->setAttribute($attributes, 'applyAlignment', '1');
+
+        $alignment = '<alignment horizontal="'.$horizontal.'" vertical="center"'.($wrap ? ' wrapText="1"' : '').'/>';
+
+        return '<xf'.$attributes.'>'.$alignment.$inner.'</xf>';
+    }
+
+    private function setAttribute(string $attributes, string $name, string $value): string
+    {
+        $pattern = '/\s'.$name.'="[^"]*"/';
+
+        return preg_match($pattern, $attributes) === 1
+            ? (string) preg_replace($pattern, ' '.$name.'="'.$value.'"', $attributes, 1)
+            : $attributes.' '.$name.'="'.$value.'"';
+    }
+
+    /**
+     * Sets the width of the named columns. A `<col>` that spans several columns is split so each can differ;
+     * the long tail range of untouched columns is left as it is.
+     *
+     * @param  array<int, float>  $widths  column number => width
+     */
+    private function setColumnWidths(string $sheet, array $widths): string
+    {
+        if (preg_match('#<cols>(.*?)</cols>#s', $sheet, $block) !== 1 || preg_match_all('#<col\b([^>]*?)/>#', $block[1], $cols, PREG_SET_ORDER) < 1) {
+            return $sheet;
+        }
+
+        $out = '';
+        foreach ($cols as $col) {
+            if (preg_match('/\bmin="(\d+)"/', $col[1], $min) !== 1 || preg_match('/\bmax="(\d+)"/', $col[1], $max) !== 1) {
+                $out .= '<col'.$col[1].'/>';
+
+                continue;
+            }
+
+            $low = (int) $min[1];
+            $high = (int) $max[1];
+
+            if ($high - $low > 40) {
+                $out .= '<col'.$col[1].'/>';
+
+                continue;
+            }
+
+            for ($index = $low; $index <= $high; $index++) {
+                $one = (string) preg_replace(['/\bmin="\d+"/', '/\bmax="\d+"/'], ['min="'.$index.'"', 'max="'.$index.'"'], $col[1]);
+
+                if (isset($widths[$index])) {
+                    $one = $this->setAttribute($one, 'width', rtrim(rtrim(sprintf('%.6F', $widths[$index]), '0'), '.'));
+                    $one = (string) preg_replace('/\sbestFit="[^"]*"/', '', $one);
+                    $one = $this->setAttribute($one, 'customWidth', '1');
+                }
+
+                $out .= '<col'.$one.'/>';
+            }
+        }
+
+        return str_replace($block[0], '<cols>'.$out.'</cols>', $sheet);
+    }
+
+    /**
+     * The NSTP forms' logo was anchored between two cells, so widening the columns would have stretched it,
+     * and the title it sits beside is centred across the whole table, so it would have stayed behind when
+     * the table grew. It is anchored again at its own size, at the same distance from the title's centre as
+     * in CHED's template.
+     */
+    private function anchorLogoBesideTitle(ZipArchive $zip, string $sheet): void
+    {
+        $drawing = $zip->getFromName('xl/drawings/drawing1.xml');
+
+        if ($drawing === false
+            || preg_match('#<xdr:twoCellAnchor\b[^>]*>(.*?)<xdr:from>.*?</xdr:from><xdr:to>.*?</xdr:to>#s', $drawing) !== 1
+            || preg_match('#<a:ext cx="(\d+)" cy="(\d+)"/>#', $drawing, $size) !== 1
+            || preg_match('#<xdr:rowOff>(\d+)</xdr:rowOff>#', $drawing, $rowOffset) !== 1
+            || preg_match('#<cols>(.*?)</cols>#s', $sheet, $block) !== 1) {
+            return;
+        }
+
+        // The title is merged across columns A..M: its centre is half the width of those columns.
+        $widths = [];
+        preg_match_all('#<col\b([^>]*?)/>#', $block[1], $cols, PREG_SET_ORDER);
+        foreach ($cols as $col) {
+            if (preg_match('/\bmin="(\d+)"/', $col[1], $min) === 1 && preg_match('/\bmax="(\d+)"/', $col[1], $max) === 1 && preg_match('/\bwidth="([0-9.]+)"/', $col[1], $width) === 1) {
+                for ($index = (int) $min[1]; $index <= min((int) $max[1], 13); $index++) {
+                    $widths[$index] = (int) floor(((256 * (float) $width[1] + 18) / 256) * 7) * 9525;
+                }
+            }
+        }
+
+        $left = max(0, (int) round(array_sum($widths) / 2) - self::LOGO_RIGHT_EDGE_TO_TITLE_CENTRE - (int) $size[1]);
+        $column = 0;
+        foreach ($widths as $index => $emu) {
+            if ($left < $emu) {
+                $column = $index - 1;
+                break;
+            }
+            $left -= $emu;
+            $column = $index;
+        }
+
+        $anchor = '<xdr:from><xdr:col>'.$column.'</xdr:col><xdr:colOff>'.$left.'</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>'.$rowOffset[1].'</xdr:rowOff></xdr:from>'
+            .'<xdr:ext cx="'.$size[1].'" cy="'.$size[2].'"/>';
+        $drawing = (string) preg_replace('#<xdr:from>.*?</xdr:from><xdr:to>.*?</xdr:to>#s', $anchor, $drawing, 1);
+        $drawing = (string) preg_replace('#<xdr:twoCellAnchor\b[^>]*>#', '<xdr:oneCellAnchor>', $drawing, 1);
+        $drawing = str_replace('</xdr:twoCellAnchor>', '</xdr:oneCellAnchor>', $drawing);
+
+        $zip->addFromString('xl/drawings/drawing1.xml', $drawing, ZipArchive::FL_OVERWRITE);
     }
 
     // ---- sheet-level ------------------------------------------------------------------------

@@ -176,10 +176,24 @@ final class ChedWorkbookWriterTest extends TestCase
         $this->assertStringContainsString('<mergeCell ref="B1:N1"/>', $sheet);
         $this->assertStringContainsString('<mergeCell ref="E7:G7"/>', $sheet);
         $this->assertStringContainsString('<dimension ref="A1:N8"/>', $sheet);
-        // Each data cell keeps the style the template gave its column.
+        // The number column keeps the template's style; every other data cell is the template's style for
+        // its column (same borders and fill) with the alignment of a filled cell.
         $this->assertMatchesRegularExpression('/<c r="A8" s="2"/', $sheet);
-        $this->assertMatchesRegularExpression('/<c r="B8" s="1"/', $sheet);
-        $this->assertMatchesRegularExpression('/<c r="N8" s="17"/', $sheet);
+        $book = $this->open($path);
+        $template = new ZipArchive;
+        $this->assertTrue($template->open(base_path('resources/ched-templates/ched-enrollment-list.xlsx')) === true);
+        foreach (['B8' => 1, 'N8' => 17] as $ref => $templateStyle) {
+            $this->assertSame(
+                $this->attribute($this->xfAt($template, $templateStyle), 'borderId'),
+                $this->attribute($this->styleOf($book['package'], $sheet, $ref), 'borderId'),
+                "{$ref} keeps the template's borders",
+            );
+            $this->assertSame(
+                $this->attribute($this->xfAt($template, $templateStyle), 'fillId'),
+                $this->attribute($this->styleOf($book['package'], $sheet, $ref), 'fillId'),
+                "{$ref} keeps the template's fill",
+            );
+        }
     }
 
     public function test_an_empty_list_still_has_one_blank_row(): void
@@ -287,6 +301,25 @@ final class ChedWorkbookWriterTest extends TestCase
         $this->assertSame('LIST OF NSTP GRADUATES FOR SERIAL NUMBER', $book['cells']['A6']);
     }
 
+    public function test_the_logo_keeps_its_own_size_and_is_anchored_beside_the_centred_title_after_the_columns_widen(): void
+    {
+        foreach ([ChedReport::NstpEnrollment, ChedReport::NstpGraduates] as $report) {
+            $path = $this->target();
+            $this->writer()->writeList($report, [$this->nstpRow(1)], $this->header(), $path);
+            $zip = $this->open($path)['package'];
+            $drawing = (string) $zip->getFromName('xl/drawings/drawing1.xml');
+
+            // Anchored at one cell with the picture's own size (it was stretched between two cells before).
+            $this->assertStringContainsString('<xdr:oneCellAnchor>', $drawing);
+            $this->assertStringNotContainsString('<xdr:twoCellAnchor', $drawing);
+            $this->assertStringContainsString('<xdr:ext cx="647699" cy="609600"/>', $drawing);
+            $this->assertStringContainsString('r:embed="rId1"', $drawing);
+            // The table is wider than CHED's, so the title's centre moved right and the logo with it.
+            $this->assertSame(1, preg_match('#<xdr:from><xdr:col>(\d+)</xdr:col>#', $drawing, $from));
+            $this->assertGreaterThanOrEqual(4, (int) $from[1], "{$report->value}: the logo moved right with the title");
+        }
+    }
+
     public function test_the_graduates_form_moves_its_own_footer(): void
     {
         $path = $this->target();
@@ -365,5 +398,118 @@ final class ChedWorkbookWriterTest extends TestCase
         $this->assertSame('MARIBEL B. GARCIA', $cells['Q34']);
         $this->assertNotFalse($book['package']->locateName('xl/media/image1.jpeg'));
         $this->assertFalse($book['package']->locateName('xl/calcChain.xml'));
+    }
+
+    // ---- how a filled file looks in Excel (owner's review, 2026-10-15) --------------------------
+
+    /** The `<xf>` of the cell with this reference, from the package's styles part. */
+    private function styleOf(ZipArchive $zip, string $sheet, string $ref): string
+    {
+        $this->assertSame(1, preg_match('#<c r="'.$ref.'"(?: s="(\d+)")?#', $sheet, $cell), "cell {$ref} not found");
+
+        return $this->xfAt($zip, (int) ($cell[1] ?? 0));
+    }
+
+    private function xfAt(ZipArchive $zip, int $index): string
+    {
+        $styles = (string) $zip->getFromName('xl/styles.xml');
+        $this->assertSame(1, preg_match('#<cellXfs\b[^>]*>(.*?)</cellXfs>#s', $styles, $block));
+        preg_match_all('#<xf\b[^>]*?(?:/>|>.*?</xf>)#s', $block[1], $xfs);
+
+        return $xfs[0][$index];
+    }
+
+    private function attribute(string $xf, string $name): string
+    {
+        $this->assertSame(1, preg_match('#\b'.$name.'="([^"]*)"#', $xf, $value));
+
+        return $value[1];
+    }
+
+    /** @return array{name: string, size: float} */
+    private function fontOf(ZipArchive $zip, string $xf): array
+    {
+        $this->assertSame(1, preg_match('#fontId="(\d+)"#', $xf, $id));
+        $styles = (string) $zip->getFromName('xl/styles.xml');
+        $this->assertSame(1, preg_match('#<fonts\b[^>]*>(.*?)</fonts>#s', $styles, $block));
+        preg_match_all('#<font>.*?</font>|<font/>#s', $block[1], $fonts);
+        $font = $fonts[0][(int) $id[1]];
+        preg_match('#<name val="([^"]+)"#', $font, $name);
+        preg_match('#<sz val="([0-9.]+)"#', $font, $size);
+
+        return ['name' => $name[1] ?? '', 'size' => (float) ($size[1] ?? 0)];
+    }
+
+    private function columnWidth(string $sheet, int $index): float
+    {
+        preg_match_all('#<col min="(\d+)" max="(\d+)" width="([0-9.]+)"#', $sheet, $cols, PREG_SET_ORDER);
+        foreach ($cols as $col) {
+            if ((int) $col[1] <= $index && $index <= (int) $col[2]) {
+                return (float) $col[3];
+            }
+        }
+
+        $this->fail("no width for column {$index}");
+    }
+
+    public function test_the_nstp_list_data_cells_use_the_same_readable_font_as_the_headings_not_the_workbook_default(): void
+    {
+        foreach ([ChedReport::NstpEnrollment, ChedReport::NstpGraduates] as $report) {
+            $path = $this->target();
+            (new ChedWorkbookWriter)->writeList($report, [$this->nstpRow(1)], $this->header(), $path);
+            ['package' => $zip, 'sheet' => $sheet] = $this->open($path);
+
+            foreach (['B14', 'C14', 'F14', 'G14', 'H14', 'I14', 'J14', 'K14', 'L14', 'M14'] as $ref) {
+                $font = $this->fontOf($zip, $this->styleOf($zip, $sheet, $ref));
+                $this->assertSame('Calibri', $font['name'], "{$report->value} {$ref} font");
+                $this->assertSame(10.0, $font['size'], "{$report->value} {$ref} size");
+            }
+        }
+    }
+
+    public function test_the_nstp_columns_are_wide_enough_for_a_whole_program_name_an_address_and_the_word_female(): void
+    {
+        foreach ([ChedReport::NstpEnrollment, ChedReport::NstpGraduates] as $report) {
+            $path = $this->target();
+            (new ChedWorkbookWriter)->writeList($report, [$this->nstpRow(1)], $this->header(), $path);
+            ['sheet' => $sheet] = $this->open($path);
+
+            $this->assertGreaterThanOrEqual(46, $this->columnWidth($sheet, 6), 'Course/Program');
+            $this->assertGreaterThanOrEqual(9, $this->columnWidth($sheet, 7), 'Gender');
+            $this->assertGreaterThanOrEqual(36, $this->columnWidth($sheet, 9), 'Street/Barangay');
+            $this->assertGreaterThanOrEqual(22, $this->columnWidth($sheet, 10), 'Town/City');
+            $this->assertGreaterThanOrEqual(16, $this->columnWidth($sheet, 4), 'First name');
+            $this->assertGreaterThanOrEqual(30, $this->columnWidth($sheet, 13), 'Email');
+        }
+    }
+
+    public function test_the_enrollment_list_columns_fit_a_long_program_name_and_the_subjects_wrap_inside_their_cell(): void
+    {
+        $path = $this->target();
+        (new ChedWorkbookWriter)->writeList(ChedReport::EnrollmentList, [$this->chedRow(1)], $this->header(), $path);
+        ['package' => $zip, 'sheet' => $sheet] = $this->open($path);
+
+        $this->assertGreaterThanOrEqual(46, $this->columnWidth($sheet, 2), 'Programs');
+        $this->assertGreaterThanOrEqual(60, $this->columnWidth($sheet, 12), 'Subjects enrolled');
+        $this->assertStringContainsString('wrapText="1"', $this->styleOf($zip, $sheet, 'L8'));
+        // The year level and gender are centred under their headings.
+        $this->assertStringContainsString('horizontal="center"', $this->styleOf($zip, $sheet, 'K8'));
+        $this->assertStringContainsString('horizontal="center"', $this->styleOf($zip, $sheet, 'J8'));
+    }
+
+    public function test_a_long_subject_list_makes_its_row_taller_and_a_short_one_does_not(): void
+    {
+        $long = $this->chedRow(1);
+        $long['subjects'] = implode(', ', array_map(static fn (int $n): string => "Professional Subject Number {$n} ({$n})", range(1, 14)));
+        $short = $this->chedRow(2);
+
+        $path = $this->target();
+        (new ChedWorkbookWriter)->writeList(ChedReport::EnrollmentList, [$long, $short], $this->header(), $path);
+        ['sheet' => $sheet] = $this->open($path);
+
+        $this->assertSame(1, preg_match('#<row r="8"[^>]*\bht="([0-9.]+)"[^>]*customHeight="1"#', $sheet, $tall), 'the long row has a fixed, taller height');
+        $this->assertSame(1, preg_match('#<row r="9"[^>]*\bht="([0-9.]+)"#', $sheet, $normal));
+        $this->assertGreaterThan((float) $normal[1] * 2, (float) $tall[1]);
+        $this->assertLessThanOrEqual(409.5, (float) $tall[1], 'Excel allows at most 409.5 points');
     }
 }
