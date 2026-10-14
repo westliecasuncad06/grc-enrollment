@@ -48,7 +48,7 @@ final class ChedReportController extends Controller
 
         $page = (int) $request->validated('page', 1);
         $perPage = (int) $request->validated('per_page', 25);
-        $rows = $preview->list($report, $term, $page, $perPage, $actor, $context);
+        $rows = $preview->list($report, $term, $page, $perPage, $request->searchTerm(), $actor, $context);
 
         return $this->noStore(response()->json([
             'data' => ChedReportRowResource::collection($rows->rows),
@@ -101,7 +101,7 @@ final class ChedReportController extends Controller
 
         return [
             'key' => $report->value,
-            'title' => $report->title(),
+            'title' => $report->titleFor($term->semester),
             'term_label' => $header->termLabel,
             'school_year' => $term->school_year,
             'columns' => $report->columns(),

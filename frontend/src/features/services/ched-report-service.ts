@@ -6,6 +6,7 @@ import {
   type ChedReportKey,
   type ChedSummaryResponse,
 } from "@/features/schemas/ched-report-schema"
+import { nstpSubjectOf } from "@/features/lib/ched-report-display"
 import {
   ApiClientError,
   getAuthenticatedBlob,
@@ -38,19 +39,24 @@ export async function getChedList(
   academicTermId: number,
   page: number,
   perPage: number,
+  search: string,
   signal?: AbortSignal,
 ): Promise<ChedListResponse> {
+  const query = new URLSearchParams({
+    academic_term_id: String(academicTermId),
+    page: String(page),
+    per_page: String(perPage),
+  })
+  if (search.trim() !== "") query.set("search", search.trim())
+
   return parse(
     chedListResponseSchema,
-    await getAuthenticatedJson(
-      `${BASE_PATH}/${report}?academic_term_id=${academicTermId}&page=${page}&per_page=${perPage}`,
-      signal,
-    ),
+    await getAuthenticatedJson(`${BASE_PATH}/${report}?${query}`, signal),
     "CHED report",
   )
 }
 
-/** NSTP Form 2-A for the school year of the term. */
+/** NSTP Form 2-A for the chosen term: only its own semester has numbers. */
 export async function getChedSummary(
   academicTermId: number,
   signal?: AbortSignal,
@@ -65,24 +71,20 @@ export async function getChedSummary(
   )
 }
 
-const FILE_STEMS: Record<ChedReportKey, string> = {
-  "enrollment-list": "CHED-Enrollment-List",
-  "nstp-enrollment": "NSTP-Form-2B-Enrollment",
-  "nstp-graduates": "NSTP-Form-2B-Graduates",
-  "nstp-summary": "NSTP-Form-2A-Summary",
-}
-
 /** The same file name the API's Content-Disposition carries. */
 export function chedReportFileName(
   report: ChedReportKey,
   term: { school_year: string; semester: string },
   format: ChedDownloadFormat,
 ): string {
-  const when =
-    report === "nstp-summary"
-      ? term.school_year
-      : `${term.school_year}-${term.semester}`
-  return `${FILE_STEMS[report]}_${when}.${format}`
+  const stem = {
+    "enrollment-list": "CHED-Enrollment-List",
+    "nstp-enrollment": `${nstpSubjectOf(term.semester).replace(" ", "")}-Form-2B-Enrollment`,
+    "nstp-graduates": "NSTP-Form-2B-Graduates",
+    "nstp-summary": "NSTP-Form-2A-Summary",
+  }[report]
+
+  return `${stem}_${term.school_year}-${term.semester}.${format}`
 }
 
 /**

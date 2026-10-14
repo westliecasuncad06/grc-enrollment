@@ -17,6 +17,11 @@ const info = {
   demo_populated: 0,
 }
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input
+  return input instanceof URL ? input.toString() : input.url
+}
+
 const none = { m: 0, f: 0 }
 const components = { rotc: none, cwts: { m: 2, f: 3 }, lts: none }
 
@@ -36,7 +41,7 @@ describe("ched-report-service", () => {
     }
     fetchMock.mockResolvedValue(new Response(JSON.stringify(payload)))
 
-    const result = await getChedList("nstp-enrollment", 7, 2, 25)
+    const result = await getChedList("nstp-enrollment", 7, 2, 25, "")
 
     expect(result.data[0]).toEqual({ no: 1, surname: "Reyes" })
     expect(fetchMock.mock.calls[0][0]).toContain(
@@ -50,6 +55,7 @@ describe("ched-report-service", () => {
         campus: "Global Reciprocal Colleges",
         classification: "Private",
         academic_year: "2025-2026",
+        semester: "2nd",
         enrollment: {
           "1st": components,
           "2nd": components,
@@ -75,25 +81,48 @@ describe("ched-report-service", () => {
       new Response(JSON.stringify({ data: [], report: info })),
     )
 
-    await expect(getChedList("nstp-enrollment", 7, 1, 25)).rejects.toThrow(
+    await expect(getChedList("nstp-enrollment", 7, 1, 25, "")).rejects.toThrow(
       /published v1 contract/,
     )
   })
 
-  it("names the file like the server does", () => {
-    const term = { school_year: "2025-2026", semester: "2nd" }
+  it("sends what was typed in the search box, trimmed, and nothing when it is empty", async () => {
+    const payload = {
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 },
+      report: info,
+    }
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(payload))),
+    )
 
-    expect(chedReportFileName("enrollment-list", term, "xlsx")).toBe(
+    await getChedList("nstp-enrollment", 7, 1, 25, "  santos ana ")
+    await getChedList("nstp-enrollment", 7, 1, 25, "   ")
+
+    expect(requestUrl(fetchMock.mock.calls[0][0])).toContain(
+      "search=santos+ana",
+    )
+    expect(requestUrl(fetchMock.mock.calls[1][0])).not.toContain("search=")
+  })
+
+  it("names the file like the server does, with the NSTP subject of the semester", () => {
+    const first = { school_year: "2025-2026", semester: "1st" }
+    const second = { school_year: "2025-2026", semester: "2nd" }
+
+    expect(chedReportFileName("enrollment-list", second, "xlsx")).toBe(
       "CHED-Enrollment-List_2025-2026-2nd.xlsx",
     )
-    expect(chedReportFileName("nstp-enrollment", term, "csv")).toBe(
-      "NSTP-Form-2B-Enrollment_2025-2026-2nd.csv",
+    expect(chedReportFileName("nstp-enrollment", first, "csv")).toBe(
+      "NSTP1-Form-2B-Enrollment_2025-2026-1st.csv",
     )
-    expect(chedReportFileName("nstp-graduates", term, "xlsx")).toBe(
+    expect(chedReportFileName("nstp-enrollment", second, "csv")).toBe(
+      "NSTP2-Form-2B-Enrollment_2025-2026-2nd.csv",
+    )
+    expect(chedReportFileName("nstp-graduates", second, "xlsx")).toBe(
       "NSTP-Form-2B-Graduates_2025-2026-2nd.xlsx",
     )
-    expect(chedReportFileName("nstp-summary", term, "xlsx")).toBe(
-      "NSTP-Form-2A-Summary_2025-2026.xlsx",
+    expect(chedReportFileName("nstp-summary", first, "xlsx")).toBe(
+      "NSTP-Form-2A-Summary_2025-2026-1st.xlsx",
     )
   })
 

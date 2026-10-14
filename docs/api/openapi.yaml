@@ -6434,9 +6434,13 @@ paths:
       summary: Preview a CHED / NSTP report for a term
       description: >
         Registrar Head only (ADR 0049). `enrollment-list` is the CHED NCR Enrollment List; `nstp-enrollment`
-        and `nstp-graduates` are NSTP Form 2-B lists; `nstp-summary` is NSTP Form 2-A for the school year of
-        the term (one fixed grid, no paging). Students flagged as demo accounts are never listed. The first
-        page of a preview writes a `ched_report.viewed` audit row. `report.missing_gender` counts listed
+        is the NSTP Form 2-B list of NSTP 1 enrollees (first-semester term) or NSTP 2 enrollees (second-semester
+        term); `nstp-graduates` is the Form 2-B list of NSTP 2 passers; `nstp-summary` is NSTP Form 2-A for the
+        chosen term only (one fixed grid, no paging; only the term's own semester block has numbers). `report.title`
+        names the NSTP subject of the term's semester. Students flagged as demo accounts are never listed. `search`
+        keeps the students whose name or student number contains every word; it narrows this preview only, never
+        a download. The first page of a preview writes a `ched_report.viewed` audit row (whether a search was used,
+        never the words). `report.missing_gender` counts listed
         students with no gender on file and `report.demo_populated` those carrying generated details.
       security: [{ bearerAuth: [] }]
       tags: [CHED reports]
@@ -6445,6 +6449,7 @@ paths:
         - { name: academic_term_id, in: query, required: true, schema: { type: integer } }
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: search, in: query, schema: { type: string, maxLength: 100 } }
       responses:
         "200":
           description: A page of rows (or the summary grid) with the report description.

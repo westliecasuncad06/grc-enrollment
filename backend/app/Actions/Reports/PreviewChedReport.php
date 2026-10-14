@@ -23,12 +23,19 @@ final class PreviewChedReport
         private readonly AuditRecorder $auditRecorder,
     ) {}
 
-    public function list(ChedReport $report, AcademicTerm $term, int $page, int $perPage, User $actor, AuditRequestContext $context): ChedReportRows
-    {
-        $rows = $this->build->execute($report, $term, $page, $perPage);
+    public function list(
+        ChedReport $report,
+        AcademicTerm $term,
+        int $page,
+        int $perPage,
+        ?string $search,
+        User $actor,
+        AuditRequestContext $context,
+    ): ChedReportRows {
+        $rows = $this->build->execute($report, $term, $page, $perPage, $search);
 
         if ($page === 1) {
-            $this->audit($report, $term, $rows->total, $actor, $context);
+            $this->audit($report, $term, $rows->total, $search !== null, $actor, $context);
         }
 
         return $rows;
@@ -36,7 +43,7 @@ final class PreviewChedReport
 
     /**
      * @return array{
-     *     campus: string, classification: string, academic_year: string,
+     *     campus: string, classification: string, academic_year: string, semester: string,
      *     enrollment: array<string, array<string, array{m: int, f: int}>>,
      *     graduates: array<string, array{m: int, f: int}>,
      *     missing_gender: int,
@@ -45,12 +52,13 @@ final class PreviewChedReport
     public function summary(AcademicTerm $term, User $actor, AuditRequestContext $context): array
     {
         $summary = $this->build->summary($term);
-        $this->audit(ChedReport::NstpSummary, $term, 1, $actor, $context);
+        $this->audit(ChedReport::NstpSummary, $term, 1, false, $actor, $context);
 
         return $summary;
     }
 
-    private function audit(ChedReport $report, AcademicTerm $term, int $count, User $actor, AuditRequestContext $context): void
+    /** `$searched` says a search narrowed the list; what was typed is never written to the audit log. */
+    private function audit(ChedReport $report, AcademicTerm $term, int $count, bool $searched, User $actor, AuditRequestContext $context): void
     {
         $this->auditRecorder->record(
             $actor,
@@ -58,7 +66,7 @@ final class PreviewChedReport
             AuditableType::CHED_REPORT,
             $term->id,
             null,
-            ['report' => $report->value, 'academic_term_id' => $term->id, 'result_count' => $count],
+            ['report' => $report->value, 'academic_term_id' => $term->id, 'result_count' => $count, 'searched' => $searched],
             null,
             $context,
         );

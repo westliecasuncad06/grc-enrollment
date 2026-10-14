@@ -105,12 +105,11 @@ final class ExportChedReport
     {
         $stem = match ($report) {
             ChedReport::EnrollmentList => 'CHED-Enrollment-List',
-            ChedReport::NstpEnrollment => 'NSTP-Form-2B-Enrollment',
+            ChedReport::NstpEnrollment => str_replace(' ', '', ChedReport::nstpSubjectOf($term->semester)).'-Form-2B-Enrollment',
             ChedReport::NstpGraduates => 'NSTP-Form-2B-Graduates',
             ChedReport::NstpSummary => 'NSTP-Form-2A-Summary',
         };
-        $when = $report === ChedReport::NstpSummary ? $term->school_year : "{$term->school_year}-{$term->semester}";
 
-        return "{$stem}_{$when}.{$format}";
+        return "{$stem}_{$term->school_year}-{$term->semester}.{$format}";
     }
 }

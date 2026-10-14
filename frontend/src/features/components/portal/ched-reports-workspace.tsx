@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { useAuth } from "@/features/auth/use-auth"
 import { AcademicTermSelector } from "@/features/components/portal/academic-term-selector"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { ChedStudentDetailsDialog } from "@/features/components/portal/ched-student-details-dialog"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   Alert,
@@ -22,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { Input } from "@/features/components/ui/input"
 import {
   Table,
   TableBody,
@@ -41,11 +43,20 @@ import {
   useChedListQuery,
   useChedSummaryQuery,
 } from "@/features/hooks/use-ched-reports"
+import { useDebouncedValue } from "@/features/hooks/use-debounced-value"
 import {
+  chedReportTitle,
+  chedStudentName,
+  chedTabLabel,
+  nstpSubjectOf,
+} from "@/features/lib/ched-report-display"
+import {
+  chedReportKeys,
   chedReportKeySchema,
   type ChedDownloadFormat,
   type ChedNstpComponents,
   type ChedReportKey,
+  type ChedReportRow,
 } from "@/features/schemas/ched-report-schema"
 import type { AcademicTerm } from "@/features/schemas/reference-data-schema"
 import {
@@ -57,41 +68,63 @@ const PER_PAGE = 25
 
 type ListReportKey = Exclude<ChedReportKey, "nstp-summary">
 
-const REPORTS: readonly {
-  key: ChedReportKey
-  tab: string
-  title: string
-  description: string
-}[] = [
-  {
-    key: "enrollment-list",
-    tab: "Enrollment List",
-    title: "CHED Enrollment List",
-    description:
-      "Every student officially enrolled in the term, in the CHED NCR template: program, major, name, citizenship, gender, year level, subjects with units.",
-  },
-  {
-    key: "nstp-enrollment",
-    tab: "NSTP 2-B Enrollment",
-    title: "NSTP Form 2-B — Enrollment",
-    description:
-      "Students officially enrolled in NSTP 1 or NSTP 2 in the term (CWTS), with their birth date, address and contact details.",
-  },
-  {
-    key: "nstp-graduates",
-    tab: "NSTP 2-B Graduates",
-    title: "NSTP Form 2-B — Graduates",
-    description:
-      "Students who passed NSTP 2 in the term (a locked, passing grade), in the same layout.",
-  },
-  {
-    key: "nstp-summary",
-    tab: "NSTP 2-A Summary",
-    title: "NSTP Form 2-A — Summary",
-    description:
-      "Enrollment and graduates of the whole school year by semester, component and gender. Only CWTS is offered; ROTC, LTS and Summer are 0.",
-  },
-]
+/**
+ * What the on-screen table shows for each list: just enough to find a student, in columns that fit
+ * the page without scrolling sideways. Every field of the file is in the student's details dialog.
+ * `@name` is the student's name written out from the name columns.
+ */
+const NAME_COLUMN = "@name"
+const TABLE_COLUMNS: Record<ListReportKey, readonly string[]> = {
+  "enrollment-list": [
+    "no",
+    "student_number",
+    NAME_COLUMN,
+    "program",
+    "year_level",
+    "gender",
+    "units",
+  ],
+  "nstp-enrollment": [
+    "no",
+    NAME_COLUMN,
+    "course",
+    "gender",
+    "birthdate",
+    "contact_number",
+  ],
+  "nstp-graduates": [
+    "no",
+    NAME_COLUMN,
+    "course",
+    "gender",
+    "birthdate",
+    "contact_number",
+  ],
+}
+
+/** What each report is, in words, for the semester of the chosen term. */
+function describeReport(key: ChedReportKey, semester: string | null): string {
+  switch (key) {
+    case "enrollment-list":
+      return "Every student officially enrolled in the term, in the CHED NCR template: program, major, name, citizenship, gender, year level, subjects with units."
+    case "nstp-enrollment":
+      return `Students officially enrolled in ${nstpSubjectOf(semester)} in the term (CWTS), with their birth date, address and contact details.`
+    case "nstp-graduates":
+      return "Students who passed NSTP 2 in the term (a locked, passing grade), in the same layout."
+    case "nstp-summary":
+      return "Enrollment and graduates of the semester you picked, by component and gender. Only that semester has numbers; the other semesters, ROTC and LTS are 0. Only CWTS is offered."
+  }
+}
+
+/** The tabs: NSTP 1 or NSTP 2 by the semester of the chosen term (NSTP 1 is taken in the 1st, NSTP 2 in the 2nd). */
+function reportsFor(semester: string | null) {
+  return chedReportKeys.map((key) => ({
+    key,
+    tab: chedTabLabel(key, semester),
+    title: chedReportTitle(key, semester),
+    description: describeReport(key, semester),
+  }))
+}
 
 function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many
@@ -193,7 +226,18 @@ function ListReportPanel({
   term: AcademicTerm
 }) {
   const [page, setPage] = useState(1)
-  const query = useChedListQuery(report, term.id, page, PER_PAGE, true)
+  const [selected, setSelected] = useState<ChedReportRow | null>(null)
+  const [search, setSearch] = useState("")
+  // Ask the server 300 ms after typing stops, not on every keystroke.
+  const searched = useDebouncedValue(search, 300).trim()
+  const query = useChedListQuery(
+    report,
+    term.id,
+    page,
+    PER_PAGE,
+    searched,
+    true,
+  )
 
   return (
     <Card>
@@ -205,9 +249,38 @@ function ListReportPanel({
         <DownloadButtons report={report} title={title} term={term} />
       </CardHeader>
       <CardContent className="grid gap-4">
+        <div className="grid gap-1">
+          <Input
+            type="search"
+            aria-label="Search students"
+            aria-describedby={`${report}-search-hint`}
+            placeholder="Search by name or student number…"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(1)
+            }}
+            className="w-full sm:w-96"
+          />
+          <p
+            id={`${report}-search-hint`}
+            className="text-xs text-muted-foreground"
+          >
+            The download always has every student of the term, not only the
+            search results.
+          </p>
+        </div>
         <AsyncBoundary query={query} loadingLabel={`Loading the ${title}…`}>
           {(response) => {
             const { meta } = response
+            const columns = TABLE_COLUMNS[report].flatMap((key) => {
+              if (key === NAME_COLUMN) return [{ key, label: "Name" }]
+              const column = response.report.columns.find(
+                (candidate) => candidate.key === key,
+              )
+              return column === undefined ? [] : [column]
+            })
+
             return (
               <>
                 <div className="flex flex-wrap items-center gap-2">
@@ -223,10 +296,13 @@ function ListReportPanel({
                   demoPopulated={response.report.demo_populated}
                   total={meta.total}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Click a student to see every field that goes into the file.
+                </p>
                 <Table aria-label={`${title}, page ${meta.current_page}`}>
                   <TableHeader>
                     <TableRow>
-                      {response.report.columns.map((column) => (
+                      {columns.map((column) => (
                         <TableHead key={column.key} scope="col">
                           {column.label}
                         </TableHead>
@@ -237,41 +313,62 @@ function ListReportPanel({
                     {response.data.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={Math.max(1, response.report.columns.length)}
+                          colSpan={Math.max(1, columns.length)}
                           className="py-8 text-center text-muted-foreground"
                         >
-                          No students are listed for this term.
+                          {searched === ""
+                            ? "No students are listed for this term."
+                            : `No student matches “${searched}”.`}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      response.data.map((row, index) => (
-                        <TableRow key={`${meta.current_page}-${index}`}>
-                          {response.report.columns.map((column) => {
-                            const value = row[column.key]
-                            const text =
-                              value === undefined || value === ""
-                                ? "—"
-                                : String(value)
-                            return (
-                              <TableCell
-                                key={column.key}
-                                className={
-                                  column.key === "subjects" ||
-                                  column.key === "course" ||
-                                  column.key === "program"
-                                    ? "max-w-xs whitespace-normal"
-                                    : undefined
-                                }
-                              >
-                                {text}
-                              </TableCell>
-                            )
-                          })}
-                        </TableRow>
-                      ))
+                      response.data.map((row, index) => {
+                        const name = chedStudentName(row)
+
+                        return (
+                          <TableRow
+                            key={`${meta.current_page}-${index}`}
+                            className="cursor-pointer"
+                            onClick={() => setSelected(row)}
+                          >
+                            {columns.map((column) => {
+                              if (column.key === NAME_COLUMN) {
+                                return (
+                                  <TableCell key={column.key}>
+                                    <button
+                                      type="button"
+                                      aria-label={`View details of ${name}`}
+                                      className="rounded-sm text-left font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                    >
+                                      {name}
+                                    </button>
+                                  </TableCell>
+                                )
+                              }
+
+                              const value = row[column.key]
+                              return (
+                                <TableCell
+                                  key={column.key}
+                                  className="whitespace-normal"
+                                >
+                                  {value === undefined || value === ""
+                                    ? "—"
+                                    : String(value)}
+                                </TableCell>
+                              )
+                            })}
+                          </TableRow>
+                        )
+                      })
                     )}
                   </TableBody>
                 </Table>
+                <ChedStudentDetailsDialog
+                  row={selected}
+                  report={response.report}
+                  onClose={() => setSelected(null)}
+                />
                 {meta.last_page > 1 && (
                   <div className="flex items-center justify-end gap-2">
                     <Button
@@ -364,7 +461,7 @@ function SummaryPanel({
             return (
               <>
                 <p className="text-sm font-medium">
-                  {`Academic Year ${data.academic_year} · Region: National Capital Region`}
+                  {`Academic Year ${data.academic_year} · ${data.semester} Semester · Region: National Capital Region`}
                 </p>
                 {data.missing_gender > 0 && (
                   <Alert>
@@ -484,6 +581,7 @@ export function ChedReportsWorkspace() {
   const { term, sortedTerms, isCurrentTerm, setSelectedTermId, termsQuery } =
     useAcademicTermSelection()
   const [active, setActive] = useState<ChedReportKey>("enrollment-list")
+  const reports = reportsFor(term?.semester ?? null)
 
   return (
     <WorkspacePage
@@ -509,13 +607,13 @@ export function ChedReportsWorkspace() {
           }}
         >
           <TabsList aria-label="CHED report">
-            {REPORTS.map((report) => (
+            {reports.map((report) => (
               <TabsTrigger key={report.key} value={report.key}>
                 {report.tab}
               </TabsTrigger>
             ))}
           </TabsList>
-          {REPORTS.map((report) => (
+          {reports.map((report) => (
             <TabsContent key={report.key} value={report.key}>
               {term === null ? (
                 <p className="text-sm text-muted-foreground">

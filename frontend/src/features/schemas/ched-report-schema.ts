@@ -72,6 +72,7 @@ export const chedSummaryResponseSchema = z
         campus: z.string().min(1),
         classification: z.string().min(1),
         academic_year: z.string().min(1),
+        semester: z.string().min(1),
         enrollment: z.object({
           "1st": componentsSchema,
           "2nd": componentsSchema,

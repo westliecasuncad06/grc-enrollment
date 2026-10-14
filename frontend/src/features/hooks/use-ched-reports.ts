@@ -15,6 +15,7 @@ export function useChedListQuery(
   academicTermId: number,
   page: number,
   perPage: number,
+  search: string,
   enabled: boolean,
 ) {
   const { session } = useAuth()
@@ -27,9 +28,10 @@ export function useChedListQuery(
       academicTermId,
       page,
       perPage,
+      search,
     ],
     queryFn: ({ signal }) =>
-      getChedList(report, academicTermId, page, perPage, signal),
+      getChedList(report, academicTermId, page, perPage, search, signal),
     enabled: enabled && session !== null && academicTermId > 0,
     placeholderData: keepPreviousData,
   })

@@ -25,20 +25,28 @@ use Illuminate\Support\Facades\DB;
  *
  * Who is counted (never a demo account, same as honors and attrition):
  *  - enrollment list: an `enrolled` enrollment in the term;
- *  - NSTP enrollment: that, with a not-dropped NSTP subject (code `NSTP...` once spaces are removed);
+ *  - NSTP enrollment: that, with a not-dropped NSTP subject (code `NSTP...` once spaces are removed):
+ *    NSTP 1 in a first-semester term, NSTP 2 in a second-semester term, any NSTP subject in another;
  *  - NSTP graduates: a LOCKED, passing grade for NSTP 2 in the term;
- *  - Form 2-A: the two NSTP counts above for the term's whole school year, split by gender.
+ *  - Form 2-A: the NSTP enrollment and graduates of the ONE chosen term, split by gender. Only that
+ *    term's semester block has numbers; every other block is 0.
  */
 final class BuildChedReport
 {
     private const IDS_PER_QUERY = 1000;
 
     /**
+     * @param  ?string  $search  narrows the list to students whose name or student number contains every
+     *                           word of it (the on-screen search; a download never passes one)
      * @return ChedReportRows one page when `$page` is given, otherwise every row
      */
-    public function execute(ChedReport $report, AcademicTerm $term, ?int $page = null, int $perPage = 25): ChedReportRows
+    public function execute(ChedReport $report, AcademicTerm $term, ?int $page = null, int $perPage = 25, ?string $search = null): ChedReportRows
     {
-        $filter = $this->students($report, [$term->id]);
+        $filter = $this->students($report, [$term->id], $this->nstpPrefix($term));
+
+        if ($search !== null && trim($search) !== '') {
+            $this->matching($filter, $search);
+        }
 
         $total = (clone $filter)->count();
         $missingGender = (clone $filter)->whereNull('student_profiles.gender')->count();
@@ -63,10 +71,11 @@ final class BuildChedReport
     }
 
     /**
-     * Form 2-A for the school year of `$term`: CWTS only (GRC offers CWTS), ROTC / LTS and Summer 0.
+     * Form 2-A for the ONE chosen term: only that term's semester block (and the graduates of that term)
+     * carries numbers, every other block is 0. CWTS only (GRC offers CWTS), ROTC and LTS are 0.
      *
      * @return array{
-     *     campus: string, classification: string, academic_year: string,
+     *     campus: string, classification: string, academic_year: string, semester: string,
      *     enrollment: array<string, array<string, array{m: int, f: int}>>,
      *     graduates: array<string, array{m: int, f: int}>,
      *     missing_gender: int,
@@ -74,27 +83,28 @@ final class BuildChedReport
      */
     public function summary(AcademicTerm $term): array
     {
-        $terms = AcademicTerm::query()->where('school_year', $term->school_year)->pluck('id', 'semester');
         $none = ['m' => 0, 'f' => 0];
+        $prefix = $this->nstpPrefix($term);
 
-        $enrollment = [];
-        foreach (['1st', '2nd'] as $semester) {
-            $enrollment[$semester] = $this->components(
-                isset($terms[$semester])
-                    ? $this->genderCounts($this->students(ChedReport::NstpEnrollment, [(int) $terms[$semester]]))
-                    : $none,
+        $enrollment = [
+            '1st' => $this->components($none),
+            '2nd' => $this->components($none),
+            'summer' => $this->components($none),
+        ];
+        $block = $this->semesterBlock($term);
+
+        if ($block !== null) {
+            $enrollment[$block] = $this->components(
+                $this->genderCounts($this->students(ChedReport::NstpEnrollment, [$term->id], $prefix)),
             );
         }
-        $enrollment['summer'] = $this->components($none);
-
-        $termIds = array_values($terms->map(fn ($id): int => (int) $id)->all());
 
         $missing = StudentProfile::query()
             ->where('student_profiles.is_demo_account', false)
             ->whereNull('student_profiles.gender')
-            ->where(function (Builder $query) use ($termIds): void {
-                $query->whereExists($this->enrolledInNstp($termIds))
-                    ->orWhereExists($this->passedNstp2($termIds));
+            ->where(function (Builder $query) use ($term, $prefix): void {
+                $query->whereExists($this->enrolledInNstp([$term->id], $prefix))
+                    ->orWhereExists($this->passedNstp2([$term->id]));
             })
             ->count();
 
@@ -102,10 +112,62 @@ final class BuildChedReport
             'campus' => (string) config('ched.school_name'),
             'classification' => (string) config('ched.classification'),
             'academic_year' => $term->school_year,
+            'semester' => $term->semester,
             'enrollment' => $enrollment,
-            'graduates' => $this->components($this->genderCounts($this->students(ChedReport::NstpGraduates, $termIds))),
+            'graduates' => $this->components($this->genderCounts($this->students(ChedReport::NstpGraduates, [$term->id]))),
             'missing_gender' => $missing,
         ];
+    }
+
+    /** The Form 2-A block a term belongs to: `1st`, `2nd` or `summer`; null for a term that is none of them. */
+    private function semesterBlock(AcademicTerm $term): ?string
+    {
+        $semester = strtolower(trim($term->semester));
+
+        return match (true) {
+            $semester === '1st' => '1st',
+            $semester === '2nd' => '2nd',
+            str_contains($semester, 'summer') => 'summer',
+            default => null,
+        };
+    }
+
+    /**
+     * The NSTP subject a term's enrollment list is about, as the start of a normalised subject code:
+     * NSTP 1 in the first semester, NSTP 2 in the second, any NSTP subject otherwise.
+     */
+    private function nstpPrefix(AcademicTerm $term): string
+    {
+        return match (strtolower(trim($term->semester))) {
+            '1st' => 'NSTP1',
+            '2nd' => 'NSTP2',
+            default => 'NSTP',
+        };
+    }
+
+    /**
+     * Keeps the students whose name or student number contains every word of `$search`.
+     *
+     * @param  Builder<StudentProfile>  $filter
+     */
+    private function matching(Builder $filter, string $search): void
+    {
+        $words = preg_split('/[\s,]+/', trim($search), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        foreach ($words as $word) {
+            $like = '%'.addcslashes($word, '%_\\').'%';
+
+            $filter->where(function (Builder $any) use ($like): void {
+                $any->where('student_profiles.student_number', 'like', $like)
+                    ->orWhereIn('student_profiles.user_id', static function (QueryBuilder $users) use ($like): void {
+                        $users->select('users.id')->from('users')->where(function (QueryBuilder $name) use ($like): void {
+                            $name->where('users.name', 'like', $like)
+                                ->orWhere('users.first_name', 'like', $like)
+                                ->orWhere('users.last_name', 'like', $like);
+                        });
+                    });
+            });
+        }
     }
 
     /**
@@ -125,13 +187,13 @@ final class BuildChedReport
      * @param  list<int>  $termIds
      * @return Builder<StudentProfile>
      */
-    private function students(ChedReport $report, array $termIds): Builder
+    private function students(ChedReport $report, array $termIds, string $nstpPrefix = 'NSTP'): Builder
     {
         $query = StudentProfile::query()->where('student_profiles.is_demo_account', false);
 
         return match ($report) {
             ChedReport::EnrollmentList => $query->whereExists($this->enrolled($termIds)),
-            ChedReport::NstpEnrollment => $query->whereExists($this->enrolledInNstp($termIds)),
+            ChedReport::NstpEnrollment => $query->whereExists($this->enrolledInNstp($termIds, $nstpPrefix)),
             ChedReport::NstpGraduates => $query->whereExists($this->passedNstp2($termIds)),
             ChedReport::NstpSummary => throw new \InvalidArgumentException('The summary has no student list.'),
         };
@@ -194,9 +256,9 @@ final class BuildChedReport
     /**
      * @param  list<int>  $termIds
      */
-    private function enrolledInNstp(array $termIds): \Closure
+    private function enrolledInNstp(array $termIds, string $prefix): \Closure
     {
-        return function (QueryBuilder $sub) use ($termIds): void {
+        return function (QueryBuilder $sub) use ($termIds, $prefix): void {
             $sub->selectRaw('1')
                 ->from('enrollments as e')
                 ->join('enrollment_subjects as es', 'es.enrollment_id', '=', 'e.id')
@@ -206,7 +268,7 @@ final class BuildChedReport
                 ->whereIn('e.academic_term_id', $termIds)
                 ->where('e.status', EnrollmentStatus::Enrolled->value)
                 ->where('es.status', '!=', EnrollmentSubjectStatus::Dropped->value)
-                ->whereRaw("UPPER(REPLACE(sub.code, ' ', '')) LIKE 'NSTP%'");
+                ->whereRaw("UPPER(REPLACE(sub.code, ' ', '')) LIKE ?", [$prefix.'%']);
         };
     }
 

@@ -14,13 +14,27 @@ enum ChedReport: string
     case NstpGraduates = 'nstp-graduates';
     case NstpSummary = 'nstp-summary';
 
-    public function title(): string
+    /**
+     * The report's name for a semester. NSTP 1 is taken in the first semester and NSTP 2 in the second,
+     * so the NSTP enrollment list is "NSTP 1 Enrollment" or "NSTP 2 Enrollment" by the term it is for.
+     */
+    public function titleFor(string $semester): string
     {
         return match ($this) {
             self::EnrollmentList => 'CHED Enrollment List',
-            self::NstpEnrollment => 'NSTP Form 2-B — Enrollment',
-            self::NstpGraduates => 'NSTP Form 2-B — Graduates',
-            self::NstpSummary => 'NSTP Form 2-A — Summary',
+            self::NstpEnrollment => self::nstpSubjectOf($semester).' Enrollment (Form 2-B)',
+            self::NstpGraduates => 'NSTP 2 Graduates (Form 2-B)',
+            self::NstpSummary => 'NSTP Summary (Form 2-A)',
+        };
+    }
+
+    /** `NSTP 1` in the first semester, `NSTP 2` in the second, plain `NSTP` for any other term. */
+    public static function nstpSubjectOf(string $semester): string
+    {
+        return match (strtolower(trim($semester))) {
+            '1st' => 'NSTP 1',
+            '2nd' => 'NSTP 2',
+            default => 'NSTP',
         };
     }
 

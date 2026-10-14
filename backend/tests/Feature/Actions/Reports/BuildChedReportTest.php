@@ -32,7 +32,10 @@ final class BuildChedReportTest extends TestCase
      */
     private function numbers(ChedReport $report, AcademicTerm $term): array
     {
-        return array_column($this->report()->execute($report, $term)->rows, $report === ChedReport::EnrollmentList ? 'student_number' : 'surname');
+        /** @var list<string> $numbers */
+        $numbers = array_values(array_map('strval', array_column($this->report()->execute($report, $term)->rows, $report === ChedReport::EnrollmentList ? 'student_number' : 'surname')));
+
+        return $numbers;
     }
 
     // ---- CHED Enrollment List -------------------------------------------------------------
@@ -133,7 +136,7 @@ final class BuildChedReportTest extends TestCase
 
     // ---- NSTP Form 2-B ---------------------------------------------------------------------
 
-    public function test_nstp_enrollment_has_only_students_enrolled_in_an_nstp_subject_that_term(): void
+    public function test_nstp_enrollment_is_nstp_1_in_the_first_semester_and_nstp_2_in_the_second(): void
     {
         $t1 = $this->chedTerm('2025-2026', '1st');
         $t2 = $this->chedTerm('2025-2026', '2nd');
@@ -141,15 +144,37 @@ final class BuildChedReportTest extends TestCase
         $nstp2 = $this->chedSubject('NSTP2', 'National Service Training Program 2');
         $it = $this->chedSubject('IT101', 'Intro to Computing');
 
-        $first = $this->chedStudent(['last_name' => 'Alpha', 'name' => 'A Alpha']);
-        $second = $this->chedStudent(['last_name' => 'Bravo', 'name' => 'B Bravo']);
-        $none = $this->chedStudent(['last_name' => 'Charlie', 'name' => 'C Charlie']);
-        $this->chedEnrol($first, $t1, [$nstp1, $it]);
-        $this->chedEnrol($second, $t2, [$nstp2]);
-        $this->chedEnrol($none, $t2, [$it]);
+        $named = fn (string $surname) => $this->chedStudent(['last_name' => $surname, 'name' => "X {$surname}"]);
+        // 1st semester: NSTP 1 only (an NSTP 2 enrollee is not on the NSTP 1 list).
+        $this->chedEnrol($named('Alpha'), $t1, [$nstp1, $it]);
+        $this->chedEnrol($named('Stray'), $t1, [$nstp2]);
+        // 2nd semester: NSTP 2 only (an NSTP 1 retaker is not on the NSTP 2 list).
+        $this->chedEnrol($named('Bravo'), $t2, [$nstp2]);
+        $this->chedEnrol($named('Retaker'), $t2, [$nstp1]);
+        // Neither: no NSTP subject at all.
+        $this->chedEnrol($named('Charlie'), $t2, [$it]);
 
         $this->assertSame(['Alpha'], $this->numbers(ChedReport::NstpEnrollment, $t1));
         $this->assertSame(['Bravo'], $this->numbers(ChedReport::NstpEnrollment, $t2));
+    }
+
+    public function test_a_term_that_is_neither_first_nor_second_semester_lists_any_nstp_subject(): void
+    {
+        $summer = $this->chedTerm('2025-2026', 'summer');
+        $student = $this->chedStudent(['last_name' => 'Summerfield', 'name' => 'X Summerfield']);
+        $this->chedEnrol($student, $summer, [$this->chedSubject('NSTP 1', 'National Service Training Program 1')]);
+
+        $this->assertSame(['Summerfield'], $this->numbers(ChedReport::NstpEnrollment, $summer));
+    }
+
+    public function test_the_report_title_names_the_nstp_subject_of_the_semester(): void
+    {
+        $this->assertSame('NSTP 1 Enrollment (Form 2-B)', ChedReport::NstpEnrollment->titleFor('1st'));
+        $this->assertSame('NSTP 2 Enrollment (Form 2-B)', ChedReport::NstpEnrollment->titleFor('2nd'));
+        $this->assertSame('NSTP Enrollment (Form 2-B)', ChedReport::NstpEnrollment->titleFor('summer'));
+        $this->assertSame('NSTP 2 Graduates (Form 2-B)', ChedReport::NstpGraduates->titleFor('1st'));
+        $this->assertSame('CHED Enrollment List', ChedReport::EnrollmentList->titleFor('2nd'));
+        $this->assertSame('NSTP Summary (Form 2-A)', ChedReport::NstpSummary->titleFor('2nd'));
     }
 
     public function test_an_nstp_row_reads_like_the_template(): void
@@ -192,7 +217,7 @@ final class BuildChedReportTest extends TestCase
     {
         $term = $this->chedTerm();
         $student = $this->chedStudent([], ['address' => '12 Rizal Ave, Caloocan City']);
-        $this->chedEnrol($student, $term, [$this->chedSubject('NSTP 1', 'NSTP 1')]);
+        $this->chedEnrol($student, $term, [$this->chedSubject('NSTP 2', 'NSTP 2')]);
 
         $row = $this->report()->execute(ChedReport::NstpEnrollment, $term)->rows[0];
 
@@ -229,7 +254,7 @@ final class BuildChedReportTest extends TestCase
     public function test_a_page_keeps_counting_from_where_the_last_page_stopped(): void
     {
         $term = $this->chedTerm();
-        $nstp = $this->chedSubject('NSTP 1', 'NSTP 1');
+        $nstp = $this->chedSubject('NSTP 2', 'NSTP 2');
         foreach (['A', 'B', 'C', 'D', 'E'] as $surname) {
             $this->chedEnrol($this->chedStudent(['last_name' => $surname, 'name' => "X {$surname}"]), $term, [$nstp]);
         }
@@ -244,7 +269,7 @@ final class BuildChedReportTest extends TestCase
     public function test_it_counts_listed_students_without_a_gender_and_with_generated_details(): void
     {
         $term = $this->chedTerm();
-        $nstp = $this->chedSubject('NSTP 1', 'NSTP 1');
+        $nstp = $this->chedSubject('NSTP 2', 'NSTP 2');
         $this->chedEnrol($this->chedStudent([], ['gender' => null]), $term, [$nstp]);
         $this->chedEnrol($this->chedStudent([], ['demographics_demo_fields' => ['gender']]), $term, [$nstp]);
         $this->chedEnrol($this->chedStudent(), $term, [$nstp]);
@@ -258,7 +283,7 @@ final class BuildChedReportTest extends TestCase
 
     // ---- NSTP Form 2-A ---------------------------------------------------------------------
 
-    public function test_the_summary_counts_cwts_by_semester_and_gender_and_leaves_the_rest_zero(): void
+    public function test_the_summary_of_a_semester_has_only_that_semesters_numbers_and_the_rest_zero(): void
     {
         $t1 = $this->chedTerm('2025-2026', '1st');
         $t2 = $this->chedTerm('2025-2026', '2nd');
@@ -266,7 +291,7 @@ final class BuildChedReportTest extends TestCase
         $nstp1 = $this->chedSubject('NSTP 1', 'National Service Training Program 1');
         $nstp2 = $this->chedSubject('NSTP2', 'National Service Training Program 2');
 
-        // 1st sem: 2 male, 1 female. 2nd sem: 1 male, 2 female. Graduates: 1 male, 2 female.
+        // 1st sem: NSTP 1, 2 male, 1 female. 2nd sem: NSTP 2, 1 male, 2 female, all three passed.
         foreach ([Gender::Male, Gender::Male, Gender::Female] as $gender) {
             $this->chedEnrol($this->chedStudent([], ['gender' => $gender]), $t1, [$nstp1]);
         }
@@ -275,42 +300,138 @@ final class BuildChedReportTest extends TestCase
             $this->chedEnrol($student, $t2, [$nstp2]);
             $this->chedGrade($student, $nstp2, $t2, '2.00');
         }
-        // Not counted: another school year, a demo account, a student with no gender (warned about).
+        // Never counted: another school year, a demo account.
         $this->chedEnrol($this->chedStudent([], ['gender' => Gender::Male]), $later, [$nstp1]);
         $this->chedEnrol($this->chedStudent([], ['gender' => Gender::Male, 'is_demo_account' => true]), $t1, [$nstp1]);
+        // Counted in neither M nor F, and warned about, only for the semester it is enrolled in.
         $this->chedEnrol($this->chedStudent([], ['gender' => null]), $t1, [$nstp1]);
 
-        $summary = $this->report()->summary($t2);
-
         $zero = ['m' => 0, 'f' => 0];
-        $this->assertSame('Global Reciprocal Colleges', $summary['campus']);
-        $this->assertSame('Private', $summary['classification']);
-        $this->assertSame('2025-2026', $summary['academic_year']);
-        $this->assertSame(['m' => 2, 'f' => 1], $summary['enrollment']['1st']['cwts']);
-        $this->assertSame(['m' => 1, 'f' => 2], $summary['enrollment']['2nd']['cwts']);
-        $this->assertSame($zero, $summary['enrollment']['summer']['cwts']);
-        foreach (['1st', '2nd', 'summer'] as $semester) {
-            $this->assertSame($zero, $summary['enrollment'][$semester]['rotc']);
-            $this->assertSame($zero, $summary['enrollment'][$semester]['lts']);
+
+        $second = $this->report()->summary($t2);
+        $this->assertSame('Global Reciprocal Colleges', $second['campus']);
+        $this->assertSame('Private', $second['classification']);
+        $this->assertSame('2025-2026', $second['academic_year']);
+        $this->assertSame('2nd', $second['semester']);
+        $this->assertSame($zero, $second['enrollment']['1st']['cwts']);
+        $this->assertSame(['m' => 1, 'f' => 2], $second['enrollment']['2nd']['cwts']);
+        $this->assertSame($zero, $second['enrollment']['summer']['cwts']);
+        $this->assertSame(['m' => 1, 'f' => 2], $second['graduates']['cwts']);
+        $this->assertSame(0, $second['missing_gender']);
+
+        $first = $this->report()->summary($t1);
+        $this->assertSame('1st', $first['semester']);
+        $this->assertSame(['m' => 2, 'f' => 1], $first['enrollment']['1st']['cwts']);
+        $this->assertSame($zero, $first['enrollment']['2nd']['cwts']);
+        $this->assertSame($zero, $first['enrollment']['summer']['cwts']);
+        $this->assertSame($zero, $first['graduates']['cwts'], 'nobody passed NSTP 2 in the first semester');
+        $this->assertSame(1, $first['missing_gender']);
+
+        foreach ([$first, $second] as $summary) {
+            foreach (['1st', '2nd', 'summer'] as $semester) {
+                $this->assertSame($zero, $summary['enrollment'][$semester]['rotc']);
+                $this->assertSame($zero, $summary['enrollment'][$semester]['lts']);
+            }
+            $this->assertSame($zero, $summary['graduates']['rotc']);
+            $this->assertSame($zero, $summary['graduates']['lts']);
         }
-        $this->assertSame(['m' => 1, 'f' => 2], $summary['graduates']['cwts']);
-        $this->assertSame($zero, $summary['graduates']['rotc']);
-        $this->assertSame($zero, $summary['graduates']['lts']);
-        $this->assertSame(1, $summary['missing_gender']);
+    }
+
+    public function test_the_summary_of_a_summer_term_fills_the_summer_block(): void
+    {
+        $summer = $this->chedTerm('2025-2026', 'summer');
+        $this->chedEnrol(
+            $this->chedStudent([], ['gender' => Gender::Female]),
+            $summer,
+            [$this->chedSubject('NSTP 1', 'National Service Training Program 1')],
+        );
+
+        $summary = $this->report()->summary($summer);
+
+        $this->assertSame(['m' => 0, 'f' => 1], $summary['enrollment']['summer']['cwts']);
+        $this->assertSame(['m' => 0, 'f' => 0], $summary['enrollment']['1st']['cwts']);
     }
 
     public function test_the_summary_of_a_school_with_no_nstp_students_is_all_zero(): void
     {
         $summary = $this->report()->summary($this->chedTerm());
 
-        $this->assertSame(['m' => 0, 'f' => 0], $summary['enrollment']['1st']['cwts']);
+        $this->assertSame(['m' => 0, 'f' => 0], $summary['enrollment']['2nd']['cwts']);
         $this->assertSame(0, $summary['missing_gender']);
+    }
+
+    // ---- search ---------------------------------------------------------------------------------
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function searchable(): array
+    {
+        $term = $this->chedTerm();
+        $nstp = $this->chedSubject('NSTP 2', 'NSTP 2');
+        foreach ([
+            ['Ana', 'Santos', 'Ana D. Santos', '2025-08-10001'],
+            ['Juan', 'Santos', 'Juan D. Santos', '2025-08-10002'],
+            ['Maria', 'Reyes', 'Maria D. Reyes', '2025-08-10003'],
+        ] as [$first, $last, $full, $number]) {
+            $student = $this->chedStudent(
+                ['first_name' => $first, 'last_name' => $last, 'name' => $full],
+                ['student_number' => $number],
+            );
+            $this->chedEnrol($student, $term, [$nstp]);
+        }
+
+        return ['2025-2026', '2nd'];
+    }
+
+    public function test_a_search_keeps_the_students_whose_name_or_number_has_every_word(): void
+    {
+        $this->searchable();
+        $term = $this->chedTerm();
+        $surnames = fn (?string $search) => array_column(
+            $this->report()->execute(ChedReport::NstpEnrollment, $term, search: $search)->rows,
+            'first_name',
+        );
+
+        $this->assertSame(['Maria', 'Ana', 'Juan'], $surnames(null));
+        $this->assertSame(['Maria', 'Ana', 'Juan'], $surnames('   '));
+        $this->assertSame(['Ana', 'Juan'], $surnames('santos'));
+        $this->assertSame(['Ana'], $surnames('SANTOS ana'));
+        $this->assertSame(['Juan'], $surnames('Santos, Juan'));
+        $this->assertSame(['Maria'], $surnames('10003'));
+        $this->assertSame(['Maria'], $surnames('2025-08-10003'));
+        $this->assertSame([], $surnames('nobody'));
+    }
+
+    public function test_a_search_counts_and_pages_only_the_students_it_found(): void
+    {
+        $this->searchable();
+        $term = $this->chedTerm();
+
+        $found = $this->report()->execute(ChedReport::NstpEnrollment, $term, page: 1, perPage: 1, search: 'santos');
+
+        $this->assertSame(2, $found->total);
+        $this->assertCount(1, $found->rows);
+        $this->assertSame(1, $found->rows[0]['no']);
+
+        $second = $this->report()->execute(ChedReport::NstpEnrollment, $term, page: 2, perPage: 1, search: 'santos');
+        $this->assertSame(2, $second->rows[0]['no']);
+    }
+
+    public function test_a_search_cannot_use_sql_wildcards(): void
+    {
+        $this->searchable();
+        $term = $this->chedTerm();
+
+        $this->assertSame(0, $this->report()->execute(ChedReport::NstpEnrollment, $term, search: '%')->total);
+        $this->assertSame(0, $this->report()->execute(ChedReport::NstpEnrollment, $term, search: '_')->total);
+        $this->assertSame(0, $this->report()->execute(ChedReport::NstpEnrollment, $term, search: "x' OR '1'='1")->total);
     }
 
     public function test_the_student_profile_model_is_not_loaded_per_row(): void
     {
         $term = $this->chedTerm();
-        $nstp = $this->chedSubject('NSTP 1', 'NSTP 1');
+        $nstp = $this->chedSubject('NSTP 2', 'NSTP 2');
         foreach (range(1, 4) as $unused) {
             $this->chedEnrol($this->chedStudent(), $term, [$nstp]);
         }

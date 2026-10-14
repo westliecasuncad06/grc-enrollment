@@ -86,7 +86,7 @@ final class ChedReportsEndpointTest extends TestCase
         $response->assertOk()
             ->assertHeader('Cache-Control', 'no-store, private')
             ->assertJsonPath('report.key', 'nstp-enrollment')
-            ->assertJsonPath('report.title', 'NSTP Form 2-B — Enrollment')
+            ->assertJsonPath('report.title', 'NSTP 2 Enrollment (Form 2-B)')
             ->assertJsonPath('report.term_label', '2nd Term, AY 2025-2026')
             ->assertJsonPath('report.school_year', '2025-2026')
             ->assertJsonPath('report.missing_gender', 0)
@@ -112,6 +112,47 @@ final class ChedReportsEndpointTest extends TestCase
         $this->assertCount(1, $audit);
         $this->assertSame('nstp-enrollment', $audit->first()->after_values['report']);
         $this->assertSame(3, $audit->first()->after_values['result_count']);
+        $this->assertFalse($audit->first()->after_values['searched']);
+    }
+
+    public function test_a_search_narrows_the_preview_and_is_noted_in_the_audit_without_the_words(): void
+    {
+        $this->actAs(UserRole::RegistrarHead);
+
+        $this->getJson($this->url('nstp-enrollment').'&search=alpha')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.surname', 'Alpha');
+
+        $audit = AuditLog::query()->where('action', AuditAction::CHED_REPORT_VIEWED)->get();
+        $this->assertCount(1, $audit);
+        $this->assertTrue($audit->first()->after_values['searched']);
+        $this->assertStringNotContainsString('alpha', strtolower(json_encode($audit->first()->after_values, JSON_THROW_ON_ERROR)));
+    }
+
+    public function test_a_search_with_no_match_is_an_empty_page_and_a_download_ignores_it(): void
+    {
+        $this->actAs(UserRole::RegistrarHead);
+
+        $this->getJson($this->url('nstp-enrollment').'&search=nobody')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 0)
+            ->assertJsonCount(0, 'data');
+
+        $csv = $this->get($this->url('nstp-enrollment', '/export').'&format=csv&search=nobody');
+        $csv->assertOk();
+        $this->assertStringContainsString('Alpha', $csv->streamedContent());
+    }
+
+    public function test_an_over_long_search_is_refused(): void
+    {
+        $this->actAs(UserRole::RegistrarHead);
+
+        $response = $this->getJson($this->url('nstp-enrollment').'&search='.str_repeat('a', 101));
+
+        $response->assertStatus(422);
+        $this->assertArrayHasKey('search', $response->json('error.errors'));
     }
 
     public function test_the_summary_previews_as_a_grid(): void
@@ -127,6 +168,7 @@ final class ChedReportsEndpointTest extends TestCase
             ->assertJsonPath('data.campus', 'Global Reciprocal Colleges')
             ->assertJsonPath('data.classification', 'Private')
             ->assertJsonPath('data.academic_year', '2025-2026')
+            ->assertJsonPath('data.semester', '2nd')
             ->assertJsonPath('data.enrollment.2nd.cwts', ['m' => 1, 'f' => 2])
             ->assertJsonPath('data.enrollment.1st.cwts', ['m' => 0, 'f' => 0])
             ->assertJsonPath('data.graduates.cwts', ['m' => 0, 'f' => 0])
@@ -176,7 +218,7 @@ final class ChedReportsEndpointTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('spreadsheetml.sheet', (string) $response->headers->get('Content-Type'));
-        $this->assertStringContainsString('NSTP-Form-2B-Enrollment_2025-2026-2nd.xlsx', (string) $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('NSTP2-Form-2B-Enrollment_2025-2026-2nd.xlsx', (string) $response->headers->get('Content-Disposition'));
 
         $path = tempnam(sys_get_temp_dir(), 'ched-dl-');
         file_put_contents($path, $response->streamedContent());
@@ -197,12 +239,12 @@ final class ChedReportsEndpointTest extends TestCase
 
         $csv = $this->get($this->url('nstp-summary', '/export').'&format=csv');
         $csv->assertOk();
-        $this->assertStringContainsString('NSTP-Form-2A-Summary_2025-2026.csv', (string) $csv->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('NSTP-Form-2A-Summary_2025-2026-2nd.csv', (string) $csv->headers->get('Content-Disposition'));
         $this->assertStringContainsString('"Global Reciprocal Colleges",Private', $csv->streamedContent());
 
         $xlsx = $this->get($this->url('nstp-summary', '/export').'&format=xlsx');
         $xlsx->assertOk();
-        $this->assertStringContainsString('NSTP-Form-2A-Summary_2025-2026.xlsx', (string) $xlsx->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('NSTP-Form-2A-Summary_2025-2026-2nd.xlsx', (string) $xlsx->headers->get('Content-Disposition'));
     }
 
     public function test_a_download_is_audited_without_any_student_in_the_record(): void
