@@ -43,11 +43,16 @@ final class ProvisionStudentAuditTest extends TestCase
                 'first_name' => 'Sensitive',
                 'last_name' => 'Student Name',
                 'email' => 'sensitive.student@grc.test',
-                'address' => '1 Sensitive Street, Caloocan City',
+                'gender' => 'F',
+                'birth_date' => '2006-05-04',
+                'citizenship' => 'Filipino',
+                'contact_number' => '09171234567',
+                'street_barangay' => '1 Sensitive Street, Caloocan City',
+                'town_city' => 'Caloocan City',
+                'province' => 'Metro Manila',
                 'program_id' => $program->id,
                 'year_level' => 2,
                 'requirements_verified' => true,
-                'enrollment_category' => 'irregular',
                 'student_type' => 'transferee',
             ]);
 
@@ -69,10 +74,9 @@ final class ProvisionStudentAuditTest extends TestCase
             'curriculum_id' => $curriculum->id,
             'entry_year' => 2027,
             'year_level' => 2,
-            // The request sent neither field — Year Level 2 derives to
-            // Irregular/Transferee (Stakeholder Doc 17,
-            // App\Domain\Identity\AdmissionIntakeDefaults).
-            'enrollment_category' => 'irregular',
+            // Admission chose the student type; the category is not asked for any more, so every new
+            // account starts Regular until the system re-derives it from the student's record.
+            'enrollment_category' => 'regular',
             'student_type' => 'transferee',
             'admission_status' => 'admitted',
             'academic_standing' => 'good',
@@ -156,11 +160,16 @@ final class ProvisionStudentAuditTest extends TestCase
                     'first_name' => 'Rollback',
                     'last_name' => 'Student',
                     'email' => 'rollback.student@grc.test',
-                    'address' => '2 Rollback Street, Caloocan City',
+                    'gender' => 'F',
+                    'birth_date' => '2006-05-04',
+                    'citizenship' => 'Filipino',
+                    'contact_number' => '09171234567',
+                    'street_barangay' => '2 Rollback Street, Caloocan City',
+                    'town_city' => 'Caloocan City',
+                    'province' => 'Metro Manila',
                     'program_id' => $program->id,
                     'year_level' => 3,
                     'requirements_verified' => true,
-                    'enrollment_category' => 'irregular',
                     'student_type' => 'transferee',
                 ]);
         } catch (RuntimeException $exception) {

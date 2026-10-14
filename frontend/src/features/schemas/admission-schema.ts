@@ -65,23 +65,59 @@ export const nextStudentNumberEnvelopeSchema = z.object({
   }),
 })
 
+/** The student's gender as the CHED forms record it (ADR 0049). */
+export const studentGenderSchema = z.enum(["M", "F"], {
+  error: "Select the student's gender.",
+})
+
+/** The student's details the CHED forms ask for, typed by Admission when the account is created. */
+export const CONTACT_NUMBER_PATTERN = /^[0-9+()\-\s]{7,30}$/
+export const CONTACT_NUMBER_MESSAGE =
+  "Enter a valid contact number (digits, +, spaces, dashes or brackets, 7 to 30 characters)."
+
+const studentDetailFieldsSchema = {
+  gender: studentGenderSchema,
+  birth_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the student's birth date.")
+    .refine((value) => value > "1900-01-01", "Enter a valid birth date.")
+    .refine(
+      (value) => value < new Date().toISOString().slice(0, 10),
+      "The birth date must be in the past.",
+    ),
+  citizenship: z
+    .string()
+    .trim()
+    .min(1, "Enter the student's citizenship.")
+    .max(100),
+  contact_number: z
+    .string()
+    .trim()
+    .regex(CONTACT_NUMBER_PATTERN, CONTACT_NUMBER_MESSAGE),
+  street_barangay: z
+    .string()
+    .trim()
+    .min(1, "Enter the street and barangay.")
+    .max(255),
+  town_city: z.string().trim().min(1, "Enter the town or city.").max(255),
+  province: z.string().trim().min(1, "Enter the province.").max(255),
+}
+
 export const provisionStudentSchema = z
   .object({
     ...personNameFieldsSchema,
     email: z.email("Enter a valid email address."),
-    address: z.string().trim().min(1, "Enter the student's complete address."),
+    // The single address text is written by the server from the street, town and province.
+    ...studentDetailFieldsSchema,
     // `false`: the server assigns the next number and none is sent. `true`: Admission types the
     // number a Returnee or an Existing Student already has.
     has_existing_student_number: z.boolean(),
     student_number: z.string().trim().optional(),
     program_id: z.number().int().positive("Select a program."),
     // entry_year is deliberately absent: the server derives it from the current ongoing academic
-    // term and rejects it if sent. The category and the type are chosen by Admission
-    // (stakeholder Doc 20), no longer derived from year_level.
+    // term and rejects it if sent. The type is chosen by Admission (stakeholder Doc 20); the
+    // Regular / Irregular category is decided by the system and is never sent.
     year_level: z.number().int().min(1).max(4),
-    enrollment_category: z.enum(["regular", "irregular"], {
-      error: "Select the enrollment category.",
-    }),
     student_type: z.enum(
       ["freshman", "transferee", "returnee", "existing_student"],
       { error: "Select the student type." },
@@ -140,6 +176,16 @@ export const studentProfileSchema = z
     suffix: z.string().nullable(),
     email: z.email(),
     address: z.string().nullable(),
+    // The details the CHED forms ask for (ADR 0049); null on an account that has none yet.
+    gender: studentGenderSchema.nullable().default(null),
+    birth_date: z.string().nullable().default(null),
+    citizenship: z.string().nullable().default(null),
+    contact_number: z.string().nullable().default(null),
+    street_barangay: z.string().nullable().default(null),
+    town_city: z.string().nullable().default(null),
+    province: z.string().nullable().default(null),
+    // The details above that were generated for the demo and not typed by Admission.
+    generated_fields: z.array(z.string()).default([]),
     program_id: z.number().int().positive(),
     program_code: z.string().min(1),
     program_name: z.string().min(1),
@@ -233,16 +279,22 @@ export const updateStudentProfileSchema = z
     last_name: z.string().trim().min(1).optional(),
     suffix: z.string().trim().max(20).nullable().optional(),
     email: z.email().optional(),
-    address: z.string().trim().min(1).optional(),
+    // The address is written by the server from the three address parts below.
+    gender: studentGenderSchema.optional(),
+    birth_date: studentDetailFieldsSchema.birth_date.optional(),
+    citizenship: studentDetailFieldsSchema.citizenship.optional(),
+    contact_number: studentDetailFieldsSchema.contact_number.optional(),
+    street_barangay: studentDetailFieldsSchema.street_barangay.optional(),
+    town_city: studentDetailFieldsSchema.town_city.optional(),
+    province: studentDetailFieldsSchema.province.optional(),
     student_number: z
       .string()
       .regex(/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/)
       .optional(),
     program_id: z.number().int().positive().optional(),
-    // entry_year is deliberately absent (see provisionStudentSchema). The category and the type are
-    // Admission's choice, corrected here until the first enrollment.
+    // entry_year is deliberately absent (see provisionStudentSchema). The type is Admission's choice,
+    // corrected here until the first enrollment; the category is the system's and is never sent.
     year_level: z.number().int().min(1).max(4).optional(),
-    enrollment_category: z.enum(["regular", "irregular"]).optional(),
     student_type: studentTypeSchema.optional(),
     financial_status: financialStatusSchema.nullable().optional(),
     admission_status: admissionStatusSchema.optional(),

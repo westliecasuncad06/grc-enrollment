@@ -1034,7 +1034,7 @@ All names use Laravel/MySQL conventions. The final schema must be represented by
   - `year_level`
   - `admission_status`
   - `academic_standing`
-  - approved contact fields, including the details the CHED forms ask for: `gender`, `birth_date`, `citizenship`, `contact_number`, `street_barangay`, `town_city`, `province` (ADR 0049)
+  - approved contact fields, including the details the CHED forms ask for: `gender`, `birth_date`, `citizenship`, `contact_number`, `street_barangay`, `town_city`, `province` (ADR 0049; typed by Admission when it creates the account, and the single `address` text is written from the street, town and province; Admission does not choose Regular or Irregular, the system decides it)
   - timestamps
 
 - `student_number_sequences`

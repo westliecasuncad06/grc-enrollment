@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests\Api\V1\StudentProfile;
 
-use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\FinancialStatus;
+use App\Domain\Identity\Gender;
 use App\Domain\Identity\StudentType;
 use App\Models\StudentProfile;
 use Illuminate\Foundation\Http\FormRequest;
@@ -30,16 +30,24 @@ final class UpdateStudentProfileRequest extends FormRequest
             'last_name' => ['sometimes', 'string', 'max:255'],
             'suffix' => ['sometimes', 'nullable', 'string', 'max:20'],
             'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
-            'address' => ['sometimes', 'string', 'max:1000'],
+            // The details the CHED forms ask for (ADR 0049). Sending any of the three address parts rewrites
+            // the single `address` text from them, so a client may not send that text itself.
+            'address' => ['prohibited'],
+            'gender' => ['sometimes', Rule::enum(Gender::class)],
+            'birth_date' => ['sometimes', 'date_format:Y-m-d', 'before:today', 'after:1900-01-01'],
+            'citizenship' => ['sometimes', 'string', 'max:100'],
+            'contact_number' => ['sometimes', 'string', 'regex:/^[0-9+()\-\s]{7,30}$/'],
+            'street_barangay' => ['sometimes', 'string', 'max:255'],
+            'town_city' => ['sometimes', 'string', 'max:255'],
+            'province' => ['sometimes', 'string', 'max:255'],
             'student_number' => ['sometimes', 'string', 'max:255', 'regex:/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/', Rule::unique('student_profiles', 'student_number')->ignore($profileId)],
             'program_id' => ['sometimes', 'integer', Rule::exists('programs', 'id')],
             // Derived from the current ongoing academic term — see
             // StoreStudentProfileRequest and App\Actions\Identity\UpdateStudentProfile.
             'entry_year' => ['prohibited'],
             'year_level' => ['sometimes', 'integer', 'between:1,4'],
-            // Chosen by Admission (stakeholder Doc 20), like year_level; academic setup fields stay
-            // editable only until the student's first enrollment.
-            'enrollment_category' => ['sometimes', Rule::enum(EnrollmentCategory::class)],
+            // Decided by the system, not chosen by Admission (ADR 0021, 0047).
+            'enrollment_category' => ['prohibited'],
             'student_type' => ['sometimes', Rule::enum(StudentType::class)],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
             'admission_status' => ['sometimes', Rule::enum(AdmissionStatus::class)],

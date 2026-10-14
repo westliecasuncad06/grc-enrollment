@@ -3,8 +3,8 @@
 namespace App\Http\Requests\Api\V1\StudentProfile;
 
 use App\Actions\Identity\ListApplicableAdmissionRequirements;
-use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\FinancialStatus;
+use App\Domain\Identity\Gender;
 use App\Domain\Identity\StudentType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -37,7 +37,16 @@ final class StoreStudentProfileRequest extends FormRequest
             'suffix' => ['sometimes', 'nullable', 'string', 'max:20'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['prohibited'],
-            'address' => ['required', 'string', 'max:1000'],
+            // The student's details the CHED forms ask for (ADR 0049). The single `address` text is written
+            // from the street, town and province, so a client may not send its own.
+            'gender' => ['required', Rule::enum(Gender::class)],
+            'birth_date' => ['required', 'date_format:Y-m-d', 'before:today', 'after:1900-01-01'],
+            'citizenship' => ['required', 'string', 'max:100'],
+            'contact_number' => ['required', 'string', 'regex:/^[0-9+()\-\s]{7,30}$/'],
+            'street_barangay' => ['required', 'string', 'max:255'],
+            'town_city' => ['required', 'string', 'max:255'],
+            'province' => ['required', 'string', 'max:255'],
+            'address' => ['prohibited'],
             // Admission ticks off each requirement the student handed in (stakeholder Doc 20). The
             // older single confirmation is still accepted when no list is sent.
             'requirement_type_ids' => ['sometimes', 'array'],
@@ -64,9 +73,9 @@ final class StoreStudentProfileRequest extends FormRequest
             // `EnrollmentAudience::fromYearLevel()` only knows 1–4, and a
             // year level outside that range has no enrollment window at all.
             'year_level' => ['required', 'integer', 'between:1,4'],
-            // Chosen by Admission on the form (stakeholder Doc 20); no longer derived from
-            // year_level as Stakeholder Doc 17 did.
-            'enrollment_category' => ['required', Rule::enum(EnrollmentCategory::class)],
+            // Regular or Irregular is decided by the system (ADR 0021, 0047): a new account starts
+            // Regular and is re-derived from the student's record. Admission no longer chooses it.
+            'enrollment_category' => ['prohibited'],
             'student_type' => ['required', Rule::enum(StudentType::class)],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
         ];
@@ -80,6 +89,10 @@ final class StoreStudentProfileRequest extends FormRequest
         return [
             'student_number.unique' => 'This student number is already in use.',
             'student_number.regex' => 'Student number must be in YYYY-MM-NNNNN format (e.g. 2026-08-07107).',
+            'enrollment_category.prohibited' => 'The system decides whether a student is Regular or Irregular.',
+            'address.prohibited' => 'The address is written from the street / barangay, town / city and province.',
+            'contact_number.regex' => 'Enter a valid contact number (digits, +, spaces, dashes or brackets, 7 to 30 characters).',
+            'birth_date.before' => 'The birth date must be in the past.',
             'student_number.prohibited' => 'A student number is assigned automatically. Tick "Student already has a student number" to enter one.',
         ];
     }

@@ -7,6 +7,7 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Curriculum\CurriculumVersion;
 use App\Domain\Identity\PersonName;
+use App\Domain\Identity\StudentAddress;
 use App\Models\Curriculum;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -17,21 +18,27 @@ use Illuminate\Validation\ValidationException;
 
 final class UpdateStudentProfile
 {
-    private const PERSONAL_FIELDS = ['first_name', 'middle_initial', 'last_name', 'suffix', 'email', 'address'];
+    private const PERSONAL_FIELDS = [
+        'first_name', 'middle_initial', 'last_name', 'suffix', 'email',
+        'gender', 'birth_date', 'citizenship', 'contact_number', 'street_barangay', 'town_city', 'province',
+    ];
+
+    /** The details the CHED forms ask for (ADR 0049): one a person enters is no longer a generated value. */
+    private const DEMOGRAPHIC_FIELDS = [
+        'gender', 'birth_date', 'citizenship', 'contact_number', 'street_barangay', 'town_city', 'province',
+    ];
 
     private const NAME_PART_FIELDS = ['first_name', 'middle_initial', 'last_name', 'suffix'];
 
     /**
-     * `entry_year` is deliberately absent (derived from the ongoing term). `enrollment_category` and
-     * `student_type` are chosen by Admission (stakeholder Doc 20); they used to be derived from
-     * `year_level` here (Stakeholder Doc 17) and no longer are, so changing the year level never
-     * overwrites what Admission picked.
+     * `entry_year` is deliberately absent (derived from the ongoing term). `student_type` is chosen by
+     * Admission (stakeholder Doc 20) and is not derived from `year_level`, so changing the year level
+     * never overwrites it. `enrollment_category` is not here: the system decides Regular or Irregular.
      */
     private const ACADEMIC_SETUP_FIELDS = [
         'student_number',
         'program_id',
         'year_level',
-        'enrollment_category',
         'student_type',
         'financial_status',
         'admission_status',
@@ -89,15 +96,40 @@ final class UpdateStudentProfile
             }
 
             $profileData = Arr::only($data, [
-                'address',
+                ...self::DEMOGRAPHIC_FIELDS,
                 'student_number',
                 'program_id',
                 'year_level',
-                'enrollment_category',
                 'student_type',
                 'financial_status',
                 'admission_status',
             ]);
+
+            // The three address parts are the only source of the single address text; a request may not set it.
+            // It is rewritten once all three are known, so a partly typed address on an older account never
+            // replaces the free text that account has with a fragment of it.
+            if (array_intersect(['street_barangay', 'town_city', 'province'], array_keys($profileData)) !== []) {
+                $street = $profileData['street_barangay'] ?? $locked->street_barangay;
+                $town = $profileData['town_city'] ?? $locked->town_city;
+                $province = $profileData['province'] ?? $locked->province;
+
+                if (trim((string) $street) !== '' && trim((string) $town) !== '' && trim((string) $province) !== '') {
+                    $profileData['address'] = StudentAddress::compose($street, $town, $province);
+                }
+            }
+
+            // A value Admission types replaces a generated one, which is then no longer marked generated. The
+            // correction form sends every detail it shows, so a value sent unchanged is not a typed one and stays
+            // generated.
+            $entered = array_values(array_filter(
+                self::DEMOGRAPHIC_FIELDS,
+                static fn (string $field): bool => array_key_exists($field, $profileData)
+                    && (string) $profileData[$field] !== (string) self::currentDetail($locked, $field),
+            ));
+            if ($entered !== [] && $locked->demographics_demo_fields !== null) {
+                $stillGenerated = array_values(array_diff($locked->demographics_demo_fields, $entered));
+                $profileData['demographics_demo_fields'] = $stillGenerated === [] ? null : $stillGenerated;
+            }
 
             if (array_key_exists('program_id', $profileData)) {
                 $programId = (int) $profileData['program_id'];
@@ -134,5 +166,15 @@ final class UpdateStudentProfile
 
             return $locked->refresh()->load(['user', 'program', 'curriculum']);
         });
+    }
+
+    /** What is stored for one of the details, in the form a request sends it. */
+    private static function currentDetail(StudentProfile $profile, string $field): ?string
+    {
+        return match ($field) {
+            'gender' => $profile->gender?->value,
+            'birth_date' => $profile->birth_date?->format('Y-m-d'),
+            default => $profile->{$field},
+        };
     }
 }

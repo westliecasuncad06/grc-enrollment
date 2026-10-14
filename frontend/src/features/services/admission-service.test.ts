@@ -16,11 +16,16 @@ const input: ProvisionStudentInput = {
   middle_initial: "S",
   last_name: "Santos",
   email: "amina.santos@grc.test",
-  address: "123 Mabini Street, Caloocan City",
+  gender: "F",
+  birth_date: "2006-05-04",
+  citizenship: "Filipino",
+  contact_number: "09171234567",
+  street_barangay: "123 Mabini Street",
+  town_city: "Caloocan City",
+  province: "Metro Manila",
   has_existing_student_number: false,
   program_id: 11,
   year_level: 1,
-  enrollment_category: "regular",
   student_type: "transferee",
 }
 
@@ -35,7 +40,15 @@ const profile = {
   last_name: input.last_name,
   suffix: null,
   email: input.email,
-  address: input.address,
+  address: "123 Mabini Street, Caloocan City, Metro Manila",
+  gender: input.gender,
+  birth_date: input.birth_date,
+  citizenship: input.citizenship,
+  contact_number: input.contact_number,
+  street_barangay: input.street_barangay,
+  town_city: input.town_city,
+  province: input.province,
+  generated_fields: [],
   program_id: input.program_id,
   program_code: "BSIT",
   program_name: "Bachelor of Science in Information Technology",
@@ -108,7 +121,7 @@ describe("admission-service", () => {
     await expect(getNextStudentNumber()).resolves.toBeNull()
   })
 
-  it("provisions with address, category and type without a password or curriculum override", async () => {
+  it("provisions with the student's details and type, without a category, an address text, a password or a curriculum override", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ data: profile }), { status: 201 }),
     )
@@ -126,11 +139,16 @@ describe("admission-service", () => {
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
     expect(body).not.toHaveProperty("entry_year")
-    // Admission's own choices travel with the request (stakeholder Doc 20).
+    // Admission's own choices travel with the request (stakeholder Doc 20); the Regular / Irregular
+    // category is the system's and the single address text is written by the server.
     expect(body).toMatchObject({
-      enrollment_category: "regular",
       student_type: "transferee",
+      gender: "F",
+      birth_date: "2006-05-04",
+      street_barangay: "123 Mabini Street",
     })
+    expect(body).not.toHaveProperty("enrollment_category")
+    expect(body).not.toHaveProperty("address")
     // The server assigns the number: none is sent unless the existing-number option is ticked.
     expect(body).not.toHaveProperty("student_number")
   })
@@ -162,6 +180,10 @@ describe("admission-service", () => {
     delete older.freshman_status
     delete older.advance_payment_held
     delete older.enrollment_deadline_at
+    delete older.gender
+    delete older.birth_date
+    delete older.street_barangay
+    delete older.generated_fields
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ data: older }), { status: 201 }),
     )
@@ -173,6 +195,10 @@ describe("admission-service", () => {
       freshman_status: null,
       advance_payment_held: false,
       enrollment_deadline_at: null,
+      gender: null,
+      birth_date: null,
+      street_barangay: null,
+      generated_fields: [],
     })
   })
 

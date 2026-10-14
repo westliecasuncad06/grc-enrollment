@@ -21,7 +21,15 @@ const profile = {
   last_name: "Santos",
   suffix: null,
   email: "amina.santos@grc.test",
-  address: "123 Mabini Street, Caloocan City",
+  address: "123 Mabini Street, Caloocan City, Metro Manila",
+  gender: "F",
+  birth_date: "2006-05-04",
+  citizenship: "Filipino",
+  contact_number: "09171234567",
+  street_barangay: "123 Mabini Street",
+  town_city: "Caloocan City",
+  province: "Metro Manila",
+  generated_fields: [],
   program_id: 11,
   program_code: "BSIT",
   program_name: "Bachelor of Science in Information Technology",
@@ -192,19 +200,34 @@ function renderWorkspace() {
   })
 }
 
+/** The details the CHED forms ask for; citizenship starts as "Filipino" and is left alone. */
+async function fillStudentDetails(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByLabelText("Gender"))
+  await user.click(await screen.findByRole("option", { name: "Female" }))
+  await user.type(screen.getByLabelText("Birth date"), profile.birth_date)
+  await user.type(
+    screen.getByLabelText("Contact number"),
+    profile.contact_number,
+  )
+  await user.type(
+    screen.getByLabelText("Street / barangay"),
+    profile.street_barangay,
+  )
+  await user.type(screen.getByLabelText("Town / city"), profile.town_city)
+  await user.type(screen.getByLabelText("Province"), profile.province)
+}
+
 async function fillAccountBasics(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("First name"), profile.first_name)
   await user.type(screen.getByLabelText("Last name"), profile.last_name)
   await user.type(screen.getByLabelText("Email address"), profile.email)
-  await user.type(screen.getByLabelText("Complete address"), profile.address)
+  await fillStudentDetails(user)
   await user.click(screen.getByLabelText("Program"))
   await user.click(
     await screen.findByRole("option", {
       name: "BSIT — Bachelor of Science in Information Technology",
     }),
   )
-  await user.click(screen.getByLabelText("Enrollment category"))
-  await user.click(await screen.findByRole("option", { name: "Regular" }))
 }
 
 async function chooseStudentType(
@@ -314,7 +337,7 @@ describe("Student Records workspace", () => {
     return bodyOf(call?.[1])
   }
 
-  it("uses one three-part workspace and creates an account with the category, type and ticked requirements Admission chose", async () => {
+  it("uses one three-part workspace and creates an account with the details, type and ticked requirements Admission chose", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -328,15 +351,23 @@ describe("Student Records workspace", () => {
     ])
     expect(screen.queryByLabelText("Curriculum")).not.toBeInTheDocument()
     expect(screen.queryByText(/temporary credential/i)).not.toBeInTheDocument()
-    // The server still derives the entry year; the category and the type are Admission's choice.
+    // The server still derives the entry year; the type is Admission's choice and the Regular /
+    // Irregular category is the system's, so it is not on the form.
     expect(screen.queryByLabelText("Entry year")).not.toBeInTheDocument()
-    expect(screen.getByLabelText("Enrollment category")).toBeInTheDocument()
+    expect(
+      screen.queryByLabelText("Enrollment category"),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Complete address")).not.toBeInTheDocument()
     expect(screen.getByLabelText("Student type")).toBeInTheDocument()
+    // The address is typed as street / barangay, town / city and province; citizenship starts Filipino.
+    expect(screen.getByLabelText("Street / barangay")).toBeInTheDocument()
+    expect(screen.getByLabelText("Town / city")).toBeInTheDocument()
+    expect(screen.getByLabelText("Province")).toBeInTheDocument()
+    expect(screen.getByLabelText("Citizenship")).toHaveValue("Filipino")
 
     await user.type(screen.getByLabelText("First name"), profile.first_name)
     await user.type(screen.getByLabelText("Last name"), profile.last_name)
     await user.type(screen.getByLabelText("Email address"), profile.email)
-    await user.type(screen.getByLabelText("Complete address"), profile.address)
     const studentNumberField = screen.getByLabelText("Student number")
     expect(studentNumberField).toHaveAttribute("readonly")
     // The number is assigned by the server in order: there is nothing to generate.
@@ -369,14 +400,23 @@ describe("Student Records workspace", () => {
       ),
     ).toBeInTheDocument()
 
-    // Submitting without the two choices stops at the form and takes Admission to the first one.
+    // Submitting without the details and the type stops at the form and takes Admission to the first one.
     const scrollIntoView = vi
       .spyOn(window.HTMLElement.prototype, "scrollIntoView")
       .mockImplementation(() => undefined)
     await user.click(submit)
     expect(
-      await screen.findByText("Select the enrollment category."),
+      await screen.findByText("Select the student's gender."),
     ).toBeInTheDocument()
+    expect(
+      screen.getByText("Enter the student's birth date."),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Enter a valid contact number/)).toBeInTheDocument()
+    expect(
+      screen.getByText("Enter the street and barangay."),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Enter the town or city.")).toBeInTheDocument()
+    expect(screen.getByText("Enter the province.")).toBeInTheDocument()
     expect(screen.getByText("Select the student type.")).toBeInTheDocument()
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
     // The first thing that needs fixing is the first invalid field on the form, not the button.
@@ -390,8 +430,7 @@ describe("Student Records workspace", () => {
       ),
     ).toBe(false)
 
-    await user.click(screen.getByLabelText("Enrollment category"))
-    await user.click(await screen.findByRole("option", { name: "Regular" }))
+    await fillStudentDetails(user)
     await user.click(screen.getByLabelText("Student type"))
     await user.click(await screen.findByRole("option", { name: "Transferee" }))
 
@@ -455,12 +494,20 @@ describe("Student Records workspace", () => {
     expect(body).toMatchObject({
       first_name: profile.first_name,
       last_name: profile.last_name,
-      address: profile.address,
-      enrollment_category: "regular",
+      gender: "F",
+      birth_date: profile.birth_date,
+      citizenship: "Filipino",
+      contact_number: profile.contact_number,
+      street_barangay: profile.street_barangay,
+      town_city: profile.town_city,
+      province: profile.province,
       student_type: "transferee",
       has_existing_student_number: false,
       requirement_type_ids: [1, 2],
     })
+    // The category is the system's and the address text is written by the server from the three parts.
+    expect(body).not.toHaveProperty("enrollment_category")
+    expect(body).not.toHaveProperty("address")
     expect(body).not.toHaveProperty("requirements_verified")
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
@@ -838,15 +885,24 @@ describe("Student Records workspace", () => {
       )
       expect(screen.getByLabelText("Last name")).toHaveValue(profile.last_name)
       expect(screen.getByLabelText("Email address")).toHaveValue(profile.email)
-      expect(screen.getByLabelText("Complete address")).toHaveValue(
-        profile.address,
+      expect(screen.getByLabelText("Gender")).toHaveTextContent("Female")
+      expect(screen.getByLabelText("Birth date")).toHaveValue(
+        profile.birth_date,
       )
+      expect(screen.getByLabelText("Citizenship")).toHaveValue("Filipino")
+      expect(screen.getByLabelText("Contact number")).toHaveValue(
+        profile.contact_number,
+      )
+      expect(screen.getByLabelText("Street / barangay")).toHaveValue(
+        profile.street_barangay,
+      )
+      expect(screen.getByLabelText("Town / city")).toHaveValue(
+        profile.town_city,
+      )
+      expect(screen.getByLabelText("Province")).toHaveValue(profile.province)
       // The program's name needs the list of programs, which a fresh page has to fetch again.
       await waitFor(() =>
         expect(screen.getByLabelText("Program")).toHaveTextContent("BSIT"),
-      )
-      expect(screen.getByLabelText("Enrollment category")).toHaveTextContent(
-        "Regular",
       )
       expect(screen.getByLabelText("Student type")).toHaveTextContent(
         "Transferee",
@@ -1174,25 +1230,26 @@ describe("Student Records workspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("lets Admission choose the enrollment category and student type from dropdowns, with nothing set automatically", async () => {
+  it("lets Admission choose the gender and student type from dropdowns, with nothing set automatically and no Regular / Irregular choice", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
-    // No value is filled in for them, whatever the year level.
-    expect(screen.getByLabelText("Enrollment category")).toHaveTextContent(
-      "Select a category",
-    )
+    // No value is filled in for them, whatever the year level; the category is the system's.
+    expect(
+      screen.queryByLabelText("Enrollment category"),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Gender")).toHaveTextContent("Select a gender")
     expect(screen.getByLabelText("Student type")).toHaveTextContent(
       "Select a student type",
     )
 
-    await user.click(screen.getByLabelText("Enrollment category"))
+    await user.click(screen.getByLabelText("Gender"))
     expect(
       (await screen.findAllByRole("option")).map(
         (option) => option.textContent,
       ),
-    ).toEqual(["Regular", "Irregular"])
-    await user.click(screen.getByRole("option", { name: "Irregular" }))
+    ).toEqual(["Female", "Male"])
+    await user.click(screen.getByRole("option", { name: "Male" }))
 
     await user.click(screen.getByLabelText("Student type"))
     expect(
@@ -1205,9 +1262,7 @@ describe("Student Records workspace", () => {
     // Changing the year level no longer rewrites what was chosen.
     await user.click(screen.getByLabelText("Year level"))
     await user.click(await screen.findByRole("option", { name: "2nd Year" }))
-    expect(screen.getByLabelText("Enrollment category")).toHaveTextContent(
-      "Irregular",
-    )
+    expect(screen.getByLabelText("Gender")).toHaveTextContent("Male")
     expect(screen.getByLabelText("Student type")).toHaveTextContent(
       "Existing Student",
     )
@@ -1252,7 +1307,17 @@ describe("Student Records workspace", () => {
       screen.getByRole("dialog", { name: profile.name }),
     ).toBeInTheDocument()
     expect(screen.getByDisplayValue(profile.email)).toBeInTheDocument()
-    expect(screen.getByDisplayValue(profile.address)).toBeInTheDocument()
+    // The address is shown as its three parts, with the rest of the details the CHED forms ask for.
+    expect(screen.getByLabelText("Street / barangay")).toHaveValue(
+      profile.street_barangay,
+    )
+    expect(screen.getByLabelText("Town / city")).toHaveValue(profile.town_city)
+    expect(screen.getByLabelText("Province")).toHaveValue(profile.province)
+    expect(screen.getByLabelText("Birth date")).toHaveValue(profile.birth_date)
+    expect(screen.getByLabelText("Gender")).toHaveTextContent("Female")
+    expect(
+      screen.queryByLabelText("Enrollment category"),
+    ).not.toBeInTheDocument()
     expect(
       screen.getByLabelText("Identity verified in person at Admission"),
     ).toBeInTheDocument()
@@ -1274,7 +1339,7 @@ describe("Student Records workspace", () => {
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: { ...enrolledProfile, address: "Updated Address" },
+              data: { ...enrolledProfile, street_barangay: "Updated Address" },
             }),
           ),
         )
@@ -1335,9 +1400,9 @@ describe("Student Records workspace", () => {
     expect(screen.getByLabelText("Middle initial")).toBeInTheDocument()
     expect(screen.getByLabelText("Suffix")).toBeInTheDocument()
     expect(screen.getByLabelText("Email")).toBeInTheDocument()
-    const address = screen.getByLabelText("Complete address")
-    await user.clear(address)
-    await user.type(address, "Updated Address")
+    const street = screen.getByLabelText("Street / barangay")
+    await user.clear(street)
+    await user.type(street, "Updated Address")
     await user.type(
       screen.getByLabelText("Reason for correction"),
       "Student presented an updated barangay certificate.",
@@ -1358,7 +1423,9 @@ describe("Student Records workspace", () => {
       )
       expect(patchCall).toBeDefined()
       const body = bodyOf(patchCall?.[1])
-      expect(body).toMatchObject({ address: "Updated Address" })
+      expect(body).toMatchObject({ street_barangay: "Updated Address" })
+      // The single address text is written by the server from the three parts.
+      expect(body).not.toHaveProperty("address")
       expect(body).not.toHaveProperty("student_number")
       expect(body).not.toHaveProperty("program_id")
       expect(body).not.toHaveProperty("entry_year")
@@ -1367,6 +1434,144 @@ describe("Student Records workspace", () => {
       expect(body).not.toHaveProperty("student_type")
       expect(body).not.toHaveProperty("financial_status")
       expect(body).not.toHaveProperty("admission_status")
+    })
+  })
+
+  describe("a student record from before these details were collected", () => {
+    const olderProfile = {
+      ...profile,
+      id: 34,
+      student_number: "2026-08-01098",
+      name: "Rosa Reyes",
+      first_name: "Rosa",
+      last_name: "Reyes",
+      email: "rosa.reyes@grc.test",
+      address: "Old Address, Caloocan City",
+      gender: null,
+      birth_date: null,
+      citizenship: null,
+      contact_number: null,
+      street_barangay: null,
+      town_city: null,
+      province: null,
+      generated_fields: [],
+      academic_setup_editable: false,
+      account_setup_status: "active",
+    } as const
+
+    async function openRecord(
+      user: ReturnType<typeof userEvent.setup>,
+      record: Record<string, unknown> & { name: string; id: number },
+    ) {
+      fetchMock.mockImplementation((input, init) => {
+        const url = urlOf(input)
+        if (url.includes("/api/v1/programs")) {
+          return Promise.resolve(new Response(JSON.stringify(programs)))
+        }
+        if (url.includes("/api/v1/admission-requirement-types")) {
+          return Promise.resolve(
+            new Response(JSON.stringify(intakeRequirements)),
+          )
+        }
+        if (
+          url.includes(`/api/v1/student-profiles/${record.id}`) &&
+          init?.method === "PATCH"
+        ) {
+          return Promise.resolve(new Response(JSON.stringify({ data: record })))
+        }
+        if (url.includes("/api/v1/student-profiles")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: [record], ...pagination })),
+          )
+        }
+        if (url.includes("/api/v1/student-profile-change-requests")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: [], ...pagination })),
+          )
+        }
+        return Promise.reject(new Error(`Unexpected request: ${url}`))
+      })
+      renderWorkspace()
+      await user.click(screen.getByRole("tab", { name: "Student Directory" }))
+      await user.type(
+        screen.getByLabelText("Search student records"),
+        record.name,
+      )
+      await user.click(screen.getByRole("button", { name: "Search" }))
+      const table = await screen.findByRole("table", {
+        name: "Student directory",
+      })
+      await user.click(
+        await within(table).findByRole("button", { name: record.name }),
+      )
+    }
+
+    it("can be corrected without filling the new details, and the blank ones are not sent", async () => {
+      const user = userEvent.setup()
+      await openRecord(user, olderProfile)
+
+      expect(screen.getByLabelText("Street / barangay")).toHaveValue("")
+      // The address already on file stays visible until the three parts are typed.
+      expect(
+        screen.getByText("Address on file: Old Address, Caloocan City"),
+      ).toBeInTheDocument()
+
+      await user.clear(screen.getByLabelText("Last name"))
+      await user.type(screen.getByLabelText("Last name"), "Reyes-Cruz")
+      await user.type(
+        screen.getByLabelText("Reason for correction"),
+        "Corrected the surname on the marriage certificate.",
+      )
+      await user.click(
+        screen.getByLabelText("Identity verified in person at Admission"),
+      )
+      await user.click(
+        screen.getByRole("button", { name: "Save verified correction" }),
+      )
+
+      await waitFor(() => {
+        const patchCall = fetchMock.mock.calls.find(
+          ([reqInput, reqInit]) =>
+            urlOf(reqInput).endsWith(
+              `/api/v1/student-profiles/${olderProfile.id}`,
+            ) && reqInit?.method === "PATCH",
+        )
+        expect(patchCall).toBeDefined()
+        const body = bodyOf(patchCall?.[1])
+        expect(body).toMatchObject({ last_name: "Reyes-Cruz" })
+        for (const key of [
+          "gender",
+          "birth_date",
+          "citizenship",
+          "contact_number",
+          "street_barangay",
+          "town_city",
+          "province",
+          "address",
+          "enrollment_category",
+        ]) {
+          expect(body).not.toHaveProperty(key)
+        }
+      })
+    })
+
+    it("tells Admission which details were generated for the demo, so the real ones can be entered", async () => {
+      const user = userEvent.setup()
+      await openRecord(user, {
+        ...olderProfile,
+        gender: "M",
+        birth_date: "2004-01-01",
+        generated_fields: ["gender", "birth_date"],
+      })
+
+      const dialog = screen.getByRole("dialog", { name: olderProfile.name })
+      expect(
+        within(dialog).getAllByText(
+          "Generated for the demo. Enter the student's real value.",
+        ),
+      ).toHaveLength(2)
+      expect(screen.getByLabelText("Gender")).toHaveTextContent("Male")
+      expect(screen.getByLabelText("Birth date")).toHaveValue("2004-01-01")
     })
   })
 

@@ -93,18 +93,32 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'New',
             'last_name' => 'Student',
             'email' => 'new.student@grc.test',
-            'address' => '123 Test Street, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '123 Test Street, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'transferee',
         ]);
 
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
         $response->assertJsonPath('data.student_number', '2027-08-00001');
-        $response->assertJsonPath('data.address', '123 Test Street, Caloocan City');
+        $response->assertJsonPath('data.address', '123 Test Street, Caloocan City, Caloocan City, Metro Manila');
+        $response->assertJsonPath('data.gender', 'F');
+        $response->assertJsonPath('data.birth_date', '2006-05-04');
+        $response->assertJsonPath('data.citizenship', 'Filipino');
+        $response->assertJsonPath('data.contact_number', '09171234567');
+        $response->assertJsonPath('data.street_barangay', '123 Test Street, Caloocan City');
+        $response->assertJsonPath('data.town_city', 'Caloocan City');
+        $response->assertJsonPath('data.province', 'Metro Manila');
+        $response->assertJsonPath('data.generated_fields', []);
         $response->assertJsonPath('data.entry_year', 2027);
+        // Admission no longer chooses it: every new account starts Regular and the system re-derives it.
         $response->assertJsonPath('data.enrollment_category', 'regular');
         $response->assertJsonPath('data.student_type', 'transferee');
         $response->assertJsonPath('data.admission_status', 'admitted');
@@ -121,7 +135,15 @@ final class StudentProfilesEndpointTest extends TestCase
         ]);
         $this->assertDatabaseHas('student_profiles', [
             'student_number' => '2027-08-00001',
-            'address' => '123 Test Street, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '123 Test Street, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
+            'address' => '123 Test Street, Caloocan City, Caloocan City, Metro Manila',
+            'demographics_demo_fields' => null,
             'requirements_verified_by' => User::query()->where('email', 'admission.provision@grc.test')->value('id'),
         ]);
         Mail::assertSentCount(1);
@@ -130,6 +152,8 @@ final class StudentProfilesEndpointTest extends TestCase
         self::assertStringNotContainsString('New Student', $provisioningPayload);
         self::assertStringNotContainsString('new.student@grc.test', $provisioningPayload);
         self::assertStringNotContainsString('123 Test Street', $provisioningPayload);
+        self::assertStringNotContainsString('09171234567', $provisioningPayload);
+        self::assertStringNotContainsString('2006-05-04', $provisioningPayload);
         $invitationAudit = AuditLog::query()->where('action', AuditAction::STUDENT_ACCOUNT_SETUP_INVITATION_SENT)->sole();
         $invitationPayload = json_encode([$invitationAudit->before_values, $invitationAudit->after_values], JSON_THROW_ON_ERROR);
         self::assertStringNotContainsString('new.student@grc.test', $invitationPayload);
@@ -155,12 +179,17 @@ final class StudentProfilesEndpointTest extends TestCase
     private function provisionPayload(Program $program, string $email, array $requirementTypeIds, int $yearLevel = 1, string $studentType = 'freshman'): array
     {
         return [
-            'enrollment_category' => 'regular',
             'student_type' => $studentType,
             'first_name' => 'Checklist',
             'last_name' => 'Student',
             'email' => $email,
-            'address' => '123 Test Street, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '123 Test Street, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => $yearLevel,
             'requirement_type_ids' => $requirementTypeIds,
@@ -292,11 +321,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'last_name' => 'DELA CRUZ',
             'suffix' => 'iii',
             'email' => 'casing.student@grc.test',
-            'address' => '1 Casing Street, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '1 Casing Street, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'freshman',
         ]);
 
@@ -317,7 +351,7 @@ final class StudentProfilesEndpointTest extends TestCase
         ]);
     }
 
-    public function test_provisioning_requires_verified_requirements_and_an_address(): void
+    public function test_provisioning_requires_verified_requirements_and_the_students_details(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.requirements@grc.test');
@@ -334,7 +368,10 @@ final class StudentProfilesEndpointTest extends TestCase
         $response->assertUnprocessable()
             ->assertJsonPath('error.code', 'VALIDATION_FAILED')
             ->assertJsonStructure([
-                'error' => ['errors' => ['address', 'requirements_verified']],
+                'error' => ['errors' => [
+                    'gender', 'birth_date', 'citizenship', 'contact_number',
+                    'street_barangay', 'town_city', 'province', 'requirements_verified',
+                ]],
             ]);
         $this->assertDatabaseMissing('users', ['email' => 'incomplete.applicant@grc.test']);
     }
@@ -348,24 +385,30 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'Unsafe',
             'last_name' => 'Contract Student',
             'email' => 'unsafe.contract@grc.test',
-            'address' => '789 Contract Road, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '789 Contract Road, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'password' => 'client-chosen-password',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
             'entry_year' => 2027,
             'year_level' => 1,
             'enrollment_category' => 'irregular',
+            'address' => 'A single address text a client made up',
             'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
-        // Admission now chooses the category and type (stakeholder Doc 20), so only the genuinely
-        // server-controlled fields are refused.
+        // Admission chooses the student type, but the Regular / Irregular category is decided by the
+        // system, and the address is written from the street, town and province: all refused.
         $response->assertUnprocessable()
             ->assertJsonStructure([
-                'error' => ['errors' => ['password', 'curriculum_id', 'entry_year']],
+                'error' => ['errors' => ['password', 'curriculum_id', 'entry_year', 'enrollment_category', 'address']],
             ]);
-        $this->assertArrayNotHasKey('enrollment_category', $response->json('error.errors'));
         $this->assertArrayNotHasKey('student_type', $response->json('error.errors'));
         $this->assertDatabaseMissing('users', ['email' => 'unsafe.contract@grc.test']);
     }
@@ -382,11 +425,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'Pending',
             'last_name' => 'Student',
             'email' => 'pending.student@grc.test',
-            'address' => '456 Setup Avenue, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '456 Setup Avenue, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'transferee',
         ])->assertCreated();
 
@@ -447,11 +495,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'Expiring',
             'last_name' => 'Student',
             'email' => 'expiring.student@grc.test',
-            'address' => '60 Minute Avenue, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '60 Minute Avenue, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'transferee',
         ])->assertCreated();
 
@@ -494,11 +547,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'Mail Failure',
             'last_name' => 'Student',
             'email' => 'mail.failure.student@grc.test',
-            'address' => 'Retry Street, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => 'Retry Street, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'transferee',
         ]);
 
@@ -542,12 +600,17 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'Scholar',
             'last_name' => 'Student',
             'email' => 'scholar.student@grc.test',
-            'address' => '101 Scholar Avenue, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '101 Scholar Avenue, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'financial_status' => 'scholar',
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'freshman',
         ]);
         $scholar->assertCreated();
@@ -558,11 +621,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'Unset',
             'last_name' => 'Student',
             'email' => 'unset.student@grc.test',
-            'address' => '102 Default Avenue, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '102 Default Avenue, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'freshman',
         ]);
         $unset->assertCreated();
@@ -571,13 +639,12 @@ final class StudentProfilesEndpointTest extends TestCase
     }
 
     /**
-     * Stakeholder Doc 20: Admission picks the Enrollment Category and the Student Type on the form
-     * (they are no longer derived from Year Level as Stakeholder Doc 17 did), so whatever is sent is
-     * what is stored, whatever the year level.
-     * `enrollment_category_derived_at` must stay NULL: this is an intake choice, not ADR 0021's
-     * grade-based re-derivation.
+     * Admission chooses the Student Type; the Regular / Irregular category is no longer asked for
+     * because the system detects it (the owner's review of 2026-10-15). A new account starts Regular
+     * and `enrollment_category_derived_at` stays NULL until the grade-based re-derivation (ADR 0021)
+     * or the approval of a transferee's credits changes it.
      */
-    public function test_enrollment_category_and_student_type_are_what_admission_chose(): void
+    public function test_the_student_type_is_what_admission_chose_and_the_category_starts_regular(): void
     {
         $program = Program::create(['code' => 'BSUNI', 'name' => 'BS Universal', 'status' => ProgramStatus::Active]);
         Curriculum::create([
@@ -589,62 +656,45 @@ final class StudentProfilesEndpointTest extends TestCase
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.chosen@grc.test');
         Mail::fake();
 
-        // The same year level (1) gets a different answer each time: nothing is derived from it.
-        $choices = [
-            ['regular', 'transferee', 'Transferee'],
-            ['irregular', 'returnee', 'Returnee'],
-            ['regular', 'existing_student', 'Existing Student'],
-            ['irregular', 'existing_student', 'Existing Student'],
-        ];
-
-        foreach ($choices as $index => [$category, $type, $label]) {
+        foreach ([['transferee', 'Transferee'], ['returnee', 'Returnee'], ['existing_student', 'Existing Student']] as $index => [$type, $label]) {
             $email = "chosen-{$index}@grc.test";
-            $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
-                'first_name' => 'Chosen',
-                'last_name' => "Type {$index}",
-                'email' => $email,
-                'address' => "{$index} Choice Road, Caloocan City",
-                'program_id' => $program->id,
-                'year_level' => 1,
-                'enrollment_category' => $category,
-                'student_type' => $type,
-                'requirement_type_ids' => [],
-            ]);
+            $payload = $this->provisionPayload($program, $email, [], 1, $type);
+            $response = $this->withToken($token)->postJson('/api/v1/student-profiles', $payload);
 
             $response->assertCreated();
-            $response->assertJsonPath('data.enrollment_category', $category);
+            $response->assertJsonPath('data.enrollment_category', 'regular');
             $response->assertJsonPath('data.student_type', $type);
             $response->assertJsonPath('data.student_type_label', $label);
             $this->assertDatabaseHas('student_profiles', [
                 'user_id' => User::query()->where('email', $email)->value('id'),
-                'enrollment_category' => $category,
+                'enrollment_category' => 'regular',
                 'student_type' => $type,
                 'enrollment_category_derived_at' => null,
             ]);
         }
     }
 
-    public function test_the_enrollment_category_and_student_type_are_required_and_must_be_known_values(): void
+    public function test_the_student_type_is_required_and_a_category_is_refused(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
         $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.required.choice@grc.test');
         $payload = $this->provisionPayload($program, 'required.choice@grc.test', []);
-        unset($payload['enrollment_category'], $payload['student_type']);
+        unset($payload['student_type']);
 
         $missing = $this->withToken($token)->postJson('/api/v1/student-profiles', $payload);
         $missing->assertUnprocessable();
-        self::assertArrayHasKey('enrollment_category', $missing->json('error.errors'));
         self::assertArrayHasKey('student_type', $missing->json('error.errors'));
+        self::assertArrayNotHasKey('enrollment_category', $missing->json('error.errors'));
 
         $unknown = $this->withToken($token)->postJson('/api/v1/student-profiles', [
             ...$payload,
-            'enrollment_category' => 'sometimes',
             'student_type' => 'visitor',
+            'enrollment_category' => 'regular',
         ]);
         $unknown->assertUnprocessable();
-        self::assertArrayHasKey('enrollment_category', $unknown->json('error.errors'));
         self::assertArrayHasKey('student_type', $unknown->json('error.errors'));
+        self::assertArrayHasKey('enrollment_category', $unknown->json('error.errors'));
         $this->assertDatabaseMissing('users', ['email' => 'required.choice@grc.test']);
     }
 
@@ -811,7 +861,13 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'New',
             'last_name' => 'Student',
             'email' => 'blocked.student@grc.test',
-            'address' => '103 Blocked Avenue, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '103 Blocked Avenue, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
@@ -838,11 +894,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'New',
             'last_name' => 'Student',
             'email' => 'mismatch.student@grc.test',
-            'address' => '104 Missing Curriculum Road, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '104 Missing Curriculum Road, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'freshman',
         ]);
 
@@ -876,11 +937,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'Fourth Year',
             'last_name' => 'Student',
             'email' => 'automatic.curriculum@grc.test',
-            'address' => '105 Automatic Curriculum Road, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '105 Automatic Curriculum Road, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 4,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'freshman',
         ]);
 
@@ -900,11 +966,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'No',
             'last_name' => 'Term',
             'email' => 'no.term.student@grc.test',
-            'address' => '110 No Term Road, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '110 No Term Road, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'freshman',
         ]);
 
@@ -922,11 +993,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'first_name' => 'New',
             'last_name' => 'Student',
             'email' => 'existing@grc.test',
-            'address' => '106 Duplicate Road, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '106 Duplicate Road, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular',
             'student_type' => 'freshman',
         ]);
 

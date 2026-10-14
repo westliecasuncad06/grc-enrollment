@@ -272,10 +272,16 @@ final class FreshmanAdmissionIntakeTest extends TestCase
 
         return [
             'first_name' => 'Juan', 'last_name' => 'Dela Cruz', 'email' => $email,
-            'address' => '123 Test Street, Caloocan City',
+            'gender' => 'F',
+            'birth_date' => '2006-05-04',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09171234567',
+            'street_barangay' => '123 Test Street, Caloocan City',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'program_id' => $program->id, 'year_level' => 1,
             'requirements_verified' => true,
-            'enrollment_category' => 'regular', 'student_type' => $studentType,
+            'student_type' => $studentType,
         ];
     }
 

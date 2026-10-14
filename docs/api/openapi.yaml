@@ -11275,6 +11275,14 @@ components:
         - suffix
         - email
         - address
+        - gender
+        - birth_date
+        - citizenship
+        - contact_number
+        - street_barangay
+        - town_city
+        - province
+        - generated_fields
         - program_id
         - program_code
         - program_name
@@ -11332,6 +11340,40 @@ components:
         address:
           type: [string, 'null']
           maxLength: 1000
+          description: >
+            The address as one text, written by the server from `street_barangay`, `town_city` and
+            `province` whenever one of them is entered. A client never sets it (ADR 0049).
+        gender:
+          type: [string, 'null']
+          enum: [M, F, null]
+          description: The details the CHED forms ask for (ADR 0049); null on an account that has none yet.
+        birth_date:
+          type: [string, 'null']
+          format: date
+        citizenship:
+          type: [string, 'null']
+          maxLength: 100
+        contact_number:
+          type: [string, 'null']
+          maxLength: 30
+        street_barangay:
+          type: [string, 'null']
+          maxLength: 255
+        town_city:
+          type: [string, 'null']
+          maxLength: 255
+        province:
+          type: [string, 'null']
+          maxLength: 255
+        generated_fields:
+          type: array
+          items:
+            type: string
+            enum: [gender, birth_date, citizenship, contact_number, street_barangay, town_city, province]
+          description: >
+            The details above that were generated for the demo by `students:populate-demographics`
+            and not typed by Admission. An empty list for every account whose details were entered.
+            A value Admission enters in a correction is removed from this list.
         program_id:
           type: integer
         program_code:
@@ -11777,10 +11819,15 @@ components:
         - first_name
         - last_name
         - email
-        - address
+        - gender
+        - birth_date
+        - citizenship
+        - contact_number
+        - street_barangay
+        - town_city
+        - province
         - program_id
         - year_level
-        - enrollment_category
         - student_type
       properties:
         first_name:
@@ -11799,9 +11846,29 @@ components:
           type: string
           format: email
           maxLength: 255
-        address:
+        gender:
           type: string
-          maxLength: 1000
+          enum: [M, F]
+        birth_date:
+          type: string
+          format: date
+          description: Y-m-d, after 1900-01-01 and before today.
+        citizenship:
+          type: string
+          maxLength: 100
+        contact_number:
+          type: string
+          pattern: '^[0-9+()\-\s]{7,30}$'
+          description: Digits, `+`, spaces, dashes or brackets, 7 to 30 characters.
+        street_barangay:
+          type: string
+          maxLength: 255
+        town_city:
+          type: string
+          maxLength: 255
+        province:
+          type: string
+          maxLength: 255
         requirements_verified:
           type: boolean
           const: true
@@ -11846,14 +11913,12 @@ components:
           type: integer
           minimum: 1
           maximum: 4
-        enrollment_category:
-          type: string
-          description: Chosen by Admission on the form (stakeholder Doc 20); no longer derived from `year_level`.
-          enum: [regular, irregular]
         student_type:
           type: string
           description: >
-            Chosen by Admission on the form (stakeholder Doc 20). The form offers Freshman,
+            Chosen by Admission on the form (stakeholder Doc 20). `enrollment_category` and `address`
+            are refused with 422: the system decides Regular or Irregular (a new account starts
+            Regular) and the address text is written from `street_barangay`, `town_city` and `province`. The form offers Freshman,
             Transferee, Returnee and Existing Student.
           enum: [freshman, transferee, returnee, existing_student]
         financial_status:
@@ -11882,9 +11947,32 @@ components:
           type: string
           format: email
           maxLength: 255
-        address:
+        gender:
           type: string
-          maxLength: 1000
+          enum: [M, F]
+        birth_date:
+          type: string
+          format: date
+        citizenship:
+          type: string
+          maxLength: 100
+        contact_number:
+          type: string
+          pattern: '^[0-9+()\-\s]{7,30}$'
+        street_barangay:
+          type: string
+          maxLength: 255
+          description: >
+            Sending any of `street_barangay`, `town_city` or `province` rewrites the single `address`
+            text from the three, once all three are known (stored or sent); until then the existing
+            text is kept. `address` itself is refused with 422. A detail whose value is changed here is
+            removed from `generated_fields`; one sent unchanged stays in it.
+        town_city:
+          type: string
+          maxLength: 255
+        province:
+          type: string
+          maxLength: 255
         student_number:
           type: string
           maxLength: 255
@@ -11899,9 +11987,6 @@ components:
           type: integer
           minimum: 1
           maximum: 4
-        enrollment_category:
-          type: string
-          enum: [regular, irregular]
         student_type:
           type: string
           enum: [freshman, transferee]

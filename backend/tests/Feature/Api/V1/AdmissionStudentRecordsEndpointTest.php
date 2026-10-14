@@ -140,11 +140,16 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             'first_name' => 'Corrected',
             'last_name' => 'Student',
             'email' => 'corrected.student@grc.test',
-            'address' => 'Corrected Complete Address, Caloocan City',
+            'gender' => 'M',
+            'birth_date' => '2005-03-02',
+            'citizenship' => 'Filipino',
+            'contact_number' => '+63 917 123 4567',
+            'street_barangay' => 'Corrected Complete Street, Barangay 5',
+            'town_city' => 'Quezon City',
+            'province' => 'Metro Manila',
             'student_number' => '2027-08-01088',
             'program_id' => $newProgram->id,
             'year_level' => 2,
-            'enrollment_category' => 'irregular',
             'student_type' => 'transferee',
             'financial_status' => 'payee',
             'admission_status' => 'admitted',
@@ -154,9 +159,14 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             ->assertJsonPath('data.name', 'Corrected Student')
             ->assertJsonPath('data.program_id', $newProgram->id)
             ->assertJsonPath('data.curriculum_id', $newCurriculum->id)
-            // The category and type are what Admission sent (stakeholder Doc 20), not derived from the year level.
-            ->assertJsonPath('data.enrollment_category', 'irregular')
-            ->assertJsonPath('data.student_type', 'transferee');
+            // The type is what Admission sent (stakeholder Doc 20); the Regular / Irregular category is the
+            // system's, so a correction leaves it alone.
+            ->assertJsonPath('data.enrollment_category', 'regular')
+            ->assertJsonPath('data.student_type', 'transferee')
+            ->assertJsonPath('data.gender', 'M')
+            ->assertJsonPath('data.birth_date', '2005-03-02')
+            ->assertJsonPath('data.contact_number', '+63 917 123 4567')
+            ->assertJsonPath('data.address', 'Corrected Complete Street, Barangay 5, Quezon City, Metro Manila');
 
         $this->assertDatabaseHas('users', [
             'id' => $student->user_id,
@@ -166,12 +176,17 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
         $this->assertDatabaseHas('student_profiles', [
             'id' => $student->id,
             'student_number' => '2027-08-01088',
-            'address' => 'Corrected Complete Address, Caloocan City',
+            'address' => 'Corrected Complete Street, Barangay 5, Quezon City, Metro Manila',
+            'street_barangay' => 'Corrected Complete Street, Barangay 5',
+            'town_city' => 'Quezon City',
+            'province' => 'Metro Manila',
+            'gender' => 'M',
+            'citizenship' => 'Filipino',
             'program_id' => $newProgram->id,
             'curriculum_id' => $newCurriculum->id,
             'entry_year' => 2026,
             'year_level' => 2,
-            'enrollment_category' => 'irregular',
+            'enrollment_category' => 'regular',
             'student_type' => 'transferee',
             'enrollment_category_derived_at' => null,
         ]);
@@ -180,7 +195,9 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
         $auditPayload = json_encode([$audit->before_values, $audit->after_values], JSON_THROW_ON_ERROR);
         self::assertStringNotContainsString('Corrected Student', $auditPayload);
         self::assertStringNotContainsString('corrected.student@grc.test', $auditPayload);
-        self::assertStringNotContainsString('Corrected Complete Address', $auditPayload);
+        self::assertStringNotContainsString('Corrected Complete Street', $auditPayload);
+        self::assertStringNotContainsString('+63 917 123 4567', $auditPayload);
+        self::assertStringNotContainsString('2005-03-02', $auditPayload);
         self::assertStringNotContainsString('Corrected after reviewing the submitted admission documents.', $auditPayload);
     }
 
@@ -226,14 +243,13 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             ]);
     }
 
-    public function test_changing_the_year_level_no_longer_overwrites_the_category_and_type_admission_chose(): void
+    public function test_changing_the_year_level_no_longer_overwrites_the_type_admission_chose(): void
     {
         $admission = $this->user(UserRole::AdmissionStaff, 'Admission Keeper', 'admission.keeper@grc.test');
         $student = $this->student('Keeper Student', 'keeper.student@grc.test', '2026-08-01099');
         Sanctum::actingAs($admission);
 
         $this->patchJson('/api/v1/student-profiles/'.$student->id, [
-            'enrollment_category' => 'regular',
             'student_type' => 'existing_student',
             'reason' => 'Existing student given an account.',
             'identity_verified_in_person' => true,
@@ -242,7 +258,7 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             ->assertJsonPath('data.student_type', 'existing_student')
             ->assertJsonPath('data.student_type_label', 'Existing Student');
 
-        // A later year-level correction leaves those two alone (it used to recompute them).
+        // A later year-level correction leaves the type and the category alone (it used to recompute them).
         $this->patchJson('/api/v1/student-profiles/'.$student->id, [
             'year_level' => 3,
             'reason' => 'Year level corrected.',
@@ -273,12 +289,14 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
         $this->patchJson('/api/v1/student-profiles/'.$student->id, [
             'first_name' => 'Corrected',
             'last_name' => 'Enrolled Student',
-            'address' => 'Updated Personal Address, Caloocan City',
+            'street_barangay' => 'Updated Personal Address',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
             'reason' => 'The student presented updated identity and address records.',
             'identity_verified_in_person' => true,
         ])->assertOk()
             ->assertJsonPath('data.name', 'Corrected Enrolled Student')
-            ->assertJsonPath('data.address', 'Updated Personal Address, Caloocan City')
+            ->assertJsonPath('data.address', 'Updated Personal Address, Caloocan City, Metro Manila')
             ->assertJsonPath('data.academic_setup_editable', false);
 
         $this->patchJson('/api/v1/student-profiles/'.$student->id, [
@@ -292,6 +310,137 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             'id' => $student->id,
             'student_number' => '2026-08-01092',
         ]);
+    }
+
+    public function test_the_category_and_the_single_address_text_cannot_be_set_by_a_correction(): void
+    {
+        $admission = $this->user(UserRole::AdmissionStaff, 'Admission Refuser', 'admission.refuser@grc.test');
+        $student = $this->student('Refused Student', 'refused.student@grc.test', '2026-08-01110');
+        Sanctum::actingAs($admission);
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'enrollment_category' => 'irregular',
+            'address' => 'A single address text a client made up',
+            'reason' => 'Trying to set what the system decides.',
+            'identity_verified_in_person' => true,
+        ])->assertUnprocessable()
+            ->assertJsonStructure(['error' => ['errors' => ['enrollment_category', 'address']]]);
+
+        $this->assertDatabaseHas('student_profiles', [
+            'id' => $student->id,
+            'enrollment_category' => 'regular',
+            'address' => 'Original Address, Caloocan City',
+        ]);
+    }
+
+    public function test_one_address_part_rewrites_the_single_address_text_from_the_stored_parts(): void
+    {
+        $admission = $this->user(UserRole::AdmissionStaff, 'Admission Address', 'admission.address@grc.test');
+        $student = $this->student('Address Student', 'address.student@grc.test', '2026-08-01111');
+        $student->forceFill([
+            'street_barangay' => '12 Sampaguita Street',
+            'town_city' => 'Caloocan City',
+            'province' => 'Metro Manila',
+            'address' => '12 Sampaguita Street, Caloocan City, Metro Manila',
+        ])->save();
+        Sanctum::actingAs($admission);
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'town_city' => 'Valenzuela City',
+            'reason' => 'The student moved to another city.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.street_barangay', '12 Sampaguita Street')
+            ->assertJsonPath('data.town_city', 'Valenzuela City')
+            ->assertJsonPath('data.province', 'Metro Manila')
+            ->assertJsonPath('data.address', '12 Sampaguita Street, Valenzuela City, Metro Manila');
+    }
+
+    public function test_a_partly_typed_address_on_an_older_account_keeps_its_free_text_until_all_three_parts_are_known(): void
+    {
+        $admission = $this->user(UserRole::AdmissionStaff, 'Admission Partial', 'admission.partial@grc.test');
+        $student = $this->student('Older Student', 'older.student@grc.test', '2026-08-01114');
+        Sanctum::actingAs($admission);
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'street_barangay' => '5 Mabini Street',
+            'reason' => 'Started typing the address parts.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.street_barangay', '5 Mabini Street')
+            ->assertJsonPath('data.address', 'Original Address, Caloocan City');
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'town_city' => 'Malabon City',
+            'province' => 'Metro Manila',
+            'reason' => 'Finished the address parts.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.address', '5 Mabini Street, Malabon City, Metro Manila');
+    }
+
+    public function test_a_detail_admission_types_is_no_longer_listed_as_a_generated_value(): void
+    {
+        $admission = $this->user(UserRole::AdmissionStaff, 'Admission Real Values', 'admission.real@grc.test');
+        $student = $this->student('Generated Student', 'generated.student@grc.test', '2026-08-01112');
+        $student->forceFill([
+            'gender' => 'F',
+            'birth_date' => '2004-01-01',
+            'citizenship' => 'Filipino',
+            'contact_number' => '09000000000',
+            'demographics_demo_fields' => ['gender', 'birth_date', 'contact_number'],
+        ])->save();
+        Sanctum::actingAs($admission);
+
+        $this->getJson('/api/v1/student-profiles/'.$student->id)
+            ->assertOk()
+            ->assertJsonPath('data.generated_fields', ['gender', 'birth_date', 'contact_number']);
+
+        // The correction form sends every detail it shows: a value sent unchanged was not typed by anyone,
+        // so it stays generated.
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'gender' => 'F',
+            'birth_date' => '2004-01-01',
+            'contact_number' => '09000000000',
+            'citizenship' => 'Filipino',
+            'reason' => 'Saved with nothing changed.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.generated_fields', ['gender', 'birth_date', 'contact_number']);
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'gender' => 'F',
+            'birth_date' => '2004-09-30',
+            'contact_number' => '09171234567',
+            'reason' => 'The student gave the real details.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.generated_fields', ['gender']);
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'gender' => 'M',
+            'reason' => 'The student gave the real gender.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.generated_fields', []);
+
+        $this->assertDatabaseHas('student_profiles', ['id' => $student->id, 'demographics_demo_fields' => null]);
+    }
+
+    public function test_a_correction_refuses_a_future_birth_date_and_an_invalid_contact_number_or_gender(): void
+    {
+        $admission = $this->user(UserRole::AdmissionStaff, 'Admission Validator', 'admission.details@grc.test');
+        $student = $this->student('Details Student', 'details.student@grc.test', '2026-08-01113');
+        Sanctum::actingAs($admission);
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'gender' => 'X',
+            'birth_date' => now()->addDay()->format('Y-m-d'),
+            'contact_number' => 'call me',
+            'reason' => 'Trying wrong values.',
+            'identity_verified_in_person' => true,
+        ])->assertUnprocessable()
+            ->assertJsonStructure(['error' => ['errors' => ['gender', 'birth_date', 'contact_number']]]);
     }
 
     public function test_admission_can_resend_setup_for_a_pending_account_but_not_an_active_account(): void

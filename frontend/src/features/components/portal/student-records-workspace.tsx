@@ -95,6 +95,12 @@ import {
 } from "@/features/schemas/admission-schema"
 
 const YEAR_LEVEL_OPTIONS = [1, 2, 3, 4] as const
+/** Nearly every student is Filipino; Admission changes it for the few who are not. */
+const DEFAULT_CITIZENSHIP = "Filipino"
+const GENDER_OPTIONS = [
+  { value: "F", label: "Female" },
+  { value: "M", label: "Male" },
+] as const
 type CreateValues = z.infer<typeof provisionStudentSchema>
 
 /**
@@ -172,10 +178,13 @@ function CreateAccountPanel() {
   const mutation = useProvisionStudentMutation()
   const resend = useResendAccountSetupInvitationMutation()
   const [created, setCreated] = useState<StudentProfile | null>(null)
+  // Bumped when the form is reset from code (after a save, or "Clear form"): a Select whose value goes
+  // back to nothing otherwise keeps showing the old choice, so each one is mounted again.
+  const [formEpoch, setFormEpoch] = useState(0)
   // What Admission has typed survives a tab switch, leaving the page and an accidental reload:
   // a long form that is lost halfway is the thing staff complain about.
   const { form, draft } = useDraftForm<CreateValues>({
-    formKey: "admission.create-account.v1",
+    formKey: "admission.create-account.v2",
     resolver: zodResolver(provisionStudentSchema),
     defaultValues: {
       first_name: "",
@@ -183,7 +192,12 @@ function CreateAccountPanel() {
       last_name: "",
       suffix: "",
       email: "",
-      address: "",
+      citizenship: DEFAULT_CITIZENSHIP,
+      contact_number: "",
+      street_barangay: "",
+      town_city: "",
+      province: "",
+      birth_date: "",
       has_existing_student_number: false,
       program_id: 0,
       year_level: 1,
@@ -274,14 +288,21 @@ function CreateAccountPanel() {
         last_name: "",
         suffix: "",
         email: "",
-        address: "",
+        // Each student has their own details: none are carried over to the next account.
+        gender: undefined,
+        birth_date: "",
+        citizenship: DEFAULT_CITIZENSHIP,
+        contact_number: "",
+        street_barangay: "",
+        town_city: "",
+        province: "",
         has_existing_student_number: false,
         student_number: undefined,
-        // Each account gets a deliberate choice: the category and type are not carried over.
-        enrollment_category: undefined,
+        // Each account gets a deliberate choice: the type is not carried over.
         student_type: undefined,
         requirement_type_ids: [],
       })
+      setFormEpoch((epoch) => epoch + 1)
       // The account exists now: nothing typed is worth keeping. What the form still holds (the
       // program and year, carried over to the next student) is its new starting point.
       draft.clear()
@@ -359,7 +380,10 @@ function CreateAccountPanel() {
                   <FieldDescription>Optional.</FieldDescription>
                   <FieldError>{errors.suffix?.message}</FieldError>
                 </Field>
-                <Field data-invalid={Boolean(errors.email)}>
+                <Field
+                  className="md:col-span-2"
+                  data-invalid={Boolean(errors.email)}
+                >
                   <FieldLabel htmlFor="record-email">Email address</FieldLabel>
                   <Input
                     id="record-email"
@@ -368,22 +392,112 @@ function CreateAccountPanel() {
                   />
                   <FieldError>{errors.email?.message}</FieldError>
                 </Field>
+                <Field data-invalid={Boolean(errors.gender)}>
+                  <FieldLabel htmlFor="record-gender">Gender</FieldLabel>
+                  {/* After a reset the Selects below are mounted again (`formEpoch`): an empty value on a Select that already had a choice makes the browser pick its first option. */}
+                  <Controller
+                    control={control}
+                    name="gender"
+                    render={({ field }) => (
+                      <Select
+                        key={formEpoch}
+                        value={field.value ?? ""}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger
+                          id="record-gender"
+                          className="w-full"
+                          aria-invalid={Boolean(errors.gender)}
+                        >
+                          <SelectValue placeholder="Select a gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GENDER_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <FieldError>{errors.gender?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.birth_date)}>
+                  <FieldLabel htmlFor="record-birth-date">
+                    Birth date
+                  </FieldLabel>
+                  <Input
+                    id="record-birth-date"
+                    type="date"
+                    aria-invalid={Boolean(errors.birth_date)}
+                    {...register("birth_date")}
+                  />
+                  <FieldError>{errors.birth_date?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.citizenship)}>
+                  <FieldLabel htmlFor="record-citizenship">
+                    Citizenship
+                  </FieldLabel>
+                  <Input
+                    id="record-citizenship"
+                    maxLength={100}
+                    {...register("citizenship")}
+                  />
+                  <FieldError>{errors.citizenship?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.contact_number)}>
+                  <FieldLabel htmlFor="record-contact-number">
+                    Contact number
+                  </FieldLabel>
+                  <Input
+                    id="record-contact-number"
+                    type="tel"
+                    autoComplete="off"
+                    placeholder="09XX XXX XXXX"
+                    maxLength={30}
+                    aria-invalid={Boolean(errors.contact_number)}
+                    {...register("contact_number")}
+                  />
+                  <FieldError>{errors.contact_number?.message}</FieldError>
+                </Field>
                 <Field
                   className="md:col-span-2"
-                  data-invalid={Boolean(errors.address)}
+                  data-invalid={Boolean(errors.street_barangay)}
                 >
-                  <FieldLabel htmlFor="record-address">
-                    Complete address
+                  <FieldLabel htmlFor="record-street-barangay">
+                    Street / barangay
                   </FieldLabel>
-                  <Textarea
-                    id="record-address"
-                    rows={3}
-                    {...register("address")}
+                  <Input
+                    id="record-street-barangay"
+                    autoComplete="off"
+                    {...register("street_barangay")}
                   />
                   <FieldDescription>
-                    Use the printable address for future COR records.
+                    The address is printed on future COR records and the CHED
+                    reports.
                   </FieldDescription>
-                  <FieldError>{errors.address?.message}</FieldError>
+                  <FieldError>{errors.street_barangay?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.town_city)}>
+                  <FieldLabel htmlFor="record-town-city">
+                    Town / city
+                  </FieldLabel>
+                  <Input
+                    id="record-town-city"
+                    autoComplete="off"
+                    {...register("town_city")}
+                  />
+                  <FieldError>{errors.town_city?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.province)}>
+                  <FieldLabel htmlFor="record-province">Province</FieldLabel>
+                  <Input
+                    id="record-province"
+                    autoComplete="off"
+                    {...register("province")}
+                  />
+                  <FieldError>{errors.province?.message}</FieldError>
                 </Field>
                 <Field data-invalid={Boolean(errors.student_number)}>
                   <FieldLabel htmlFor="record-number">
@@ -463,6 +577,7 @@ function CreateAccountPanel() {
                     name="program_id"
                     render={({ field }) => (
                       <Select
+                        key={formEpoch}
                         value={field.value ? String(field.value) : ""}
                         onValueChange={(value) => field.onChange(Number(value))}
                       >
@@ -496,6 +611,7 @@ function CreateAccountPanel() {
                     name="year_level"
                     render={({ field }) => (
                       <Select
+                        key={formEpoch}
                         value={String(field.value)}
                         onValueChange={(v) => field.onChange(Number(v))}
                       >
@@ -516,34 +632,6 @@ function CreateAccountPanel() {
                     )}
                   />
                 </Field>
-                <Field data-invalid={Boolean(errors.enrollment_category)}>
-                  <FieldLabel htmlFor="record-category">
-                    Enrollment category
-                  </FieldLabel>
-                  <Controller
-                    control={control}
-                    name="enrollment_category"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value ?? ""}
-                        onValueChange={field.onChange}
-                      >
-                        <SelectTrigger
-                          id="record-category"
-                          className="w-full"
-                          aria-invalid={Boolean(errors.enrollment_category)}
-                        >
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="regular">Regular</SelectItem>
-                          <SelectItem value="irregular">Irregular</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  <FieldError>{errors.enrollment_category?.message}</FieldError>
-                </Field>
                 <Field data-invalid={Boolean(errors.student_type)}>
                   <FieldLabel htmlFor="record-student-type">
                     Student type
@@ -553,6 +641,7 @@ function CreateAccountPanel() {
                     name="student_type"
                     render={({ field }) => (
                       <Select
+                        key={formEpoch}
                         value={field.value ?? ""}
                         onValueChange={field.onChange}
                       >
@@ -652,6 +741,7 @@ function CreateAccountPanel() {
                         disabled={mutation.isPending}
                         onClick={() => {
                           draft.discard()
+                          setFormEpoch((epoch) => epoch + 1)
                           clearErrors()
                         }}
                       >
@@ -762,6 +852,48 @@ function CreateAccountPanel() {
 const editSchema = updateStudentProfileSchema
 type EditValues = z.infer<typeof editSchema>
 
+const DETAIL_KEYS = [
+  "gender",
+  "birth_date",
+  "citizenship",
+  "contact_number",
+  "street_barangay",
+  "town_city",
+  "province",
+] as const
+
+/** The CHED details left blank are dropped before they are checked or sent. */
+function withoutBlankDetails(values: EditValues): EditValues {
+  const kept = { ...values }
+  for (const key of DETAIL_KEYS) {
+    const value = kept[key]
+    if (
+      value === undefined ||
+      (typeof value === "string" && value.trim() === "")
+    ) {
+      delete kept[key]
+    }
+  }
+  return kept
+}
+
+/** Tells Admission a detail was generated for the demo and still needs the student's real value. */
+function GeneratedHint({
+  profile,
+  field,
+}: {
+  profile: StudentProfile
+  field: (typeof DETAIL_KEYS)[number]
+}) {
+  if (!profile.generated_fields.includes(field)) return null
+
+  return (
+    <FieldDescription>
+      Generated for the demo. Enter the student&apos;s real value.
+    </FieldDescription>
+  )
+}
+
 function StudentRecordDialog({
   profile,
   onClose,
@@ -773,7 +905,10 @@ function StudentRecordDialog({
   const update = useUpdateStudentProfileMutation()
   const resend = useResendAccountSetupInvitationMutation()
   const { control, handleSubmit, register, reset } = useForm<EditValues>({
-    resolver: zodResolver(editSchema),
+    resolver: (values, context, options) =>
+      // An account that has no value for one of the CHED details yet may keep it empty: a blank box
+      // is "leave as it is", not a value to check.
+      zodResolver(editSchema)(withoutBlankDetails(values), context, options),
   })
 
   useEffect(() => {
@@ -784,13 +919,18 @@ function StudentRecordDialog({
       last_name: profile.last_name,
       suffix: profile.suffix ?? "",
       email: profile.email,
-      address: profile.address ?? "",
+      gender: profile.gender ?? undefined,
+      birth_date: profile.birth_date ?? "",
+      citizenship: profile.citizenship ?? "",
+      contact_number: profile.contact_number ?? "",
+      street_barangay: profile.street_barangay ?? "",
+      town_city: profile.town_city ?? "",
+      province: profile.province ?? "",
       ...(profile.academic_setup_editable
         ? {
             student_number: profile.student_number,
             program_id: profile.program_id,
             year_level: profile.year_level,
-            enrollment_category: profile.enrollment_category ?? undefined,
             student_type: profile.student_type ?? undefined,
             admission_status: profile.admission_status,
           }
@@ -860,9 +1000,95 @@ function StudentRecordDialog({
                 <FieldLabel htmlFor="edit-email">Email</FieldLabel>
                 <Input id="edit-email" type="email" {...register("email")} />
               </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-gender">Gender</FieldLabel>
+                <Controller
+                  control={control}
+                  name="gender"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ""}
+                      onValueChange={field.onChange}
+                    >
+                      <SelectTrigger id="edit-gender" className="w-full">
+                        <SelectValue placeholder="Select a gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GENDER_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <GeneratedHint profile={profile} field="gender" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-birth-date">Birth date</FieldLabel>
+                <Input
+                  id="edit-birth-date"
+                  type="date"
+                  {...register("birth_date")}
+                />
+                <GeneratedHint profile={profile} field="birth_date" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-citizenship">Citizenship</FieldLabel>
+                <Input
+                  id="edit-citizenship"
+                  maxLength={100}
+                  {...register("citizenship")}
+                />
+                <GeneratedHint profile={profile} field="citizenship" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-contact-number">
+                  Contact number
+                </FieldLabel>
+                <Input
+                  id="edit-contact-number"
+                  type="tel"
+                  autoComplete="off"
+                  maxLength={30}
+                  {...register("contact_number")}
+                />
+                <GeneratedHint profile={profile} field="contact_number" />
+              </Field>
               <Field className="md:col-span-2">
-                <FieldLabel htmlFor="edit-address">Complete address</FieldLabel>
-                <Textarea id="edit-address" {...register("address")} />
+                <FieldLabel htmlFor="edit-street-barangay">
+                  Street / barangay
+                </FieldLabel>
+                <Input
+                  id="edit-street-barangay"
+                  autoComplete="off"
+                  {...register("street_barangay")}
+                />
+                <GeneratedHint profile={profile} field="street_barangay" />
+                {profile.address && !profile.street_barangay && (
+                  <FieldDescription>
+                    Address on file: {profile.address}
+                  </FieldDescription>
+                )}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-town-city">Town / city</FieldLabel>
+                <Input
+                  id="edit-town-city"
+                  autoComplete="off"
+                  {...register("town_city")}
+                />
+                <GeneratedHint profile={profile} field="town_city" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-province">Province</FieldLabel>
+                <Input
+                  id="edit-province"
+                  autoComplete="off"
+                  {...register("province")}
+                />
+                <GeneratedHint profile={profile} field="province" />
               </Field>
               {profile.academic_setup_editable ? (
                 <>
@@ -913,29 +1139,6 @@ function StudentRecordDialog({
                       min={1}
                       max={4}
                       {...register("year_level", { valueAsNumber: true })}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="edit-category">
-                      Enrollment category
-                    </FieldLabel>
-                    <Controller
-                      control={control}
-                      name="enrollment_category"
-                      render={({ field }) => (
-                        <Select
-                          value={field.value ?? ""}
-                          onValueChange={field.onChange}
-                        >
-                          <SelectTrigger id="edit-category" className="w-full">
-                            <SelectValue placeholder="Select a category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="regular">Regular</SelectItem>
-                            <SelectItem value="irregular">Irregular</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
                     />
                   </Field>
                   <Field>

@@ -10,6 +10,7 @@ use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\PersonName;
+use App\Domain\Identity\StudentAddress;
 use App\Domain\Identity\StudentType;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
@@ -39,7 +40,7 @@ final class ProvisionStudent
     ) {}
 
     /**
-     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, has_existing_student_number?: bool, student_number?: ?string, program_id: int, year_level: int, enrollment_category: string, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>}  $data
+     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, gender: string, birth_date: string, citizenship: string, contact_number: string, street_barangay: string, town_city: string, province: string, has_existing_student_number?: bool, student_number?: ?string, program_id: int, year_level: int, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>}  $data
      */
     public function handle(
         array $data,
@@ -89,7 +90,9 @@ final class ProvisionStudent
                 'account_setup_completed_at' => null,
             ]);
 
-            $category = EnrollmentCategory::from($data['enrollment_category']);
+            // Admission no longer chooses Regular or Irregular: the system derives it from the student's
+            // record when there is one (ADR 0021, 0047), so every new account starts Regular.
+            $category = EnrollmentCategory::Regular;
             $studentType = StudentType::from($data['student_type']);
             // The checklist is the evidence of what was handed in. The account counts as "requirements
             // verified" only when every requirement that applies was ticked (or, for an older caller that
@@ -114,16 +117,24 @@ final class ProvisionStudent
                 'curriculum_id' => $curriculum->id,
                 'entry_year' => $entryYear,
                 'year_level' => $yearLevel,
-                // Chosen by Admission on the form (stakeholder Doc 20) — never
-                // written to enrollment_category_derived_at, which is
-                // reserved for ADR 0021's separate, later, grade-based
-                // per-term reclassification.
+                // Never written to enrollment_category_derived_at, which is reserved for ADR 0021's
+                // separate, later, grade-based per-term reclassification.
                 'enrollment_category' => $category->value,
                 'student_type' => $studentType->value,
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
                 'financial_status' => $data['financial_status'] ?? null,
-                'address' => $data['address'],
+                // The details the CHED forms ask for, typed by Admission (ADR 0049): real values, so no
+                // field is marked as generated. `address` is the three address parts written as one text.
+                'gender' => $data['gender'],
+                'birth_date' => $data['birth_date'],
+                'citizenship' => $data['citizenship'],
+                'contact_number' => $data['contact_number'],
+                'street_barangay' => $data['street_barangay'],
+                'town_city' => $data['town_city'],
+                'province' => $data['province'],
+                'address' => StudentAddress::compose($data['street_barangay'], $data['town_city'], $data['province']),
+                'demographics_demo_fields' => null,
                 'requirements_verified_at' => $requirementsComplete ? now() : null,
                 'requirements_verified_by' => $requirementsComplete ? $actor->id : null,
                 // A Transferee or Returnee has 7 days to get the enrollment approved (ADR 0048).
