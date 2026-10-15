@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\V1;
 
 use App\Domain\Academic\GradeStatus;
+use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\AcademicStanding;
@@ -22,6 +23,8 @@ use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\StudentSchedulePreference;
 use App\Models\Subject;
+use App\Models\SubjectPrerequisite;
+use App\Models\TransfereeCredit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -251,6 +254,102 @@ final class EnrollmentBlocksEndpointTest extends TestCase
             'window_closed',
             array_column($response->json('data.0.reasons'), 'code'),
         );
+    }
+
+    private function credit(StudentProfile $student, Subject $subject, TransfereeCreditStatus $status = TransfereeCreditStatus::Approved): void
+    {
+        TransfereeCredit::create([
+            'student_id' => $student->id, 'source_institution' => 'Other University',
+            'source_subject_code' => 'EXT101', 'source_subject_title' => 'Previous school subject',
+            'credited_units' => 3, 'subject_id' => $subject->id, 'status' => $status,
+        ]);
+    }
+
+    /**
+     * Owner, 2026-10-15: a transferee credited for NSTP 1 was still treated as Regular and offered the whole
+     * block, NSTP 1 included. A subject the student is credited for cannot be enrolled again, so the student
+     * is Irregular and enrols per subject: no block is offered, and the category on the profile says so.
+     */
+    public function test_a_student_credited_for_a_subject_of_the_block_becomes_irregular_and_is_offered_no_block(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        [$credited] = $this->makeBlockSection($term, $plan, 'IT101', 'NSTP1');
+        $this->makeBlockSection($term, $plan, 'IT101', 'CS101');
+        $student = $this->makeStudent($curriculum, 1, 'regular');
+        $this->credit($student, $credited);
+        // The category heals itself on use, attributed to a Registrar Head, as it does in production.
+        User::create([
+            'name' => 'Registrar Head', 'email' => 'head.block@grc.test', 'password' => self::PASSWORD,
+            'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
+        ]);
+
+        $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id)
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        self::assertSame('irregular', $student->fresh()->enrollment_category);
+    }
+
+    public function test_a_block_cannot_be_submitted_by_a_student_credited_for_one_of_its_subjects(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        [$credited] = $this->makeBlockSection($term, $plan, 'IT101', 'NSTP1');
+        $this->makeBlockSection($term, $plan, 'IT101', 'CS101');
+        $student = $this->makeStudent($curriculum, 1, 'regular');
+        $this->credit($student, $credited);
+
+        $this->withToken($this->tokenFor($student))
+            ->postJson('/api/v1/enrollments', ['academic_term_id' => $term->id, 'block_code' => 'IT101'])
+            ->assertUnprocessable();
+
+        $this->assertDatabaseCount('enrollments', 0);
+    }
+
+    public function test_a_credit_on_a_subject_outside_the_block_leaves_a_regular_student_with_a_selectable_block(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        $this->makeBlockSection($term, $plan, 'IT101', 'CS101');
+        $elsewhere = Subject::create(['code' => 'ZZ900', 'title' => 'Not in this block', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $student = $this->makeStudent($curriculum, 1, 'regular');
+        $this->credit($student, $elsewhere);
+
+        $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id)
+            ->assertOk()
+            ->assertJsonPath('data.0.is_selectable', true);
+
+        self::assertSame('regular', $student->fresh()->enrollment_category);
+    }
+
+    /**
+     * The classifier counts a credited prerequisite as met, so a student it calls Regular for that reason must
+     * not then find the block withheld because the block pool only looked at grades.
+     */
+    public function test_a_credited_prerequisite_does_not_withhold_the_block_from_a_regular_student(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        [$dependent] = $this->makeBlockSection($term, $plan, 'IT101', 'CS201');
+        $prerequisite = Subject::create(['code' => 'CS100', 'title' => 'Introduction', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $placement = CurriculumSubject::query()->where('curriculum_id', $curriculum->id)->where('subject_id', $dependent->id)->firstOrFail();
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $prerequisite->id, 'minimum_grade' => '3.00',
+        ]);
+        $student = $this->makeStudent($curriculum, 1, 'regular');
+        $this->credit($student, $prerequisite);
+
+        $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id)
+            ->assertOk()
+            ->assertJsonPath('data.0.is_selectable', true);
     }
 
     public function test_an_incomplete_schedule_marks_the_block_unselectable(): void

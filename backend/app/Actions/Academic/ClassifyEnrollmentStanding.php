@@ -27,8 +27,10 @@ use Illuminate\Database\Eloquent\Collection;
  * student is Regular for a term when they can take exactly the standard
  * block subject set the Program Chair published for their year level —
  * nothing needs adding (an offered backlog subject outside the block) and
- * nothing needs removing (a block subject already passed, or blocked by an
- * unmet prerequisite).
+ * nothing needs removing (a block subject the student is already credited for,
+ * or one blocked by an unmet prerequisite). A block subject passed with a grade
+ * does not make a student Irregular; a credited one does (owner, 2026-10-15),
+ * because a credit is not a seat to take again.
  *
  * `classifyMany()` is the batch entry point — every student passed in MUST
  * share the same `(curriculum_id, year_level)`; the caller
@@ -133,10 +135,23 @@ final readonly class ClassifyEnrollmentStanding
                     continue;
                 }
 
+                if (isset($credited[$subjectId])) {
+                    // A subject the student is already CREDITED for (a transferee credit, or a returnee's
+                    // curriculum migration) cannot be enrolled again: the standard block has to lose it, so
+                    // the student enrols per subject as an Irregular student (owner, 2026-10-15: a student
+                    // credited for NSTP 1 was still treated as Regular and offered the whole block).
+                    $reasons[] = [
+                        'code' => 'needs_removing_credited',
+                        'message' => "{$placement->subject->code} is already credited, so it is taken out of your block.",
+                    ];
+
+                    continue;
+                }
+
                 if ($this->isCompletedEarly($subjectId, $marks, $credited, $term->id)) {
-                    // Having already passed a subject is a normal academic achievement and
-                    // must never make a student irregular. Only unmet prerequisites or backlogs
-                    // from prior failures trigger irregular standing.
+                    // Having already passed a subject with a grade is a normal academic achievement and
+                    // must never make a student irregular. Only unmet prerequisites, credited subjects or
+                    // backlogs from prior failures trigger irregular standing.
                     continue;
                 }
 

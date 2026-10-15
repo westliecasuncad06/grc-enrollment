@@ -59,4 +59,19 @@ describe("EnrollmentCategoryExplanation", () => {
     expect(screen.getByText(/“Backlog”/)).toBeInTheDocument()
     expect(screen.getByText(/return to Regular automatically/)).toBeInTheDocument()
   })
+
+  it("also says a credited subject takes a student out of the block and is not offered again", () => {
+    render(
+      <EnrollmentCategoryExplanation
+        viewer={viewer({ audience: "irregular", label: "Irregular Students" })}
+      />,
+    )
+
+    expect(
+      screen.getByText(/already credited from your previous school or curriculum/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/A subject you are already credited for is not offered again/),
+    ).toBeInTheDocument()
+  })
 })

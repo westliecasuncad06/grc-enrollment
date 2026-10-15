@@ -559,6 +559,105 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         self::assertFalse($this->studentWithACreditedBacklogSubject(TransfereeCreditStatus::Pending)->isRegular());
     }
 
+    /**
+     * A transferee whose block (the standard set the Program Chair published for their year level) has
+     * a subject the student may already be credited for: CS201 is in the block, and so is CS202.
+     */
+    private function studentWithACreditOnABlockSubject(TransfereeCreditStatus $status): ClassificationVerdict
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 2);
+        $credited = $this->makeSubject('CS201');
+        $other = $this->makeSubject('CS202');
+        foreach ([$credited, $other] as $subject) {
+            $this->placeSubject($curriculum, $subject, 2);
+            $this->makeBlockSection($term, $plan, $subject);
+        }
+        $student = $this->makeStudent($curriculum, 'block-credit-'.$status->value.'@grc.test');
+        TransfereeCredit::create([
+            'student_id' => $student->id, 'source_institution' => 'Other University',
+            'source_subject_code' => 'EXT201', 'source_subject_title' => 'Data Structures',
+            'credited_units' => 3, 'subject_id' => $credited->id, 'status' => $status,
+        ]);
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+        self::assertNotNull($verdict);
+
+        return $verdict;
+    }
+
+    /**
+     * Owner, 2026-10-15 (a student credited for NSTP 1 was still enrolled as Regular and offered the whole
+     * block): a block subject the student is already credited for cannot be taken again, so they enrol per
+     * subject as an Irregular student. A subject passed with a grade keeps its own rule (see the tests above).
+     */
+    public function test_an_approved_credit_on_a_block_subject_makes_the_student_irregular(): void
+    {
+        $verdict = $this->studentWithACreditOnABlockSubject(TransfereeCreditStatus::Approved);
+
+        self::assertFalse($verdict->isRegular());
+        self::assertSame(['needs_removing_credited'], array_column($verdict->reasons, 'code'));
+        self::assertStringContainsString('CS201', $verdict->reasons[0]['message']);
+        self::assertStringContainsString('credited', $verdict->reasons[0]['message']);
+    }
+
+    public function test_a_credit_the_chair_passed_on_makes_the_student_irregular_before_the_head_decides(): void
+    {
+        self::assertFalse($this->studentWithACreditOnABlockSubject(TransfereeCreditStatus::Endorsed)->isRegular());
+    }
+
+    public function test_a_credit_still_with_the_program_chair_leaves_the_student_regular(): void
+    {
+        self::assertTrue($this->studentWithACreditOnABlockSubject(TransfereeCreditStatus::Pending)->isRegular());
+    }
+
+    public function test_a_credit_the_registrar_head_rejected_leaves_the_student_regular(): void
+    {
+        self::assertTrue($this->studentWithACreditOnABlockSubject(TransfereeCreditStatus::Rejected)->isRegular());
+    }
+
+    public function test_a_curriculum_migration_credit_on_a_block_subject_makes_a_returnee_irregular(): void
+    {
+        $term = $this->makeTerm();
+        $target = $this->makeCurriculum();
+        $source = Curriculum::create([
+            'program_id' => $target->program_id, 'name' => 'BSCS Previous Curriculum',
+            'effective_school_year' => '2023-2024', 'status' => CurriculumStatus::Archived,
+        ]);
+        $plan = $this->makePlan($term, $target, 2);
+        $newSubject = $this->makeSubject('CS201');
+        $oldSubject = $this->makeSubject('CS-OLD');
+        $this->placeSubject($target, $newSubject, 2);
+        $this->placeSubject($source, $oldSubject, 2);
+        $this->makeBlockSection($term, $plan, $newSubject);
+        $student = $this->makeStudent($target, 'returnee-block-credit@grc.test');
+        $registrar = User::create([
+            'name' => 'Registrar', 'email' => 'registrar.block.credit@grc.test',
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+        ]);
+        $priorTerm = $this->makeTerm('1st');
+        $grade = $this->lockGrade($student, $oldSubject, $priorTerm, '2.00');
+        $equivalency = CurriculumSubjectEquivalency::create([
+            'source_curriculum_id' => $source->id, 'target_curriculum_id' => $target->id,
+            'source_subject_id' => $oldSubject->id, 'target_subject_id' => $newSubject->id,
+        ]);
+        $migration = CurriculumMigration::create([
+            'student_id' => $student->id, 'source_curriculum_id' => $source->id,
+            'target_curriculum_id' => $target->id, 'processed_by' => $registrar->id, 'migrated_at' => now(),
+        ]);
+        CurriculumMigrationCredit::create([
+            'curriculum_migration_id' => $migration->id, 'curriculum_subject_equivalency_id' => $equivalency->id,
+            'source_academic_grade_id' => $grade->id, 'target_subject_id' => $newSubject->id,
+        ]);
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertFalse($verdict->isRegular());
+        self::assertSame(['needs_removing_credited'], array_column($verdict->reasons, 'code'));
+    }
+
     public function test_classify_many_batches_across_students_sharing_curriculum_and_year_level(): void
     {
         $priorTerm = $this->makeTerm('1st');

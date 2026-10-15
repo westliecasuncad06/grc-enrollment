@@ -2,6 +2,7 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Actions\Academic\ResolveCreditedSubjectIds;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Academic\PrerequisiteEvaluator;
 use App\Domain\Academic\PrerequisiteVerdict;
@@ -69,6 +70,10 @@ final readonly class BuildEnrollmentBlockPool
         // student, and every block is scored against the same preference.
         $preference = StudentSchedulePreference::query()->where('student_id', $student->id)->first();
 
+        // Subjects the student is credited for (a transferee credit, including one the Program Chair passed on,
+        // or a curriculum migration): a credited prerequisite is met, as `ClassifyEnrollmentStanding` counts it.
+        $credited = (new ResolveCreditedSubjectIds)->forStudents([$student->id], $student->curriculum_id, includeEndorsed: true)[$student->id] ?? [];
+
         $blocks = $sections
             ->groupBy('section_code')
             ->map(fn ($blockSections, string $blockCode): EnrollmentBlock => $this->buildBlock(
@@ -78,6 +83,7 @@ final readonly class BuildEnrollmentBlockPool
                 $context->viewerWindowIsOpen || $ignoreEnrollmentWindow,
                 $alreadyEnrolled,
                 $preference,
+                $credited,
             ));
 
         return array_values($blocks->all());
@@ -85,6 +91,7 @@ final readonly class BuildEnrollmentBlockPool
 
     /**
      * @param  list<Section>  $sections
+     * @param  array<int, true>  $credited  subject id => the student is credited for it
      */
     private function buildBlock(
         StudentProfile $student,
@@ -93,6 +100,7 @@ final readonly class BuildEnrollmentBlockPool
         bool $windowIsOpen,
         bool $alreadyEnrolled,
         ?StudentSchedulePreference $preference,
+        array $credited,
     ): EnrollmentBlock {
         /** @var list<array{code: string, message: string}> $reasons */
         $reasons = [];
@@ -148,6 +156,10 @@ final readonly class BuildEnrollmentBlockPool
 
             $prerequisites = $placement !== null ? $placement->prerequisites : [];
             foreach ($prerequisites as $edge) {
+                if (isset($credited[$edge->prerequisite_subject_id])) {
+                    continue;
+                }
+
                 $prerequisiteGrade = $this->latestLockedGrade($student->id, $edge->prerequisite_subject_id);
                 $verdict = $this->verdictFor($prerequisiteGrade, $edge->minimum_grade);
 

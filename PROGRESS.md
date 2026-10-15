@@ -1,5 +1,39 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-15 (re-applied presentation state) — Database restored to Presentation State on Local and Production VPS (Term 6 current, 26,023 locked grades, ahead data purged, test accounts #7122 and #7123 removed, counter reset to 1931) (DONE)
+
+- **User request:**
+  - Make `2025-2026 · 2nd` the current academic term.
+  - Colleges CCS, COE, COA, and CBAE have PUBLISHED schedules.
+  - Term-wide enrollment closed in May/June (`2026-05-31`).
+  - All students in `2025-2026 · 2nd` have locked grades (26,023 locked, 0 unlocked).
+  - All data real and preserved (including all seeded records and CHED demographics).
+  - Delete any data produced ahead of 2025-2026 (subsequent terms, sections, forecasts, generated test student accounts, queue tickets, rooms) to ensure clean database ready for system presentation and manual testing.
+- **Production Hostinger VPS Database (`201.18.211.197`):**
+  - Verified backup taken: `/root/pre-presentation-restore-20261015103022.sql.gz` (7.5 MB).
+  - Executed `php /tmp/r.php --apply --notifications`:
+    - Term #6 un-archived and restored to `semester_ongoing`.
+    - `academic_term_current_slots` row 1 points back to Term #6.
+    - Purged ahead Term #43 (along with its 306 sections, 69 forecasts, 306 faculty recommendations, and 1 rehearsal enrollment).
+    - Purged 2 test student accounts: User #7122 (`we***@gmail.com`, `2026-10-01932`) and User #7123 (`mh***@gmail.com`, `2026-10-01933`).
+    - 2026 student counter returned from 1933 to **1931** (next assigned student number will cleanly be `2026-10-01931`).
+    - Queue cycle #11 deleted, cycle #6 reopened.
+    - Verified all 26,023 grades locked, 757 published sections, 2,089 enrolled students.
+    - CHED demographics intact: 6,369 students with gender and birth date.
+    - Re-cached Laravel config and routes (`config:cache`, `route:cache`).
+    - Health check: `https://api.grc-enrollment.tech/api/v1/health` ➔ `200 OK`.
+- **Local Dev Database (:3306):**
+  - Confirmed via `scripts/restore_presentation_term6.php`: Term 6 `semester_ongoing`, current slot pointing to Term 6, 26,023 locked grades, 0 test accounts.
+
+## 2026-10-15 (very late night) — A subject the student is credited for now makes them Irregular and is never offered again (a Transferee credited for NSTP 1 was still Regular and offered the whole block) — BUILT, TESTED (local + real browser), COMMITTED and PUSHED (commit in the git log); no migration
+
+- **Owner report (Taglish, two screenshots of "Mharc Angelo S. Cardenas", student number 2026-10-01933, BS IT):** NSTP 1 is "Credited" (grade 1.00, previous school) on the Prospectus, yet the Enrollment page says "You're Regular this semester" and offers block IT101 (14 subjects, 30.5 units). The system must detect such a student as Irregular and, for every Transferee and Returnee, never give or recommend a subject that is already credited.
+- **Cause (two places):** (1) `ClassifyEnrollmentStanding` skipped any block subject the student had "completed early", and its completed test counted credits, so a credit never made anyone Irregular and the stored/derived category stayed Regular; (2) `BuildEnrollmentBlockPool` (what a Regular student may submit) looked only at grades: it did not notice a credited subject inside a block, and it treated a credited PREREQUISITE as unmet, so a student the classifier called Regular because a credit covered a prerequisite would have found their block withheld.
+- **Fix (ADR 0051):** a block subject the student is credited for (approved transferee credit, one the Chair passed on, or a returnee's curriculum migration credit) adds the reason `needs_removing_credited` and makes the student Irregular; a credit still `pending` or `rejected` changes nothing; a subject passed by GRADE keeps its old rule (a 2026-08 real-data regression is pinned by two tests). The block pool counts a credited prerequisite as met. The per-subject pool already lists a credited subject as "completed", so it is not offered or recommended. The category re-derives itself when the student uses Enrollment and at the Chair's endorse / the Head's decisions (ADR 0050). The Irregular explanation on the Enrollment page (static text about failed/backlog subjects) now also names credited subjects and says a credited subject is not offered again.
+- **Tests (test-first, 7 new red then green):** `ClassifyEnrollmentStandingTest` (approved, endorsed, migration credit make Irregular with the new reason; pending and rejected do not), `EnrollmentBlocksEndpointTest` (a credited block subject: no block offered, the category flips to irregular, a block submission is refused; a credit outside the block leaves a Regular student a selectable block; a credited prerequisite does not withhold the block), `enrollment-category-explanation.test.tsx`. Backend, 12 directories on the private MariaDB, all exit 0, 2,540 tests: Unit 512, Auth 54, Billing 6, Console 47, Http 7, Mail 4, Models 24, Policies 54, Scripts 19, Api 1,476, Actions 316, Reports 21 (the `Database` directory not run: no schema change). Pint and PHPStan clean on the two changed actions. Frontend: `tsc` clean, ESLint clean, the explanation and Enrollment workspace tests 55/55 (the two touched frontend files were not Prettier-clean at HEAD either, so they were not reformatted).
+- **Real-browser check (scratch DB on :3310, private `php -S :8001`, owner's `next dev`; all removed afterwards):** a restricted Transferee credited for CS101 and MATH101 (both inside the block): the moment the Chair passed the credits on, the category became `irregular` with the notice "Your enrollment standing has been updated to Irregular: CS101 is already credited, so it is taken out of your block. MATH101 is already credited, ...", and the Enrollment page showed "Select your subjects" (the per-subject flow) listing only CS102 and ENG101 (CS101 and MATH101 appear nowhere). In the earlier credit-mapping pass (ADR 0050) the same student had been offered the whole block with both credited subjects in it: that pass missed it, this is the same defect.
+- **Production:** before the fix, read-only: 1 credited (student, subject) pair, inside the student's current block, student stored `regular` (the reported student); no curriculum migration credits. Another session's restore (entry above, `/root/pre-presentation-restore-20261015103022.sql.gz`) removed that test account (2026-10-01933), so the fix has no existing student to correct there; any other student is corrected the next time they use Enrollment, or with `php artisan students:reclassify` (`--dry-run` first).
+
 ## 2026-10-15 (late night) — CHED Excel downloads: the filled files now look like the owner's templates in Excel (data font, column widths, wrapped subject list, logo kept beside the title) — BUILT, VERIFIED IN EXCEL ITSELF, COMMITTED and PUSHED (commit in the git log); backend only, no migration
 
 - **Owner request (Taglish, four screenshots of the templates: `template_2024`, NSTP 2-B Graduates, NSTP 2-A, NSTP 2-B Enrollment):** when a list is downloaded as Excel it must look like the template, with the design and the logo.
