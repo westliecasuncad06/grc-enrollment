@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { TableFit } from "@/features/components/ui/table"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -340,7 +341,7 @@ export function AdvancePaymentWorkspace() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto rounded-md border">
+                <TableFit className="rounded-md border">
                   <table className="w-full text-left text-sm" aria-label="Student payment history">
                     <thead className="bg-muted/50 text-xs text-muted-foreground uppercase">
                       <tr>
@@ -373,7 +374,7 @@ export function AdvancePaymentWorkspace() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </TableFit>
               </CardContent>
             </Card>
           )}

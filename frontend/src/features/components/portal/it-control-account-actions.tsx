@@ -276,11 +276,11 @@ export function ItControlAccountActions({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       {!account.isArchived && (
         <Button
           type="button"
-          size="sm"
+          size="xs"
           variant="outline"
           aria-label={`Edit ${account.name}`}
           onClick={() => setDialog("edit")}
@@ -291,7 +291,7 @@ export function ItControlAccountActions({
       {account.isArchived ? (
         <Button
           type="button"
-          size="sm"
+          size="xs"
           variant="secondary"
           aria-label={`Restore ${account.name}`}
           onClick={() => setDialog("restore")}
@@ -301,7 +301,7 @@ export function ItControlAccountActions({
       ) : (
         <Button
           type="button"
-          size="sm"
+          size="xs"
           variant="secondary"
           aria-label={`Archive ${account.name}`}
           onClick={() => setDialog("archive")}
@@ -311,7 +311,7 @@ export function ItControlAccountActions({
       )}
       <Button
         type="button"
-        size="sm"
+        size="xs"
         variant="destructive"
         aria-label={`Delete ${account.name}`}
         onClick={() => setDialog("delete")}

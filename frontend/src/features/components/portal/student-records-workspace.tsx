@@ -1622,7 +1622,7 @@ export function StudentRecordsWorkspace() {
     >
       <Tabs defaultValue="create" className="gap-5">
         <TabsList
-          className="h-auto w-full justify-start overflow-x-auto p-1 sm:w-fit"
+          className="h-auto w-full justify-start p-1 sm:w-fit"
           aria-label="Student Records sections"
         >
           <TabsTrigger value="create">Create Account</TabsTrigger>

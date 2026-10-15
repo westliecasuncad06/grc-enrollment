@@ -1,4 +1,5 @@
 import { AccordionCard } from "@/features/components/portal/accordion-card"
+import { TableFit } from "@/features/components/ui/table"
 import { Badge } from "@/features/components/ui/badge"
 import type { StudentAccount } from "@/features/schemas/student-account-schema"
 
@@ -106,7 +107,7 @@ export function StudentAccountBalancePanel({
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Cashier Payment Transactions
           </h3>
-          <div className="overflow-x-auto rounded-lg border">
+          <TableFit className="rounded-lg border">
             <table className="w-full text-left text-sm" aria-label="Payment transactions">
               <thead className="bg-muted/50 text-xs font-medium text-muted-foreground">
                 <tr>
@@ -144,7 +145,7 @@ export function StudentAccountBalancePanel({
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableFit>
         </div>
       )}
     </AccordionCard>

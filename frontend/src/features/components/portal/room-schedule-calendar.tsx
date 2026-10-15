@@ -14,7 +14,9 @@ import {
 } from "@/features/lib/room-calendar"
 import type { RoomOccupancyEntry } from "@/features/schemas/room-occupancy-schema"
 import { cn } from "@/features/lib/utils"
+import { useElementWidth } from "@/features/hooks/use-element-width"
 import { Badge } from "@/features/components/ui/badge"
+import { Button } from "@/features/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -49,6 +51,9 @@ const dayShortLabels: Record<number, string> = {
   6: "Sat",
 }
 
+/** The week grid is `min-w-[46rem]`; a box narrower than that shows one day at a time instead of scrolling sideways. */
+const WEEK_GRID_MIN_WIDTH_PX = 46 * 16
+
 interface RoomScheduleCalendarProps {
   week: Map<number, RoomCalendarPlacement<RoomOccupancyEntry>[]>
   onSelectSlot: (day: number, slotIndex: number) => void
@@ -70,10 +75,9 @@ function conflictBadge(isConflicting: boolean) {
 }
 
 /**
- * Monday–Saturday columns, 30-minute rows from 7:30 AM to 9:00 PM. Both the
- * time column and the day header stay visible while the grid scrolls inside
- * its own horizontally-scrolling container — the page body never scrolls
- * sideways.
+ * Monday–Saturday columns, 30-minute rows from 7:30 AM to 9:00 PM. When the box
+ * is too narrow for the whole week, one day is shown at a time (chosen with the
+ * Mon–Sat buttons above the grid), so nothing ever scrolls sideways.
  */
 export function RoomScheduleCalendar({
   week,
@@ -86,23 +90,51 @@ export function RoomScheduleCalendar({
     day: number
     entries: RoomOccupancyEntry[]
   } | null>(null)
+  const [boxRef, boxWidth] = useElementWidth<HTMLDivElement>()
+  const oneDayAtATime = boxWidth > 0 && boxWidth < WEEK_GRID_MIN_WIDTH_PX
+  const [selectedDay, setSelectedDay] = useState<number>(CALENDAR_DAYS[0])
+  const visibleDays: readonly number[] = oneDayAtATime
+    ? [selectedDay]
+    : CALENDAR_DAYS
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div ref={boxRef} className="overflow-x-auto rounded-lg border">
+      {oneDayAtATime && (
+        <div
+          role="group"
+          aria-label="Day of the week"
+          className="flex flex-wrap gap-1 border-b bg-muted/40 p-2"
+        >
+          {CALENDAR_DAYS.map((day) => (
+            <Button
+              key={day}
+              type="button"
+              size="sm"
+              variant={day === selectedDay ? "default" : "outline"}
+              aria-pressed={day === selectedDay}
+              onClick={() => setSelectedDay(day)}
+            >
+              {dayShortLabels[day]}
+            </Button>
+          ))}
+        </div>
+      )}
       <div
-        className="grid w-full min-w-[46rem]"
+        className={cn("grid w-full", !oneDayAtATime && "min-w-[46rem]")}
         style={{
-          gridTemplateColumns: "4.25rem repeat(6, minmax(7rem, 1fr))",
+          gridTemplateColumns: oneDayAtATime
+            ? "4.25rem minmax(0, 1fr)"
+            : "4.25rem repeat(6, minmax(7rem, 1fr))",
           gridTemplateRows: `auto repeat(${SLOT_COUNT}, 2.5rem)`,
         }}
       >
         <div className="sticky top-0 left-0 z-20 border-r border-b bg-muted/60" />
-        {CALENDAR_DAYS.map((day) => (
+        {visibleDays.map((day) => (
           <div
             key={day}
             className="sticky top-0 z-10 border-b bg-muted/60 px-2 py-2 text-center text-sm font-semibold"
           >
-            {dayShortLabels[day]}
+            {oneDayAtATime ? dayLabels[day] : dayShortLabels[day]}
           </div>
         ))}
 
@@ -116,7 +148,7 @@ export function RoomScheduleCalendar({
           </div>
         ))}
 
-        {CALENDAR_DAYS.map((day, dayIndex) =>
+        {visibleDays.map((day, dayIndex) =>
           freeSlots(week, day).map((slotIndex) => (
             <button
               key={`free-${day}-${slotIndex}`}
@@ -134,7 +166,7 @@ export function RoomScheduleCalendar({
           )),
         )}
 
-        {CALENDAR_DAYS.map((day, dayIndex) =>
+        {visibleDays.map((day, dayIndex) =>
           (week.get(day) ?? []).map((placement, index) =>
             placement.kind === "cluster" ? (
               <RoomCalendarClusterCell

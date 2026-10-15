@@ -151,8 +151,8 @@ function ScheduleSectionTabs({
         onValueChange={setActiveProgram}
         className="min-w-0 gap-4"
       >
-        <div className="overflow-x-auto pb-1">
-          <TabsList aria-label="Programs" className="min-w-max">
+        <div className="pb-1">
+          <TabsList aria-label="Programs">
             {groupedPrograms.map(({ program, sectionGroups }) => (
               <TabsTrigger key={program} value={program}>
                 {program}

@@ -11,6 +11,7 @@ import {
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
 import { ItControlAccountActions } from "@/features/components/portal/it-control-account-actions"
+import { ItControlEmailCell } from "@/features/components/portal/it-control-email-cell"
 import { Paginator } from "@/features/components/portal/paginator"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Button } from "@/features/components/ui/button"
@@ -46,10 +47,6 @@ const collegeOptions = [
   ["cbae", "College of Business Administration and Entrepreneurship"],
 ] as const
 
-function copyEmail(email: string) {
-  void navigator.clipboard?.writeText(email)
-}
-
 export function ItControlFacultyWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "it_admin"
@@ -64,20 +61,7 @@ export function ItControlFacultyWorkspace() {
     {
       key: "email",
       header: "Email",
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <span>{row.email}</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            aria-label={`Copy email for ${row.name}`}
-            onClick={() => copyEmail(row.email)}
-          >
-            Copy email
-          </Button>
-        </div>
-      ),
+      render: (row) => <ItControlEmailCell name={row.name} email={row.email} />,
     },
     {
       key: "college",

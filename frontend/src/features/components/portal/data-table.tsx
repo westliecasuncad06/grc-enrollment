@@ -102,11 +102,18 @@ export function DataTable<Row>({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <dl className="grid grid-cols-2 gap-2 text-sm">
+                {/* `minmax(0, 1fr)` columns and `anywhere` wrapping: a long value
+                    (an email address, a long name) breaks to the next line
+                    instead of pushing the card past the edge of a phone. */}
+                <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 text-sm">
                   {columns.slice(1).map((column) => (
                     <div key={column.key} className="contents">
-                      <dt className="text-muted-foreground">{column.header}</dt>
-                      <dd>{column.render(row)}</dd>
+                      <dt className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
+                        {column.header}
+                      </dt>
+                      <dd className="min-w-0 [overflow-wrap:anywhere]">
+                        {column.render(row)}
+                      </dd>
                     </div>
                   ))}
                 </dl>

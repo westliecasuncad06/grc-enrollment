@@ -20,6 +20,7 @@ import {
   type RoomCalendarPlacement,
 } from "@/features/lib/room-calendar"
 import { cn } from "@/features/lib/utils"
+import { useElementWidth } from "@/features/hooks/use-element-width"
 import { useIsPhone } from "@/features/hooks/use-media-query"
 import { SectionScheduleAgenda } from "@/features/components/portal/section-schedule-agenda"
 import { Badge } from "@/features/components/ui/badge"
@@ -75,6 +76,9 @@ const dayShortLabels: Record<number, string> = {
   6: "Sat",
 }
 
+/** The week grid is `min-w-[58rem]`; a box narrower than that gets the day-by-day agenda instead of a sideways scroll. */
+const WEEK_GRID_MIN_WIDTH_PX = 58 * 16
+
 interface SectionScheduleCalendarProps {
   items: readonly SectionScheduleItem[]
   onSelectSubject?: (item: SectionScheduleItem) => void
@@ -105,6 +109,9 @@ export function SectionScheduleCalendar({
   emptyMessage = "No scheduled classes found for this section.",
 }: SectionScheduleCalendarProps) {
   const isPhone = useIsPhone()
+  const [boxRef, boxWidth] = useElementWidth<HTMLDivElement>()
+  const showAgenda =
+    isPhone || (boxWidth > 0 && boxWidth < WEEK_GRID_MIN_WIDTH_PX)
   const [openCluster, setOpenCluster] = useState<{
     day: number
     entries: SectionScheduleItem[]
@@ -141,7 +148,7 @@ export function SectionScheduleCalendar({
   )
 
   return (
-    <div className={cn("grid gap-4", className)}>
+    <div ref={boxRef} className={cn("grid gap-4", className)}>
       {conflictingIds.size > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
@@ -153,9 +160,9 @@ export function SectionScheduleCalendar({
         </div>
       )}
 
-      {/* Phones get a day-at-a-time agenda: the 58rem grid below would be
-          clipped to about two columns (stakeholder Doc 13). */}
-      {isPhone && hasAnyPlacements && (
+      {/* Phones, and any box narrower than the 58rem grid, get a day-at-a-time
+          agenda instead of a grid that would have to scroll sideways. */}
+      {showAgenda && hasAnyPlacements && (
         <SectionScheduleAgenda
           week={week}
           conflictingIds={conflictingIds}
@@ -163,7 +170,7 @@ export function SectionScheduleCalendar({
         />
       )}
 
-      {!isPhone && (
+      {!showAgenda && (
       <div className="overflow-x-auto rounded-lg border bg-background">
         <div
           className="grid min-w-[58rem]"

@@ -3,6 +3,7 @@
 import { Printer } from "lucide-react"
 
 import { PrintDocument } from "@/features/components/portal/print-document"
+import { TableFit } from "@/features/components/ui/table"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -129,7 +130,7 @@ export function YearOverYearReportDialog({
               </div>
 
               {/* Data Table */}
-              <div className="overflow-x-auto">
+              <TableFit>
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40 text-xs font-semibold text-muted-foreground uppercase">
@@ -202,7 +203,7 @@ export function YearOverYearReportDialog({
                     </tr>
                   </tfoot>
                 </table>
-              </div>
+              </TableFit>
 
               {/* Executive Sign-off Block */}
               <div className="mt-8 pt-8 border-t flex flex-wrap justify-between gap-6 text-xs text-muted-foreground">

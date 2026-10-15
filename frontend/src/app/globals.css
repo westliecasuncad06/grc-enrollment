@@ -1593,6 +1593,9 @@
   width: 100%;
   min-width: 0;
   max-width: 76rem;
+  /* The one column is `minmax(0, 1fr)`, not `auto`: an `auto` column grows to its widest child, so a wide
+     table stretched the whole workspace (header, cards and all) past the screen instead of staying in its box. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .portal-workspace-header {
@@ -3418,6 +3421,79 @@
   }
 
   table[data-stack-mobile] td:empty {
+    display: none;
+  }
+}
+
+/* A table that cannot fit its box is stacked (decided and labelled by `fitTableToContainer`, which sets
+   `data-stacked` on the table's container and a `data-label` on every cell): each row becomes a small block of
+   label / value pairs, so no table in the system needs sideways scrolling. `screen` only, so print keeps the
+   true table. A cell with `data-stack="full"` (actions, or one spanning the row) uses the whole block. */
+@media screen {
+  [data-slot="table-container"][data-stacked="true"] {
+    overflow-x: visible;
+  }
+
+  [data-slot="table-container"][data-stacked="true"] thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+
+  [data-slot="table-container"][data-stacked="true"] table,
+  [data-slot="table-container"][data-stacked="true"] tbody,
+  [data-slot="table-container"][data-stacked="true"] tfoot,
+  [data-slot="table-container"][data-stacked="true"] caption {
+    display: block;
+    width: 100%;
+    padding-right: 0;
+  }
+
+  [data-slot="table-container"][data-stacked="true"] caption {
+    text-align: left;
+    padding: 0.5rem 0;
+    white-space: normal;
+  }
+
+  [data-slot="table-container"][data-stacked="true"] tr {
+    display: grid;
+    /* As many label / value pairs per row as fit: two on a phone, more on a tablet or a narrow laptop. */
+    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+    gap: 0.5rem 1rem;
+    padding: 0.85rem 0.25rem;
+  }
+
+  [data-slot="table-container"][data-stacked="true"] td,
+  [data-slot="table-container"][data-stacked="true"] tbody th,
+  [data-slot="table-container"][data-stacked="true"] tfoot th {
+    display: block;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  [data-slot="table-container"][data-stacked="true"]
+    td[data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.15rem;
+    color: var(--muted-foreground);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  [data-slot="table-container"][data-stacked="true"] td[data-stack="full"] {
+    grid-column: 1 / -1;
+  }
+
+  [data-slot="table-container"][data-stacked="true"] td:empty {
     display: none;
   }
 }

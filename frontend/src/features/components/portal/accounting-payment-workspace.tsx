@@ -36,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/features/components/ui/dialog"
+import { TableFit } from "@/features/components/ui/table"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -1098,7 +1099,7 @@ export function AccountingPaymentWorkspace() {
                               Click to view past payments
                             </span>
                           </summary>
-                          <div className="overflow-x-auto rounded-md border bg-card mt-2.5">
+                          <TableFit className="rounded-md border bg-card mt-2.5">
                             <table
                               className="w-full text-left text-xs"
                               aria-label="Student payment history"
@@ -1144,7 +1145,7 @@ export function AccountingPaymentWorkspace() {
                                 ))}
                               </tbody>
                             </table>
-                          </div>
+                          </TableFit>
                         </details>
                       )}
                     <div className="flex flex-wrap gap-2">
