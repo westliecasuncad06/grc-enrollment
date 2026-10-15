@@ -10,6 +10,7 @@ import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
+import { ItControlAccountActions } from "@/features/components/portal/it-control-account-actions"
 import { Paginator } from "@/features/components/portal/paginator"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Button } from "@/features/components/ui/button"
@@ -104,12 +105,33 @@ export function ItControlStudentsWorkspace() {
       header: "Category",
       render: (row) => row.enrollment_category ?? "Not recorded",
     },
-    { key: "status", header: "Account status", render: (row) => row.status },
+    {
+      key: "status",
+      header: "Account status",
+      render: (row) => (row.is_archived ? "Archived" : row.status),
+    },
     {
       key: "current-enrollment",
       header: "Current enrollment",
       render: (row) =>
         enrollmentStatusLabel(row.current_term_enrollment_status),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (row) => (
+        <ItControlAccountActions
+          account={{
+            id: row.user_id,
+            name: row.name,
+            firstName: row.first_name,
+            lastName: row.last_name,
+            suffix: row.suffix,
+            email: row.email,
+            isArchived: row.is_archived,
+          }}
+        />
+      ),
     },
   ]
 
@@ -128,7 +150,7 @@ export function ItControlStudentsWorkspace() {
   return (
     <WorkspacePage
       title="IT Control student accounts"
-      description="Find student accounts and copy a test login email without exposing credentials."
+      description="Find student accounts, copy a test login email, and edit, archive or delete an account. Archive an account that has records; delete only one that was never used."
       unauthorized={!authorized}
       lastUpdated={accountsQuery.dataUpdatedAt}
     >
@@ -277,6 +299,7 @@ export function ItControlStudentsWorkspace() {
                     </SelectItem>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="disabled">Inactive</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
                   </SelectContent>
                 </Select>
               )}

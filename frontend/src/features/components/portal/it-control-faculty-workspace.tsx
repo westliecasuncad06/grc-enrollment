@@ -10,6 +10,7 @@ import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
+import { ItControlAccountActions } from "@/features/components/portal/it-control-account-actions"
 import { Paginator } from "@/features/components/portal/paginator"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Button } from "@/features/components/ui/button"
@@ -88,7 +89,11 @@ export function ItControlFacultyWorkspace() {
       header: "Employment",
       render: (row) => row.employment_type ?? "Not recorded",
     },
-    { key: "status", header: "Account status", render: (row) => row.status },
+    {
+      key: "status",
+      header: "Account status",
+      render: (row) => (row.is_archived ? "Archived" : row.status),
+    },
     {
       key: "availability",
       header: "Availability windows",
@@ -103,6 +108,23 @@ export function ItControlFacultyWorkspace() {
       key: "specializations",
       header: "Specializations",
       render: (row) => String(row.specialization_count),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (row) => (
+        <ItControlAccountActions
+          account={{
+            id: row.id,
+            name: row.name,
+            firstName: row.first_name,
+            lastName: row.last_name,
+            suffix: row.suffix,
+            email: row.email,
+            isArchived: row.is_archived,
+          }}
+        />
+      ),
     },
   ]
 
@@ -120,7 +142,7 @@ export function ItControlFacultyWorkspace() {
   return (
     <WorkspacePage
       title="IT Control faculty accounts"
-      description="Find faculty accounts and copy a test login email without exposing credentials."
+      description="Find faculty accounts, copy a test login email, and edit, archive or delete an account. Archive an account that has records; delete only one that was never used."
       unauthorized={!authorized}
       lastUpdated={accountsQuery.dataUpdatedAt}
     >
@@ -229,6 +251,7 @@ export function ItControlFacultyWorkspace() {
                     </SelectItem>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="disabled">Inactive</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
                   </SelectContent>
                 </Select>
               )}

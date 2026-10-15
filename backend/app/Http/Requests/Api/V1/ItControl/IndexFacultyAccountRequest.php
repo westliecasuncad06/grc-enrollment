@@ -22,7 +22,8 @@ final class IndexFacultyAccountRequest extends FormRequest
             'q' => ['sometimes', 'string', 'max:255'],
             'college' => ['sometimes', Rule::enum(CollegeCode::class)],
             'employment_type' => ['sometimes', Rule::enum(FacultyEmploymentType::class)],
-            'status' => ['sometimes', Rule::enum(UserStatus::class)],
+            // `archived` is not a UserStatus: an archived account is disabled and leaves the other views (ADR 0054).
+            'status' => ['sometimes', Rule::in([UserStatus::Active->value, UserStatus::Disabled->value, 'archived'])],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];

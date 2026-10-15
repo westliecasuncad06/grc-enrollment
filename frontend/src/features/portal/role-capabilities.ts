@@ -19,7 +19,6 @@ import {
   Percent,
   ReceiptText,
   ScrollText,
-  ShieldCheck,
   UserCheck,
   UserMinus,
   UserPlus,
@@ -537,25 +536,19 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
   it_admin: {
     roleLabel: "IT Control",
     welcomeHeading:
-      "Find authorized account records and support enrollment controls.",
+      "Find authorized account records and manage Student and Faculty accounts.",
     modules: [
       portalModule(
         "it-control-students",
         "Student Accounts",
-        "Browse student accounts and copy a test login email for authorized support.",
+        "Find student accounts, copy a test login email, and edit, archive or delete an account.",
         Users,
       ),
       portalModule(
         "it-control-faculty",
         "Faculty Accounts",
-        "Browse faculty accounts and copy a test login email for authorized support.",
+        "Find faculty accounts, copy a test login email, and edit, archive or delete an account.",
         UserCheck,
-      ),
-      portalModule(
-        "it-control-enrollment-override",
-        "Enrollment Overrides",
-        "Review the authorized entry point for enrollment override controls.",
-        ShieldCheck,
       ),
     ],
   },

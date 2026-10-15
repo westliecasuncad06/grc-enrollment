@@ -239,11 +239,6 @@ const ItControlFacultyWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/it-control-faculty-workspace"),
   "ItControlFacultyWorkspace",
 )
-const ItControlEnrollmentOverrideWorkspace = lazyWorkspace(
-  () =>
-    import("@/features/components/portal/it-control-enrollment-override-workspace"),
-  "ItControlEnrollmentOverrideWorkspace",
-)
 const QueueKioskAccessWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/queue-kiosk-access-workspace"),
   "QueueKioskAccessWorkspace",
@@ -345,7 +340,6 @@ export type ConnectedModuleId =
   | "academic-terms"
   | "it-control-students"
   | "it-control-faculty"
-  | "it-control-enrollment-override"
   | "attrition-analytics"
   | "honors"
   | "graduates"
@@ -411,7 +405,6 @@ export const connectedModuleIds = [
   "academic-terms",
   "it-control-students",
   "it-control-faculty",
-  "it-control-enrollment-override",
   "attrition-analytics",
   "honors",
   "graduates",
@@ -434,9 +427,6 @@ const programChairEnrollmentWorkspace: PortalModuleComponent = () => (
 )
 const academicTermWorkspace: PortalModuleComponent = () => (
   <AcademicTermWorkspace />
-)
-const enrollmentOverrideWorkspace: PortalModuleComponent = () => (
-  <ItControlEnrollmentOverrideWorkspace />
 )
 function ScheduleModuleRouter() {
   const { session } = useAuth()
@@ -552,7 +542,6 @@ export const connectedModuleRegistry: Readonly<
   "academic-terms": academicTermWorkspace,
   "it-control-students": ItControlStudentsWorkspace,
   "it-control-faculty": ItControlFacultyWorkspace,
-  "it-control-enrollment-override": enrollmentOverrideWorkspace,
   "attrition-analytics": AttritionAnalyticsWorkspace,
   honors: HonorsWorkspace,
   graduates: GraduatesWorkspace,

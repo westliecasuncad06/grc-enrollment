@@ -27,7 +27,7 @@ test.describe("cross-role authorization", () => {
     const navigation = page.getByRole("navigation", {
       name: "Role portal navigation",
     })
-    await expect(navigation.getByRole("link")).toHaveCount(4)
+    await expect(navigation.getByRole("link")).toHaveCount(3)
     await expect(
       navigation.getByRole("link", { name: "Student Accounts" }),
     ).toBeVisible()
@@ -36,11 +36,12 @@ test.describe("cross-role authorization", () => {
     ).toBeVisible()
     await expect(
       navigation.getByRole("link", { name: "Enrollment Overrides" }),
-    ).toBeVisible()
+    ).toHaveCount(0)
 
+    // The Enrollment Overrides module was removed: its old address is simply not a module.
     await page.goto("/portal/it-control-enrollment-override")
     await expect(
-      page.getByRole("heading", { name: "Enrollment overrides" }),
+      page.getByRole("heading", { name: "Portal module not found" }),
     ).toBeVisible()
 
     await page.goto("/portal/audit-logs")

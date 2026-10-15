@@ -65,7 +65,7 @@ use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\GraduateController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\HonorsReportController;
-use App\Http\Controllers\Api\V1\ItControl\AutomationRunController;
+use App\Http\Controllers\Api\V1\ItControl\AccountController as ItControlAccountController;
 use App\Http\Controllers\Api\V1\ItControl\FacultyAccountController;
 use App\Http\Controllers\Api\V1\ItControl\StudentAccountController as ItControlStudentAccountController;
 use App\Http\Controllers\Api\V1\LectureLabAdjacencyController;
@@ -659,9 +659,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::prefix('it-control')->name('it-control.')->middleware('role:it_admin')->group(function (): void {
             Route::get('/students', ItControlStudentAccountController::class)->name('students.index');
             Route::get('/faculty', FacultyAccountController::class)->name('faculty.index');
-            Route::get('/automation-runs', [AutomationRunController::class, 'index'])->name('automation-runs.index');
-            Route::post('/automation-runs', [AutomationRunController::class, 'store'])->name('automation-runs.store');
-            Route::get('/automation-runs/{run}', [AutomationRunController::class, 'show'])->name('automation-runs.show');
+            // ADR 0054: edit, archive, restore and delete a Student or Faculty account (the gate refuses any other role's).
+            Route::patch('/accounts/{user}', [ItControlAccountController::class, 'update'])->whereNumber('user')->name('accounts.update');
+            Route::post('/accounts/{user}/archive', [ItControlAccountController::class, 'archive'])->whereNumber('user')->name('accounts.archive');
+            Route::post('/accounts/{user}/restore', [ItControlAccountController::class, 'restore'])->whereNumber('user')->name('accounts.restore');
+            Route::delete('/accounts/{user}', [ItControlAccountController::class, 'destroy'])->whereNumber('user')->name('accounts.destroy');
         });
 
         Route::prefix('super-admin')->name('super-admin.')->middleware('super_admin')->group(function (): void {

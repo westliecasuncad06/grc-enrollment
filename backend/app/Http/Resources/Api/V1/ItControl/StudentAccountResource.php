@@ -9,7 +9,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /** @property-read StudentProfile $resource */
 final class StudentAccountResource extends JsonResource
 {
-    /** @return array<string, int|string|null> */
+    /** @return array<string, int|string|bool|null> */
     public function toArray(Request $request): array
     {
         $currentTermEnrollment = $this->resource->enrollments->first();
@@ -20,6 +20,9 @@ final class StudentAccountResource extends JsonResource
             'user_id' => $this->resource->user_id,
             'student_number' => $this->resource->student_number,
             'name' => $this->resource->user->name,
+            'first_name' => $this->resource->user->first_name,
+            'last_name' => $this->resource->user->last_name,
+            'suffix' => $this->resource->user->suffix,
             'email' => $this->resource->user->email,
             'program_code' => $this->resource->program->code,
             'college' => $this->resource->program->college?->value,
@@ -27,6 +30,7 @@ final class StudentAccountResource extends JsonResource
             'enrollment_category' => $this->resource->enrollment_category,
             'academic_standing' => $this->resource->academic_standing->value,
             'status' => $this->resource->user->status->value,
+            'is_archived' => $this->resource->user->archived_at !== null,
             'current_term_enrollment_status' => $currentTermEnrollment?->status->value,
             'password_hint' => 'password',
         ];

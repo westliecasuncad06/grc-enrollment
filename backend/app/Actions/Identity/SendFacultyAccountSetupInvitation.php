@@ -31,6 +31,7 @@ final class SendFacultyAccountSetupInvitation
             $faculty->role !== UserRole::Faculty
             || $faculty->status !== UserStatus::Disabled
             || $faculty->account_setup_completed_at !== null
+            || $faculty->archived_at !== null
         ) {
             throw ValidationException::withMessages([
                 'faculty' => 'Only a pending faculty account can receive a setup invitation.',

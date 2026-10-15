@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -12,10 +12,14 @@ const faculty = {
       type: "it-control-faculty-account",
       id: 14,
       name: "Avery Faculty",
+      first_name: "Avery",
+      last_name: "Faculty",
+      suffix: null,
       email: "avery.faculty@grc.test",
       college: "ccs",
       employment_type: "full_time",
       status: "active",
+      is_archived: false,
       availability_window_count: 2,
       subject_preference_count: 3,
       specialization_count: 1,
@@ -104,6 +108,38 @@ describe("ItControlFacultyWorkspace", () => {
     expect(
       screen.getAllByRole("button", { name: "Copy email for Avery Faculty" }),
     ).not.toHaveLength(0)
+  })
+
+  it("offers the account actions and addresses the faculty account itself", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await screen.findAllByText("Avery Faculty")
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          '{"data":{"type":"it-control-account","id":14,"role":"faculty","name":"Avery Faculty","first_name":"Avery","last_name":"Faculty","suffix":null,"email":"avery.faculty@grc.test","status":"disabled","is_archived":true,"archived_at":"2026-10-16T08:00:00Z"}}',
+        ),
+      ),
+    )
+
+    expect(
+      screen.getAllByRole("button", { name: "Edit Avery Faculty" }),
+    ).not.toHaveLength(0)
+    await user.click(
+      screen.getAllByRole("button", { name: "Archive Avery Faculty" })[0],
+    )
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Archive account",
+      }),
+    )
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/it-control/accounts/14/archive"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    )
   })
 
   it("renders the role guard without fetching faculty accounts for an unauthorized role", () => {

@@ -55,8 +55,8 @@ final class FacultyAccountsEndpointTest extends TestCase
             ->assertJsonPath('data.0.specialization_count', 1)
             ->assertJsonPath('data.0.password_hint', 'password');
         self::assertSame([
-            'type', 'id', 'name', 'email', 'college', 'employment_type', 'status', 'availability_window_count',
-            'subject_preference_count', 'specialization_count', 'password_hint',
+            'type', 'id', 'name', 'first_name', 'last_name', 'suffix', 'email', 'college', 'employment_type', 'status',
+            'is_archived', 'availability_window_count', 'subject_preference_count', 'specialization_count', 'password_hint',
         ], array_keys($response->json('data.0')));
     }
 

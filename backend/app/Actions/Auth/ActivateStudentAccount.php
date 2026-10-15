@@ -34,6 +34,7 @@ final class ActivateStudentAccount
             || $candidate->role !== UserRole::Student
             || $candidate->status !== UserStatus::Disabled
             || $candidate->account_setup_completed_at !== null
+            || $candidate->archived_at !== null
         ) {
             $this->invalidCode();
         }
@@ -60,6 +61,7 @@ final class ActivateStudentAccount
                 $locked->role !== UserRole::Student
                 || $locked->status !== UserStatus::Disabled
                 || $locked->account_setup_completed_at !== null
+                || $locked->archived_at !== null
                 || ! $this->setupCodes->consume($locked)
             ) {
                 $this->invalidCode();

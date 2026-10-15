@@ -110,7 +110,6 @@ const workspaceHeadings: Record<string, string> = {
   "freshman-enrollees": "Freshmen enrollees",
   "it-control-students": "IT Control student accounts",
   "it-control-faculty": "IT Control faculty accounts",
-  "it-control-enrollment-override": "Enrollment overrides",
   "irregular-enrollments": "Irregular Student Advising & Approvals",
   graduates: "Graduates directory",
   "ched-reports": "CHED Reports",

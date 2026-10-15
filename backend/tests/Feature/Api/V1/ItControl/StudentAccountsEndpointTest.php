@@ -74,8 +74,9 @@ final class StudentAccountsEndpointTest extends TestCase
             ->assertJsonPath('data.0.password_hint', 'password');
         $this->assertNotEmpty($response->json('data.0.email'));
         self::assertSame([
-            'type', 'id', 'user_id', 'student_number', 'name', 'email', 'program_code', 'college', 'year_level',
-            'enrollment_category', 'academic_standing', 'status', 'current_term_enrollment_status', 'password_hint',
+            'type', 'id', 'user_id', 'student_number', 'name', 'first_name', 'last_name', 'suffix', 'email', 'program_code',
+            'college', 'year_level', 'enrollment_category', 'academic_standing', 'status', 'is_archived',
+            'current_term_enrollment_status', 'password_hint',
         ], array_keys($response->json('data.0')));
     }
 

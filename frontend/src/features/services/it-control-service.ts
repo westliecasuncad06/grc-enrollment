@@ -1,28 +1,29 @@
 import {
   facultyAccountFiltersSchema,
-  itControlAutomationRunResponseSchema,
+  itControlAccountDeletedResponseSchema,
+  itControlAccountResponseSchema,
   paginatedItControlFacultyAccountsSchema,
-  paginatedItControlAutomationRunsSchema,
   paginatedItControlStudentAccountsSchema,
   studentAccountFiltersSchema,
-  startItControlAutomationRunSchema,
-  type ItControlAutomationRun,
-  type ItControlAutomationStep,
+  updateItControlAccountSchema,
   type FacultyAccountFilters,
+  type ItControlAccount,
   type PaginatedItControlFacultyAccounts,
   type PaginatedItControlStudentAccounts,
   type StudentAccountFilters,
+  type UpdateItControlAccountInput,
 } from "@/features/schemas/it-control-schema"
 import {
   ApiClientError,
+  deleteAuthenticatedJson,
   getAuthenticatedJson,
+  patchAuthenticatedJson,
   postAuthenticatedJson,
 } from "@/features/services/api-client"
 
 export const IT_CONTROL_STUDENTS_PATH = "/api/v1/it-control/students"
 export const IT_CONTROL_FACULTY_PATH = "/api/v1/it-control/faculty"
-export const IT_CONTROL_AUTOMATION_RUNS_PATH =
-  "/api/v1/it-control/automation-runs"
+export const IT_CONTROL_ACCOUNTS_PATH = "/api/v1/it-control/accounts"
 
 function parse<T>(
   schema: {
@@ -81,47 +82,49 @@ export async function getItControlFacultyAccounts(
   )
 }
 
-export async function getItControlAutomationRuns(
-  signal?: AbortSignal,
-): Promise<ItControlAutomationRun[]> {
-  return parse(
-    paginatedItControlAutomationRunsSchema,
-    await getAuthenticatedJson(IT_CONTROL_AUTOMATION_RUNS_PATH, signal),
-    "automation run list",
-  ).data
-}
-
-export async function getItControlAutomationRun(
+/** Edits the name parts and email of a Student or Faculty account. `id` is the account (user) id. */
+export async function updateItControlAccount(
   id: number,
-  signal?: AbortSignal,
-): Promise<ItControlAutomationRun> {
-  return parse(
-    itControlAutomationRunResponseSchema,
-    await getAuthenticatedJson(
-      `${IT_CONTROL_AUTOMATION_RUNS_PATH}/${id}`,
-      signal,
-    ),
-    "automation run",
-  ).data
-}
-
-export async function createItControlAutomationRun(
-  step: ItControlAutomationStep,
-  signal?: AbortSignal,
-): Promise<ItControlAutomationRun> {
+  input: UpdateItControlAccountInput,
+): Promise<ItControlAccount> {
   const request = parse(
-    startItControlAutomationRunSchema,
-    { step },
-    "automation run request",
+    updateItControlAccountSchema,
+    input,
+    "account change request",
   )
 
   return parse(
-    itControlAutomationRunResponseSchema,
-    await postAuthenticatedJson(
-      IT_CONTROL_AUTOMATION_RUNS_PATH,
-      request,
-      signal,
-    ),
-    "automation run",
+    itControlAccountResponseSchema,
+    await patchAuthenticatedJson(`${IT_CONTROL_ACCOUNTS_PATH}/${id}`, request),
+    "account",
   ).data
+}
+
+export async function archiveItControlAccount(
+  id: number,
+): Promise<ItControlAccount> {
+  return parse(
+    itControlAccountResponseSchema,
+    await postAuthenticatedJson(`${IT_CONTROL_ACCOUNTS_PATH}/${id}/archive`),
+    "archived account",
+  ).data
+}
+
+export async function restoreItControlAccount(
+  id: number,
+): Promise<ItControlAccount> {
+  return parse(
+    itControlAccountResponseSchema,
+    await postAuthenticatedJson(`${IT_CONTROL_ACCOUNTS_PATH}/${id}/restore`),
+    "restored account",
+  ).data
+}
+
+/** Permanently deletes an account that was never used; the server refuses one with records (archive it instead). */
+export async function deleteItControlAccount(id: number): Promise<void> {
+  parse(
+    itControlAccountDeletedResponseSchema,
+    await deleteAuthenticatedJson(`${IT_CONTROL_ACCOUNTS_PATH}/${id}`),
+    "deleted account",
+  )
 }

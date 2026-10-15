@@ -38,7 +38,7 @@ final readonly class ListStudentAccounts
         ): LengthAwarePaginator {
             $query = StudentProfile::query()
                 ->with([
-                    'user:id,name,email,status',
+                    'user:id,name,first_name,last_name,suffix,email,status,archived_at',
                     'program:id,code,college',
                     'enrollments' => function (HasMany $query): void {
                         $query
@@ -52,8 +52,10 @@ final readonly class ListStudentAccounts
                 ->when($programId !== null, fn (Builder $query): Builder => $query->where('program_id', $programId))
                 ->when($yearLevel !== null, fn (Builder $query): Builder => $query->where('year_level', $yearLevel))
                 ->when($enrollmentCategory !== null, fn (Builder $query): Builder => $query->where('enrollment_category', $enrollmentCategory))
-                ->when($status !== null, fn (Builder $query): Builder => $query
-                    ->whereHas('user', fn (Builder $userQuery): Builder => $userQuery->where('status', $status)))
+                // Archived accounts leave every view but their own (ADR 0054).
+                ->whereHas('user', fn (Builder $userQuery): Builder => $status === 'archived'
+                    ? $userQuery->whereNotNull('archived_at')
+                    : $userQuery->whereNull('archived_at')->when($status !== null, fn (Builder $q): Builder => $q->where('status', $status)))
                 ->when($search !== null, function (Builder $query) use ($search): Builder {
                     $pattern = '%'.$search.'%';
 

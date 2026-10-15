@@ -314,6 +314,12 @@ final class AuditAction
 
     public const USER_ACCOUNT_DELETED = 'user_account.deleted';
 
+    public const USER_ACCOUNT_UPDATED = 'user_account.updated';
+
+    public const USER_ACCOUNT_ARCHIVED = 'user_account.archived';
+
+    public const USER_ACCOUNT_RESTORED = 'user_account.restored';
+
     public const USER_ACCOUNT_LIST_VIEWED = 'user_account.list_viewed';
 
     public const STUDENT_DEMOGRAPHICS_POPULATED = 'student_demographics.populated';
@@ -485,6 +491,9 @@ final class AuditAction
             self::USER_ACCOUNT_SESSIONS_REVOKED,
             self::USER_ACCOUNT_PASSWORD_RESET_SENT,
             self::USER_ACCOUNT_DELETED,
+            self::USER_ACCOUNT_UPDATED,
+            self::USER_ACCOUNT_ARCHIVED,
+            self::USER_ACCOUNT_RESTORED,
             self::USER_ACCOUNT_LIST_VIEWED,
             self::STUDENT_DEMOGRAPHICS_POPULATED,
             self::STUDENT_DEMOGRAPHICS_WIPED,

@@ -34,6 +34,7 @@ final class SendStudentAccountSetupInvitation
             $student->role !== UserRole::Student
             || $student->status !== UserStatus::Disabled
             || $student->account_setup_completed_at !== null
+            || $student->archived_at !== null
         ) {
             throw ValidationException::withMessages([
                 'student' => 'Only a pending student account can receive a setup invitation.',

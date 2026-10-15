@@ -2,21 +2,8 @@ import { z } from "zod"
 
 const collegeSchema = z.enum(["ccs", "coe", "coa", "cbae"])
 const accountStatusSchema = z.enum(["active", "disabled"])
-const automationStepSchema = z.enum([
-  "chair_generate_sections",
-  "dean_approve_all",
-  "executive_publish_all",
-  "students_auto_enroll",
-  "registrar_approve_all",
-  "cashier_confirm_all",
-])
-const automationRunStatusSchema = z.enum([
-  "queued",
-  "running",
-  "succeeded",
-  "partial",
-  "failed",
-])
+// `archived` is not a status an account has: an archived account is disabled and hidden from the other views.
+const accountStatusFilterSchema = z.enum(["active", "disabled", "archived"])
 
 const paginationLinksSchema = z
   .object({
@@ -57,6 +44,9 @@ export const itControlStudentAccountSchema = z
     user_id: z.number().int().positive(),
     student_number: z.string().min(1),
     name: z.string().min(1),
+    first_name: z.string().nullable(),
+    last_name: z.string().nullable(),
+    suffix: z.string().nullable(),
     email: z.email(),
     program_code: z.string().min(1),
     college: collegeSchema.nullable(),
@@ -64,6 +54,7 @@ export const itControlStudentAccountSchema = z
     enrollment_category: z.enum(["regular", "irregular"]).nullable(),
     academic_standing: z.enum(["good", "probation", "warning"]),
     status: accountStatusSchema,
+    is_archived: z.boolean(),
     current_term_enrollment_status: z
       .enum([
         "draft",
@@ -87,36 +78,19 @@ export const itControlFacultyAccountSchema = z
     type: z.literal("it-control-faculty-account"),
     id: z.number().int().positive(),
     name: z.string().min(1),
+    first_name: z.string().nullable(),
+    last_name: z.string().nullable(),
+    suffix: z.string().nullable(),
     email: z.email(),
     college: collegeSchema.nullable(),
     employment_type: z.enum(["full_time", "part_time"]).nullable(),
     status: accountStatusSchema,
+    is_archived: z.boolean(),
     availability_window_count: z.number().int().nonnegative(),
     subject_preference_count: z.number().int().nonnegative(),
     specialization_count: z.number().int().nonnegative(),
     password_hint: z.literal("password"),
   })
-  .strict()
-
-export const itControlAutomationRunSchema = z
-  .object({
-    type: z.literal("it-control-automation-run"),
-    id: z.number().int().positive(),
-    step: automationStepSchema,
-    academic_term_id: z.number().int().positive(),
-    status: automationRunStatusSchema,
-    processed_count: z.number().int().nonnegative(),
-    failed_count: z.number().int().nonnegative(),
-    warnings: z.array(z.string().min(1)),
-    error_summary: z.string().min(1).nullable(),
-    started_at: z.string().datetime({ offset: true }).nullable(),
-    completed_at: z.string().datetime({ offset: true }).nullable(),
-    created_at: z.string().datetime({ offset: true }).nullable(),
-  })
-  .strict()
-
-export const itControlAutomationRunResponseSchema = z
-  .object({ data: itControlAutomationRunSchema })
   .strict()
 
 function paginatedSchema<Item extends z.ZodType>(itemSchema: Item) {
@@ -135,12 +109,51 @@ export const paginatedItControlStudentAccountsSchema = paginatedSchema(
 export const paginatedItControlFacultyAccountsSchema = paginatedSchema(
   itControlFacultyAccountSchema,
 )
-export const paginatedItControlAutomationRunsSchema = paginatedSchema(
-  itControlAutomationRunSchema,
-)
 
-export const startItControlAutomationRunSchema = z
-  .object({ step: automationStepSchema })
+// What IT Control gets back after editing, archiving or restoring an account (ADR 0054).
+export const itControlAccountSchema = z
+  .object({
+    type: z.literal("it-control-account"),
+    id: z.number().int().positive(),
+    role: z.enum(["student", "faculty"]),
+    name: z.string().min(1),
+    first_name: z.string().nullable(),
+    last_name: z.string().nullable(),
+    suffix: z.string().nullable(),
+    email: z.email(),
+    status: accountStatusSchema,
+    is_archived: z.boolean(),
+    archived_at: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict()
+export const itControlAccountResponseSchema = z
+  .object({ data: itControlAccountSchema })
+  .strict()
+export const itControlAccountDeletedResponseSchema = z
+  .object({
+    data: z
+      .object({ id: z.number().int().positive(), deleted: z.literal(true) })
+      .strict(),
+  })
+  .strict()
+
+/** The fields IT Control may change. The middle name is deliberately not one of them (ADR 0053). */
+export const updateItControlAccountSchema = z
+  .object({
+    first_name: z.string().trim().min(1).max(255).optional(),
+    last_name: z.string().trim().min(1).max(255).optional(),
+    suffix: z.string().trim().max(20).nullable().optional(),
+    email: z.email().max(255).optional(),
+  })
+  .strict()
+
+export const accountEditFormSchema = z
+  .object({
+    first_name: z.string().trim().min(1, "Enter the first name.").max(255),
+    last_name: z.string().trim().min(1, "Enter the last name.").max(255),
+    suffix: z.string().trim().max(20, "Suffix is too long."),
+    email: z.string().trim().max(255).pipe(z.email("Enter a valid email.")),
+  })
   .strict()
 
 export const studentAccountFiltersSchema = z
@@ -150,7 +163,7 @@ export const studentAccountFiltersSchema = z
     program_id: z.number().int().positive().optional(),
     year_level: z.number().int().positive().optional(),
     enrollment_category: z.enum(["regular", "irregular"]).optional(),
-    status: accountStatusSchema.optional(),
+    status: accountStatusFilterSchema.optional(),
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(100).default(20),
   })
@@ -161,7 +174,7 @@ export const facultyAccountFiltersSchema = z
     q: z.string().trim().min(1).max(255).optional(),
     college: collegeSchema.optional(),
     employment_type: z.enum(["full_time", "part_time"]).optional(),
-    status: accountStatusSchema.optional(),
+    status: accountStatusFilterSchema.optional(),
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(100).default(20),
   })
@@ -173,7 +186,7 @@ export const studentAccountFilterFormSchema = z
     college: collegeSchema.optional(),
     year_level: z.number().int().positive().optional(),
     enrollment_category: z.enum(["regular", "irregular"]).optional(),
-    status: accountStatusSchema.optional(),
+    status: accountStatusFilterSchema.optional(),
   })
   .strict()
 
@@ -182,7 +195,7 @@ export const facultyAccountFilterFormSchema = z
     q: z.string().max(255),
     college: collegeSchema.optional(),
     employment_type: z.enum(["full_time", "part_time"]).optional(),
-    status: accountStatusSchema.optional(),
+    status: accountStatusFilterSchema.optional(),
   })
   .strict()
 
@@ -192,13 +205,11 @@ export type ItControlStudentAccount = z.infer<
 export type ItControlFacultyAccount = z.infer<
   typeof itControlFacultyAccountSchema
 >
-export type ItControlAutomationRun = z.infer<
-  typeof itControlAutomationRunSchema
+export type ItControlAccount = z.infer<typeof itControlAccountSchema>
+export type UpdateItControlAccountInput = z.infer<
+  typeof updateItControlAccountSchema
 >
-export type ItControlAutomationStep = z.infer<typeof automationStepSchema>
-export type ItControlAutomationRunStatus = z.infer<
-  typeof automationRunStatusSchema
->
+export type AccountEditForm = z.infer<typeof accountEditFormSchema>
 export type PaginatedItControlStudentAccounts = z.infer<
   typeof paginatedItControlStudentAccountsSchema
 >

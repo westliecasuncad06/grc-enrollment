@@ -25,6 +25,7 @@ final class ResendStudentAccountSetupController extends Controller
             ->where('role', UserRole::Student)
             ->where('status', UserStatus::Disabled)
             ->whereNull('account_setup_completed_at')
+            ->whereNull('archived_at')
             ->first();
 
         // An unpaid freshman has no account to set up yet; the answer stays the

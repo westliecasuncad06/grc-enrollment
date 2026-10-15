@@ -57,7 +57,10 @@ final readonly class ListFacultyAccounts
                 ->where('role', UserRole::Faculty)
                 ->when($college !== null, fn (Builder $query): Builder => $query->where('college', $college))
                 ->when($employmentType !== null, fn (Builder $query): Builder => $query->where('employment_type', $employmentType))
-                ->when($status !== null, fn (Builder $query): Builder => $query->where('status', $status))
+                // Archived accounts leave every view but their own (ADR 0054).
+                ->when($status === 'archived', fn (Builder $query): Builder => $query->whereNotNull('archived_at'))
+                ->when($status !== 'archived', fn (Builder $query): Builder => $query->whereNull('archived_at')
+                    ->when($status !== null, fn (Builder $q): Builder => $q->where('status', $status)))
                 ->when($search !== null, function (Builder $query) use ($search): Builder {
                     $pattern = '%'.$search.'%';
 

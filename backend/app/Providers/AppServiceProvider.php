@@ -68,8 +68,7 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::define('view-faculty-directory', [FacultyMemberPolicy::class, 'viewAny']);
         Gate::define('view-it-control-account-browser', [ItControlPolicy::class, 'viewAccountBrowser']);
-        Gate::define('view-it-control-automation-runs', [ItControlPolicy::class, 'viewAutomationRuns']);
-        Gate::define('create-it-control-automation-runs', [ItControlPolicy::class, 'createAutomationRuns']);
+        Gate::define('manage-it-control-account', [ItControlPolicy::class, 'manageAccount']);
         Gate::define('view-faculty-profile', [FacultyMemberPolicy::class, 'viewProfile']);
         Gate::define('update-faculty-workforce-profile', [FacultyMemberPolicy::class, 'updateWorkforceProfile']);
         Gate::define('search-cashier-students', [StudentProfilePolicy::class, 'searchForCashier']);

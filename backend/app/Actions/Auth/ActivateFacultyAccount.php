@@ -38,6 +38,7 @@ final class ActivateFacultyAccount
             || $candidate->role !== UserRole::Faculty
             || $candidate->status !== UserStatus::Disabled
             || $candidate->account_setup_completed_at !== null
+            || $candidate->archived_at !== null
         ) {
             $this->invalidCode();
         }
@@ -55,6 +56,7 @@ final class ActivateFacultyAccount
                 $locked->role !== UserRole::Faculty
                 || $locked->status !== UserStatus::Disabled
                 || $locked->account_setup_completed_at !== null
+                || $locked->archived_at !== null
                 || ! $this->setupCodes->consume($locked)
             ) {
                 $this->invalidCode();

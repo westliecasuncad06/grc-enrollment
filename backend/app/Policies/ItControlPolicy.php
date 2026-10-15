@@ -12,13 +12,13 @@ final class ItControlPolicy
         return $user->role === UserRole::ItAdmin;
     }
 
-    public function viewAutomationRuns(User $user): bool
+    /**
+     * IT Control edits, archives, restores and deletes Student and Faculty accounts and no other role's
+     * (ADR 0054): a staff, Super Admin or IT account is never managed from here.
+     */
+    public function manageAccount(User $user, User $target): bool
     {
-        return $user->role === UserRole::ItAdmin;
-    }
-
-    public function createAutomationRuns(User $user): bool
-    {
-        return $user->role === UserRole::ItAdmin;
+        return $user->role === UserRole::ItAdmin
+            && in_array($target->role, [UserRole::Student, UserRole::Faculty], true);
     }
 }

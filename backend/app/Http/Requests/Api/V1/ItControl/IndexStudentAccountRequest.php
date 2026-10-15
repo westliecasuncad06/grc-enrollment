@@ -23,7 +23,8 @@ final class IndexStudentAccountRequest extends FormRequest
             'program_id' => ['sometimes', 'integer', Rule::exists('programs', 'id')],
             'year_level' => ['sometimes', 'integer', 'min:1'],
             'enrollment_category' => ['sometimes', Rule::in(['regular', 'irregular'])],
-            'status' => ['sometimes', Rule::enum(UserStatus::class)],
+            // `archived` is not a UserStatus: an archived account is disabled and leaves the other views (ADR 0054).
+            'status' => ['sometimes', Rule::in([UserStatus::Active->value, UserStatus::Disabled->value, 'archived'])],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];
