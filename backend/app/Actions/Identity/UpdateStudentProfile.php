@@ -19,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 final class UpdateStudentProfile
 {
     private const PERSONAL_FIELDS = [
-        'first_name', 'middle_initial', 'last_name', 'suffix', 'email',
+        'first_name', 'middle_name', 'last_name', 'suffix', 'email',
         'gender', 'birth_date', 'citizenship', 'contact_number', 'street_barangay', 'town_city', 'province',
     ];
 
@@ -28,7 +28,7 @@ final class UpdateStudentProfile
         'gender', 'birth_date', 'citizenship', 'contact_number', 'street_barangay', 'town_city', 'province',
     ];
 
-    private const NAME_PART_FIELDS = ['first_name', 'middle_initial', 'last_name', 'suffix'];
+    private const NAME_PART_FIELDS = ['first_name', 'middle_name', 'last_name', 'suffix'];
 
     /**
      * `entry_year` is deliberately absent (derived from the ongoing term). `student_type` is chosen by
@@ -75,10 +75,17 @@ final class UpdateStudentProfile
             }
 
             $userData = Arr::only($data, [...self::NAME_PART_FIELDS, 'email']);
-            foreach (['first_name', 'middle_initial', 'last_name'] as $namePart) {
+            foreach (['first_name', 'last_name'] as $namePart) {
                 if (array_key_exists($namePart, $userData)) {
                     $userData[$namePart] = PersonName::normalizeNamePart($userData[$namePart]);
                 }
+            }
+            // The full middle name decides the initial; a value sent back as it already is changes neither.
+            $middle = ['middle_name' => $user->middle_name, 'middle_initial' => $user->middle_initial];
+            if (array_key_exists('middle_name', $userData)) {
+                $middle = PersonName::middle($userData['middle_name'], $user->middle_name, $user->middle_initial);
+                $userData['middle_name'] = $middle['middle_name'];
+                $userData['middle_initial'] = $middle['middle_initial'];
             }
             if (array_key_exists('suffix', $userData)) {
                 $userData['suffix'] = PersonName::normalizeSuffix($userData['suffix']);
@@ -86,7 +93,7 @@ final class UpdateStudentProfile
             if (array_intersect(array_keys($userData), self::NAME_PART_FIELDS) !== []) {
                 $userData['name'] = PersonName::compose(
                     $userData['first_name'] ?? $user->first_name ?? '',
-                    array_key_exists('middle_initial', $userData) ? $userData['middle_initial'] : $user->middle_initial,
+                    $middle['middle_initial'],
                     $userData['last_name'] ?? $user->last_name ?? '',
                     array_key_exists('suffix', $userData) ? $userData['suffix'] : $user->suffix,
                 );

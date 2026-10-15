@@ -13,7 +13,7 @@ import {
 
 const input: ProvisionStudentInput = {
   first_name: "Amina",
-  middle_initial: "S",
+  middle_name: "Santos",
   last_name: "Santos",
   email: "amina.santos@grc.test",
   gender: "F",
@@ -36,7 +36,8 @@ const profile = {
   student_number: "2027-08-00001",
   name: "Amina S. Santos",
   first_name: input.first_name,
-  middle_initial: input.middle_initial ?? null,
+  middle_name: input.middle_name ?? null,
+  middle_initial: "S",
   last_name: input.last_name,
   suffix: null,
   email: input.email,
@@ -290,6 +291,7 @@ describe("admission-service", () => {
               official: {
                 name: profile.name,
                 first_name: profile.first_name,
+                middle_name: profile.middle_name,
                 middle_initial: profile.middle_initial,
                 last_name: profile.last_name,
                 suffix: profile.suffix,
@@ -299,6 +301,7 @@ describe("admission-service", () => {
               requested: {
                 name: profile.name,
                 first_name: profile.first_name,
+                middle_name: profile.middle_name,
                 middle_initial: profile.middle_initial,
                 last_name: profile.last_name,
                 suffix: profile.suffix,

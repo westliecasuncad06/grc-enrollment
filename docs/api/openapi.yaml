@@ -1997,7 +1997,9 @@ paths:
       description: >
         Admission Staff only. Returns a paginated directory searchable by
         student name, student number, or email. Responses include no password,
-        setup code, or reset-token data.
+        setup code, or reset-token data. The directory can be narrowed to one
+        student type and to where the account stands (the Freshmen view,
+        ADR 0052): `account_setup_status` matches the status each row reports.
       security:
         - bearerAuth: []
       tags:
@@ -2010,6 +2012,35 @@ paths:
           schema:
             type: string
             maxLength: 255
+        - name: student_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [freshman, transferee, returnee, existing_student]
+        - name: intake
+          in: query
+          required: false
+          description: >
+            `pay_first`: only students Admission is processing through the
+            pay-first intake (they hold a queue number, or the Cashier has
+            confirmed their first payment), newest first. Historical records
+            are left out. Without it the directory lists everyone by student
+            number.
+          schema:
+            type: string
+            enum: [pay_first]
+        - name: account_setup_status
+          in: query
+          required: false
+          description: >
+            `active`: the student set the account up. `awaiting_payment`: a
+            freshman whose first payment the Cashier has not confirmed (no
+            setup email yet). `pending`: every other account still to be set
+            up.
+          schema:
+            type: string
+            enum: [awaiting_payment, pending, active]
         - name: page
           in: query
           required: false
@@ -11270,6 +11301,7 @@ components:
         - student_number
         - name
         - first_name
+        - middle_name
         - middle_initial
         - last_name
         - suffix
@@ -11326,9 +11358,15 @@ components:
           description: Composed display name — "First M. Last Suffix". Always kept in sync with the split name fields.
         first_name:
           type: string
+        middle_name:
+          type: [string, 'null']
+          description: >
+            The full middle name. Only Admission staff and the student on their own profile receive it;
+            every other role gets null (and an older account that has only an initial has none).
         middle_initial:
           type: [string, 'null']
           maxLength: 10
+          description: What every display of the name shows ("West R. Ragma"); derived from the middle name.
         last_name:
           type: string
         suffix:
@@ -11833,9 +11871,12 @@ components:
         first_name:
           type: string
           maxLength: 255
-        middle_initial:
+        middle_name:
           type: [string, 'null']
-          maxLength: 10
+          maxLength: 100
+          description: >
+            The student's full middle name. The server derives the initial from it;
+            every display of the name shows only that initial (ADR 0053).
         last_name:
           type: string
           maxLength: 255
@@ -11934,9 +11975,12 @@ components:
         first_name:
           type: string
           maxLength: 255
-        middle_initial:
+        middle_name:
           type: [string, 'null']
-          maxLength: 10
+          maxLength: 100
+          description: >
+            The student's full middle name. The server derives the initial from it;
+            every display of the name shows only that initial (ADR 0053).
         last_name:
           type: string
           maxLength: 255
@@ -12010,9 +12054,12 @@ components:
         first_name:
           type: string
           maxLength: 255
-        middle_initial:
+        middle_name:
           type: [string, 'null']
-          maxLength: 10
+          maxLength: 100
+          description: >
+            The student's full middle name. The server derives the initial from it;
+            every display of the name shows only that initial (ADR 0053).
         last_name:
           type: string
           maxLength: 255
@@ -12119,16 +12166,22 @@ components:
     StudentProfileOfficialIdentityFields:
       type: object
       additionalProperties: false
-      required: [name, first_name, middle_initial, last_name, suffix, email, address]
+      required: [name, first_name, middle_name, middle_initial, last_name, suffix, email, address]
       properties:
         name:
           type: string
           description: Composed display name — "First M. Last Suffix".
         first_name:
           type: string
+        middle_name:
+          type: [string, 'null']
+          description: >
+            The full middle name. Only Admission staff and the student on their own profile receive it;
+            every other role gets null (and an older account that has only an initial has none).
         middle_initial:
           type: [string, 'null']
           maxLength: 10
+          description: What every display of the name shows ("West R. Ragma"); derived from the middle name.
         last_name:
           type: string
         suffix:
@@ -12143,16 +12196,22 @@ components:
     StudentProfileRequestedIdentityFields:
       type: object
       additionalProperties: false
-      required: [name, first_name, middle_initial, last_name, suffix, email, address]
+      required: [name, first_name, middle_name, middle_initial, last_name, suffix, email, address]
       properties:
         name:
           type: string
           description: Composed display name — "First M. Last Suffix".
         first_name:
           type: string
+        middle_name:
+          type: [string, 'null']
+          description: >
+            The full middle name. Only Admission staff and the student on their own profile receive it;
+            every other role gets null (and an older account that has only an initial has none).
         middle_initial:
           type: [string, 'null']
           maxLength: 10
+          description: What every display of the name shows ("West R. Ragma"); derived from the middle name.
         last_name:
           type: string
         suffix:

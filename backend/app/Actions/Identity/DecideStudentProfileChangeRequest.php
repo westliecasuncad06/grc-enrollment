@@ -61,6 +61,7 @@ final class DecideStudentProfileChangeRequest
                         $locked->requested_suffix,
                     ),
                     'first_name' => $locked->requested_first_name,
+                    'middle_name' => $locked->requested_middle_name,
                     'middle_initial' => $locked->requested_middle_initial,
                     'last_name' => $locked->requested_last_name,
                     'suffix' => $locked->requested_suffix,

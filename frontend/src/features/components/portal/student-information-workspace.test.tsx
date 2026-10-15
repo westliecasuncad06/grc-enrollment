@@ -12,6 +12,7 @@ const profile = {
   student_number: "2027-08-01001",
   name: "Amina Santos",
   first_name: "Amina",
+  middle_name: null,
   middle_initial: null,
   last_name: "Santos",
   suffix: null,
@@ -51,6 +52,7 @@ const pending = {
   official: {
     name: profile.name,
     first_name: profile.first_name,
+    middle_name: profile.middle_name,
     middle_initial: profile.middle_initial,
     last_name: profile.last_name,
     suffix: profile.suffix,
@@ -60,6 +62,7 @@ const pending = {
   requested: {
     name: profile.name,
     first_name: profile.first_name,
+    middle_name: profile.middle_name,
     middle_initial: profile.middle_initial,
     last_name: profile.last_name,
     suffix: profile.suffix,
@@ -129,7 +132,8 @@ describe("StudentInformationWorkspace", () => {
                   requested: {
                     name: `${body.first_name} ${body.last_name}`,
                     first_name: body.first_name,
-                    middle_initial: body.middle_initial,
+                    middle_name: body.middle_name ?? null,
+                    middle_initial: null,
                     last_name: body.last_name,
                     suffix: body.suffix,
                     email: body.email,
@@ -184,6 +188,109 @@ describe("StudentInformationWorkspace", () => {
     expect(
       screen.getByRole("button", { name: "Cancel pending request" }),
     ).toBeInTheDocument()
+  })
+
+  describe("the middle name", () => {
+    const noRequests = {
+      ...page,
+      data: [],
+      meta: { ...page.meta, total: 0 },
+    }
+
+    function mockOwnProfile(own: Record<string, unknown>) {
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockImplementation((input, init) => {
+          const url = urlOf(input)
+          if (url.endsWith("/api/v1/student-profile")) {
+            return Promise.resolve(new Response(JSON.stringify({ data: own })))
+          }
+          if (
+            url.includes("student-profile-change-requests") &&
+            init?.method === "POST"
+          ) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ data: pending }), { status: 201 }),
+            )
+          }
+          if (url.includes("student-profile-change-requests")) {
+            return Promise.resolve(new Response(JSON.stringify(noRequests)))
+          }
+          return Promise.reject(new Error(`Unexpected request: ${url}`))
+        })
+      vi.stubGlobal("fetch", fetchMock)
+      renderWithSession(<StudentInformationWorkspace />, {
+        session: {
+          userId: "41",
+          displayName: String(own.name),
+          role: "student",
+          signedInAt: "2026-08-26T00:00:00Z",
+        },
+      })
+      return fetchMock
+    }
+
+    it("shows the student the full middle name on their own profile, while the name itself stays an initial", async () => {
+      mockOwnProfile({
+        ...profile,
+        name: "West R. Ragma",
+        first_name: "West",
+        last_name: "Ragma",
+        middle_name: "Ramga",
+        middle_initial: "R",
+      })
+
+      await screen.findByText(/go to the Admission Office/i)
+
+      expect(screen.getByText("West R. Ragma")).toBeInTheDocument()
+      expect(screen.getByText("Middle name")).toBeInTheDocument()
+      expect(screen.getByText("Ramga")).toBeInTheDocument()
+      expect(screen.getByLabelText("Proposed middle name")).toHaveValue("Ramga")
+      expect(screen.queryByLabelText(/middle initial/i)).not.toBeInTheDocument()
+    })
+
+    it("shows an older account's initial where the full name is not known", async () => {
+      mockOwnProfile({ ...profile, middle_name: null, middle_initial: "S" })
+
+      await screen.findByText(/go to the Admission Office/i)
+
+      expect(screen.getByText("S.")).toBeInTheDocument()
+      expect(screen.getByLabelText("Proposed middle name")).toHaveValue("S")
+    })
+
+    it("asks for the full middle name in a change request", async () => {
+      const fetchMock = mockOwnProfile({
+        ...profile,
+        name: "West R. Ragma",
+        first_name: "West",
+        last_name: "Ragma",
+        middle_name: "Ramga",
+        middle_initial: "R",
+      })
+      const user = userEvent.setup()
+      await screen.findByText(/go to the Admission Office/i)
+
+      const middle = screen.getByLabelText("Proposed middle name")
+      await user.clear(middle)
+      await user.type(middle, "Santos")
+      await user.type(
+        screen.getByLabelText("Reason for change"),
+        "My middle name was misspelled.",
+      )
+      await user.click(
+        screen.getByRole("button", { name: "Submit change request" }),
+      )
+
+      await waitFor(() => {
+        const post = fetchMock.mock.calls.find(
+          ([input, init]) =>
+            urlOf(input).includes("student-profile-change-requests") &&
+            init?.method === "POST",
+        )
+        expect(bodyOf(post?.[1])).toMatchObject({ middle_name: "Santos" })
+        expect(bodyOf(post?.[1])).not.toHaveProperty("middle_initial")
+      })
+    })
   })
 
   it("keeps the long request form collapsed on a phone until it is opened", async () => {

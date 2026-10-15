@@ -5,6 +5,7 @@ namespace App\Actions\Identity;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Identity\PersonName;
 use App\Domain\Identity\StudentProfileChangeRequestStatus;
 use App\Models\StudentProfile;
 use App\Models\StudentProfileChangeRequest;
@@ -19,7 +20,7 @@ final class ManageStudentProfileChangeRequest
 {
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
-    /** @param array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, reason: string} $data */
+    /** @param array{first_name: string, middle_name?: ?string, last_name: string, suffix?: ?string, email: string, address: string, reason: string} $data */
     public function create(array $data, User $actor, AuditRequestContext $context): StudentProfileChangeRequest
     {
         return DB::transaction(function () use ($data, $actor, $context): StudentProfileChangeRequest {
@@ -31,10 +32,12 @@ final class ManageStudentProfileChangeRequest
 
             $profile->loadMissing('user');
             $this->ensureChangesOfficialInformation($profile, $data);
+            $middle = $this->requestedMiddle($profile, $data);
 
             $changeRequest = $profile->profileChangeRequests()->create([
                 'requested_first_name' => $data['first_name'],
-                'requested_middle_initial' => $data['middle_initial'] ?? null,
+                'requested_middle_name' => $middle['middle_name'],
+                'requested_middle_initial' => $middle['middle_initial'],
                 'requested_last_name' => $data['last_name'],
                 'requested_suffix' => $data['suffix'] ?? null,
                 'requested_email' => $data['email'],
@@ -59,7 +62,7 @@ final class ManageStudentProfileChangeRequest
         });
     }
 
-    /** @param array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, reason: string} $data */
+    /** @param array{first_name: string, middle_name?: ?string, last_name: string, suffix?: ?string, email: string, address: string, reason: string} $data */
     public function revise(
         StudentProfileChangeRequest $changeRequest,
         array $data,
@@ -76,10 +79,12 @@ final class ManageStudentProfileChangeRequest
 
             $profile->loadMissing('user');
             $this->ensureChangesOfficialInformation($profile, $data);
+            $middle = $this->requestedMiddle($profile, $data);
 
             $locked->update([
                 'requested_first_name' => $data['first_name'],
-                'requested_middle_initial' => $data['middle_initial'] ?? null,
+                'requested_middle_name' => $middle['middle_name'],
+                'requested_middle_initial' => $middle['middle_initial'],
                 'requested_last_name' => $data['last_name'],
                 'requested_suffix' => $data['suffix'] ?? null,
                 'requested_email' => $data['email'],
@@ -151,12 +156,24 @@ final class ManageStudentProfileChangeRequest
             ->withQueryString();
     }
 
-    /** @param array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, reason: string} $data */
+    /**
+     * The middle name and initial the request proposes; the profile's own values when the submitted middle name
+     * is the one already on record, however it is typed.
+     *
+     * @param  array{middle_name?: ?string}  $data
+     * @return array{middle_name: ?string, middle_initial: ?string}
+     */
+    private function requestedMiddle(StudentProfile $profile, array $data): array
+    {
+        return PersonName::middle($data['middle_name'] ?? null, $profile->user->middle_name, $profile->user->middle_initial);
+    }
+
+    /** @param array{first_name: string, middle_name?: ?string, last_name: string, suffix?: ?string, email: string, address: string, reason: string} $data */
     private function ensureChangesOfficialInformation(StudentProfile $profile, array $data): void
     {
         if (
             $data['first_name'] === $profile->user->first_name
-            && ($data['middle_initial'] ?? null) === $profile->user->middle_initial
+            && $this->requestedMiddle($profile, $data) === ['middle_name' => $profile->user->middle_name, 'middle_initial' => $profile->user->middle_initial]
             && $data['last_name'] === $profile->user->last_name
             && ($data['suffix'] ?? null) === $profile->user->suffix
             && mb_strtolower($data['email']) === mb_strtolower($profile->user->email)

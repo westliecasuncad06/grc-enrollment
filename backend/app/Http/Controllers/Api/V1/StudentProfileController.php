@@ -67,7 +67,7 @@ final class StudentProfileController extends Controller
         // The student and, for a freshman, their queue number are recorded together or not at all.
         $admitted = $admitStudent->handle([
             'first_name' => $request->validated('first_name'),
-            'middle_initial' => $request->validated('middle_initial'),
+            'middle_name' => $request->validated('middle_name'),
             'last_name' => $request->validated('last_name'),
             'suffix' => $request->validated('suffix'),
             'email' => $request->validated('email'),

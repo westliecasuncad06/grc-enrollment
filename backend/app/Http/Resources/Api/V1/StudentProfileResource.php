@@ -5,7 +5,9 @@ namespace App\Http\Resources\Api\V1;
 use App\Actions\Enrollment\FreshmanPaymentRules;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Identity\StudentType;
+use App\Domain\Identity\UserRole;
 use App\Models\StudentProfile;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -25,6 +27,7 @@ final class StudentProfileResource extends JsonResource
      *     student_number: string,
      *     name: string,
      *     first_name: string,
+     *     middle_name: ?string,
      *     middle_initial: ?string,
      *     last_name: string,
      *     suffix: ?string,
@@ -81,6 +84,9 @@ final class StudentProfileResource extends JsonResource
             'student_number' => $this->resource->student_number,
             'name' => $user->name,
             'first_name' => $user->first_name ?? '',
+            // Only Admission and the student themself ever get the full middle name; everyone else, and every
+            // display of the name, has the initial (ADR 0053).
+            'middle_name' => $this->mayReadFullMiddleName($request) ? $user->middle_name : null,
             'middle_initial' => $user->middle_initial,
             'last_name' => $user->last_name ?? '',
             'suffix' => $user->suffix,
@@ -148,6 +154,14 @@ final class StudentProfileResource extends JsonResource
                 default => 'not_sent',
             },
         ];
+    }
+
+    private function mayReadFullMiddleName(Request $request): bool
+    {
+        $viewer = $request->user();
+
+        return $viewer instanceof User
+            && ($viewer->role === UserRole::AdmissionStaff || $viewer->id === $this->resource->user_id);
     }
 
     /**

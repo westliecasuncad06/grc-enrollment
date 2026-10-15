@@ -16,7 +16,7 @@ final class StoreStudentProfileChangeRequestRequest extends FormRequest
     {
         return [
             'first_name' => ['required', 'string', 'max:255'],
-            'middle_initial' => ['sometimes', 'nullable', 'string', 'max:10'],
+            'middle_name' => ['sometimes', 'nullable', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:255'],
             'suffix' => ['sometimes', 'nullable', 'string', 'max:20'],
             'email' => ['required', 'email', 'max:255'],

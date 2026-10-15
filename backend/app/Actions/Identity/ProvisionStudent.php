@@ -40,7 +40,7 @@ final class ProvisionStudent
     ) {}
 
     /**
-     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, gender: string, birth_date: string, citizenship: string, contact_number: string, street_barangay: string, town_city: string, province: string, has_existing_student_number?: bool, student_number?: ?string, program_id: int, year_level: int, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>}  $data
+     * @param  array{first_name: string, middle_name?: ?string, last_name: string, suffix?: ?string, email: string, gender: string, birth_date: string, citizenship: string, contact_number: string, street_barangay: string, town_city: string, province: string, has_existing_student_number?: bool, student_number?: ?string, program_id: int, year_level: int, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>}  $data
      */
     public function handle(
         array $data,
@@ -73,14 +73,16 @@ final class ProvisionStudent
             }
 
             $firstName = (string) PersonName::normalizeNamePart($data['first_name']);
-            $middleInitial = PersonName::normalizeNamePart($data['middle_initial'] ?? null);
+            // Admission types the full middle name; every display of the name shows only its initial.
+            $middle = PersonName::middle($data['middle_name'] ?? null, null, null);
             $lastName = (string) PersonName::normalizeNamePart($data['last_name']);
             $suffix = PersonName::normalizeSuffix($data['suffix'] ?? null);
 
             $user = User::create([
-                'name' => PersonName::compose($firstName, $middleInitial, $lastName, $suffix),
+                'name' => PersonName::compose($firstName, $middle['middle_initial'], $lastName, $suffix),
                 'first_name' => $firstName,
-                'middle_initial' => $middleInitial,
+                'middle_name' => $middle['middle_name'],
+                'middle_initial' => $middle['middle_initial'],
                 'last_name' => $lastName,
                 'suffix' => $suffix,
                 'email' => $data['email'],

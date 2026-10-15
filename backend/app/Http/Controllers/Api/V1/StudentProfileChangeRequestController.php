@@ -39,7 +39,7 @@ final class StudentProfileChangeRequestController extends Controller
         $this->authorize('create', StudentProfileChangeRequest::class);
         $changeRequest = $manager->create([
             'first_name' => $request->validated('first_name'),
-            'middle_initial' => $request->validated('middle_initial'),
+            'middle_name' => $request->validated('middle_name'),
             'last_name' => $request->validated('last_name'),
             'suffix' => $request->validated('suffix'),
             'email' => $request->validated('email'),
@@ -65,7 +65,7 @@ final class StudentProfileChangeRequestController extends Controller
         return $this->private(StudentProfileChangeRequestResource::make(
             $manager->revise($studentProfileChangeRequest, [
                 'first_name' => $request->validated('first_name'),
-                'middle_initial' => $request->validated('middle_initial'),
+                'middle_name' => $request->validated('middle_name'),
                 'last_name' => $request->validated('last_name'),
                 'suffix' => $request->validated('suffix'),
                 'email' => $request->validated('email'),

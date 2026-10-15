@@ -9,6 +9,13 @@ export const studentTypeSchema = z.enum([
   "returnee",
   "existing_student",
 ])
+// `awaiting_payment`: a freshman whose first payment the Cashier has not confirmed (no setup email yet);
+// `pending`: set up not finished; `active`: the student set the account up.
+export const accountSetupStatusSchema = z.enum([
+  "awaiting_payment",
+  "pending",
+  "active",
+])
 export const financialStatusSchema = z.enum(["scholar", "payee"])
 export const admissionStatusSchema = z.enum([
   "pending",
@@ -21,10 +28,12 @@ export const academicStandingSchema = z.enum(["good", "probation", "warning"])
 
 export const personNameFieldsSchema = {
   first_name: z.string().trim().min(1, "Enter the student's first name."),
-  middle_initial: z
+  // The full middle name. Every display of the name shows only its initial; only Admission and the student
+  // themself ever see the full name (ADR 0053).
+  middle_name: z
     .string()
     .trim()
-    .max(10, "Middle initial is too long.")
+    .max(100, "Middle name is too long.")
     .nullable()
     .optional(),
   last_name: z.string().trim().min(1, "Enter the student's last name."),
@@ -171,6 +180,9 @@ export const studentProfileSchema = z
     student_number: z.string().min(1),
     name: z.string().min(1),
     first_name: z.string().min(1),
+    // The full middle name: only present for Admission and for the student's own profile, null for everyone
+    // else and for an older account that has only an initial.
+    middle_name: z.string().nullable().default(null),
     middle_initial: z.string().nullable(),
     last_name: z.string().min(1),
     suffix: z.string().nullable(),
@@ -209,7 +221,7 @@ export const studentProfileSchema = z
     academic_setup_editable: z.boolean(),
     // `awaiting_payment`: a freshman who has taken a queue number but whose first payment the
     // Cashier has not confirmed — the account setup email is sent only after that.
-    account_setup_status: z.enum(["awaiting_payment", "pending", "active"]),
+    account_setup_status: accountSetupStatusSchema,
     invitation_delivery_status: z.enum(["not_sent", "sent", "failed"]),
     // Set when the Cashier confirms the freshman's first payment; null for everyone else.
     freshman_payment_confirmed_at: z.iso.datetime().nullable().default(null),
@@ -260,6 +272,12 @@ const paginationMetaSchema = z
 export const studentProfileFiltersSchema = z
   .object({
     search: z.string().trim().max(255).optional(),
+    // Admission's freshman view: narrow the directory to one student type and to where the account stands.
+    student_type: studentTypeSchema.optional(),
+    account_setup_status: accountSetupStatusSchema.optional(),
+    // `pay_first`: only the students Admission is processing (they hold a queue number or have paid), newest
+    // first. Left out: historical records, which would all read "Awaiting payment".
+    intake: z.enum(["pay_first"]).optional(),
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(100).default(20),
   })
@@ -275,7 +293,7 @@ export const paginatedStudentProfilesSchema = z
 export const updateStudentProfileSchema = z
   .object({
     first_name: z.string().trim().min(1).optional(),
-    middle_initial: z.string().trim().max(10).nullable().optional(),
+    middle_name: z.string().trim().max(100).nullable().optional(),
     last_name: z.string().trim().min(1).optional(),
     suffix: z.string().trim().max(20).nullable().optional(),
     email: z.email().optional(),
@@ -321,6 +339,7 @@ export const profileChangeRequestSchema = z
     official: z.object({
       name: z.string().min(1),
       first_name: z.string().min(1),
+      middle_name: z.string().nullable().default(null),
       middle_initial: z.string().nullable(),
       last_name: z.string().min(1),
       suffix: z.string().nullable(),
@@ -330,6 +349,7 @@ export const profileChangeRequestSchema = z
     requested: z.object({
       name: z.string().min(1),
       first_name: z.string().min(1),
+      middle_name: z.string().nullable().default(null),
       middle_initial: z.string().nullable(),
       last_name: z.string().min(1),
       suffix: z.string().nullable(),

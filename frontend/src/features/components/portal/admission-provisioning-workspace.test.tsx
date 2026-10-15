@@ -17,6 +17,7 @@ const profile = {
   student_number: "2027-08-01001",
   name: "Amina Santos",
   first_name: "Amina",
+  middle_name: null,
   middle_initial: null,
   last_name: "Santos",
   suffix: null,
@@ -77,6 +78,9 @@ const enrolledProfile = {
   first_name: "Marco",
   last_name: "Dela Cruz",
   email: "marco.delacruz@grc.test",
+  // Admission keeps the full middle name; the name above only ever shows its initial.
+  middle_name: "Ramga",
+  middle_initial: "R",
   academic_setup_editable: false,
   account_setup_status: "active",
 } as const
@@ -123,6 +127,7 @@ const changeRequest = {
   official: {
     name: profile.name,
     first_name: profile.first_name,
+    middle_name: profile.middle_name,
     middle_initial: profile.middle_initial,
     last_name: profile.last_name,
     suffix: profile.suffix,
@@ -132,7 +137,8 @@ const changeRequest = {
   requested: {
     name: "Amina Reyes Santos",
     first_name: profile.first_name,
-    middle_initial: "Reyes",
+    middle_name: "Reyes",
+    middle_initial: "R",
     last_name: profile.last_name,
     suffix: null,
     email: "amina.reyes@grc.test",
@@ -337,7 +343,7 @@ describe("Student Records workspace", () => {
     return bodyOf(call?.[1])
   }
 
-  it("uses one three-part workspace and creates an account with the details, type and ticked requirements Admission chose", async () => {
+  it("uses one four-part workspace and creates an account with the details, type and ticked requirements Admission chose", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -347,6 +353,7 @@ describe("Student Records workspace", () => {
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "Create Account",
       "Student Directory",
+      "Freshmen",
       "Change Requests",
     ])
     expect(screen.queryByLabelText("Curriculum")).not.toBeInTheDocument()
@@ -367,6 +374,9 @@ describe("Student Records workspace", () => {
 
     await user.type(screen.getByLabelText("First name"), profile.first_name)
     await user.type(screen.getByLabelText("Last name"), profile.last_name)
+    // The full middle name, not an initial: the server derives the initial every screen shows.
+    expect(screen.queryByLabelText("Middle initial")).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText("Middle name"), "Ramga")
     await user.type(screen.getByLabelText("Email address"), profile.email)
     const studentNumberField = screen.getByLabelText("Student number")
     expect(studentNumberField).toHaveAttribute("readonly")
@@ -493,6 +503,7 @@ describe("Student Records workspace", () => {
     const body = bodyOf(provisioningCall?.[1])
     expect(body).toMatchObject({
       first_name: profile.first_name,
+      middle_name: "Ramga",
       last_name: profile.last_name,
       gender: "F",
       birth_date: profile.birth_date,
@@ -506,6 +517,7 @@ describe("Student Records workspace", () => {
       requirement_type_ids: [1, 2],
     })
     // The category is the system's and the address text is written by the server from the three parts.
+    expect(body).not.toHaveProperty("middle_initial")
     expect(body).not.toHaveProperty("enrollment_category")
     expect(body).not.toHaveProperty("address")
     expect(body).not.toHaveProperty("requirements_verified")
@@ -1385,6 +1397,7 @@ describe("Student Records workspace", () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Student number")).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Middle name")).toHaveValue("Ramga")
     expect(screen.queryByLabelText("Program")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Entry year")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Year level")).not.toBeInTheDocument()
@@ -1397,7 +1410,8 @@ describe("Student Records workspace", () => {
 
     expect(screen.getByLabelText("First name")).toBeInTheDocument()
     expect(screen.getByLabelText("Last name")).toBeInTheDocument()
-    expect(screen.getByLabelText("Middle initial")).toBeInTheDocument()
+    expect(screen.getByLabelText("Middle name")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Middle initial")).not.toBeInTheDocument()
     expect(screen.getByLabelText("Suffix")).toBeInTheDocument()
     expect(screen.getByLabelText("Email")).toBeInTheDocument()
     const street = screen.getByLabelText("Street / barangay")

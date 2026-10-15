@@ -22,6 +22,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property int $id
  * @property string $name
  * @property ?string $first_name
+ * @property ?string $middle_name
  * @property ?string $middle_initial
  * @property ?string $last_name
  * @property ?string $suffix
@@ -38,6 +39,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property ?CarbonImmutable $account_setup_completed_at
  * @property ?CarbonImmutable $account_setup_invitation_sent_at
  * @property ?CarbonImmutable $account_setup_invitation_failed_at
+ * @property ?CarbonImmutable $archived_at
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Collection<int, AuditLog> $auditLogs
@@ -54,6 +56,7 @@ final class User extends Authenticatable implements CanResetPasswordContract
     protected $fillable = [
         'name',
         'first_name',
+        'middle_name',
         'middle_initial',
         'last_name',
         'suffix',
@@ -70,6 +73,7 @@ final class User extends Authenticatable implements CanResetPasswordContract
         'account_setup_completed_at',
         'account_setup_invitation_sent_at',
         'account_setup_invitation_failed_at',
+        'archived_at',
     ];
 
     protected static function booted(): void
@@ -108,6 +112,7 @@ final class User extends Authenticatable implements CanResetPasswordContract
             'account_setup_completed_at' => 'immutable_datetime',
             'account_setup_invitation_sent_at' => 'immutable_datetime',
             'account_setup_invitation_failed_at' => 'immutable_datetime',
+            'archived_at' => 'immutable_datetime',
         ];
     }
 

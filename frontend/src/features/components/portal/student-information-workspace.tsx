@@ -72,7 +72,7 @@ export function StudentInformationWorkspace() {
     resolver: zodResolver(storeProfileChangeRequestSchema),
     defaultValues: {
       first_name: "",
-      middle_initial: "",
+      middle_name: "",
       last_name: "",
       suffix: "",
       email: "",
@@ -85,8 +85,13 @@ export function StudentInformationWorkspace() {
     if (!profile) return
     reset({
       first_name: pending?.requested.first_name ?? profile.first_name,
-      middle_initial:
-        pending?.requested.middle_initial ?? profile.middle_initial ?? "",
+      // An older account has only the initial; that is what the box starts with until a full name is typed.
+      middle_name:
+        pending?.requested.middle_name ??
+        pending?.requested.middle_initial ??
+        profile.middle_name ??
+        profile.middle_initial ??
+        "",
       last_name: pending?.requested.last_name ?? profile.last_name,
       suffix: pending?.requested.suffix ?? profile.suffix ?? "",
       email: pending?.requested.email ?? profile.email,
@@ -153,6 +158,14 @@ export function StudentInformationWorkspace() {
                       {official.student_number}
                     </span>
                   </p>
+                  <p>
+                    <strong>Middle name</strong>
+                    <br />
+                    {official.middle_name ??
+                      (official.middle_initial
+                        ? `${official.middle_initial}.`
+                        : "None on record")}
+                  </p>
                   <p className="flex gap-2">
                     <Mail aria-hidden="true" className="size-4" />
                     {official.email}
@@ -214,6 +227,13 @@ export function StudentInformationWorkspace() {
                     <br />
                     {pending.requested.name}
                   </p>
+                  {pending.requested.middle_name !== null && (
+                    <p>
+                      <strong>Middle name</strong>
+                      <br />
+                      {pending.requested.middle_name}
+                    </p>
+                  )}
                   <p>
                     <strong>Email</strong>
                     <br />
@@ -259,17 +279,20 @@ export function StudentInformationWorkspace() {
                     <Input id="request-last-name" {...register("last_name")} />
                     <FieldError>{errors.last_name?.message}</FieldError>
                   </Field>
-                  <Field data-invalid={Boolean(errors.middle_initial)}>
-                    <FieldLabel htmlFor="request-middle-initial">
-                      Proposed middle initial
+                  <Field data-invalid={Boolean(errors.middle_name)}>
+                    <FieldLabel htmlFor="request-middle-name">
+                      Proposed middle name
                     </FieldLabel>
                     <Input
-                      id="request-middle-initial"
-                      maxLength={10}
-                      {...register("middle_initial")}
+                      id="request-middle-name"
+                      maxLength={100}
+                      {...register("middle_name")}
                     />
-                    <FieldDescription>Optional.</FieldDescription>
-                    <FieldError>{errors.middle_initial?.message}</FieldError>
+                    <FieldDescription>
+                      Optional. Only you and Admission see the full middle name;
+                      it shows as an initial everywhere else.
+                    </FieldDescription>
+                    <FieldError>{errors.middle_name?.message}</FieldError>
                   </Field>
                   <Field data-invalid={Boolean(errors.suffix)}>
                     <FieldLabel htmlFor="request-suffix">

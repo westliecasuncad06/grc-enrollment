@@ -13,7 +13,8 @@ Migrations: `backend/database/migrations/2026_07_26_00000{1,2,3,4}_*.php`.
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
 | `name` | `VARCHAR(255)` | not null | Composed display name ("First M. Last Suffix"). Kept in sync with the four fields below by `App\Domain\Identity\PersonName::compose()` whenever any of them is written through the Student provisioning/correction/change-request flows; never edited directly by those flows. |
 | `first_name` | `VARCHAR(255)` | nullable | Added `2026_08_26_000003`. Nullable at the DB level only so pre-split seeders/roles without a name-collecting form (e.g. Faculty, still seeder-only) keep working; required by every Form Request that actually collects a name. |
-| `middle_initial` | `VARCHAR(10)` | nullable | Added `2026_08_26_000003`. An initial (e.g. `M`), not a full middle name — always optional. |
+| `middle_name` | `VARCHAR(100)` | nullable | Added `2026_10_16_000001` (ADR 0053). The student's full middle name, typed by Admission; null for an older account that has only an initial. Only Admission and the student on their own profile are ever sent it. |
+| `middle_initial` | `VARCHAR(10)` | nullable | Added `2026_08_26_000003`. The initial (e.g. `M`) every display of the name shows. Since ADR 0053 it is derived from `middle_name` (`PersonName::middle()`), so the two cannot disagree; older accounts keep only this. |
 | `last_name` | `VARCHAR(255)` | nullable | Added `2026_08_26_000003`. Same nullability rationale as `first_name`. |
 | `suffix` | `VARCHAR(20)` | nullable | Added `2026_08_26_000003`. Free text (`Jr.`, `Sr.`, `III`, …), always optional. |
 | `email` | `VARCHAR(255)` | not null, **unique** | Normalized (trimmed, lowercased) by the application before validation, not by the database |
@@ -21,6 +22,7 @@ Migrations: `backend/database/migrations/2026_07_26_00000{1,2,3,4}_*.php`.
 | `role` | `VARCHAR(255)` | not null | Application-backed string, not a MySQL `ENUM`, so new roles need only a normal migration. Exact values: `student`, `admission_staff`, `faculty`, `program_chair`, `dean`, `executive_director`, `registrar_head`, `registrar_staff`, `accounting_staff` — see `App\Domain\Identity\UserRole` |
 | `status` | `VARCHAR(255)` | not null | `active` or `disabled` — see `App\Domain\Identity\UserStatus` |
 | `last_login_at` | `TIMESTAMP` | nullable | Set on every successful login; UTC |
+| `archived_at` | `TIMESTAMP` | nullable, indexed | Added `2026_10_16_000002` (ADR 0054). Set when IT Control archives a Student or Faculty account: the account is disabled, signed out and hidden from the default lists, and the person's records are untouched. Cleared by Restore. Activation and setup invitations refuse an archived account. |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | Laravel timestamps |
 
 No foreign keys in this slice. `student_profiles`, which would reference

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property int $student_id
  * @property string $requested_first_name
+ * @property ?string $requested_middle_name
  * @property ?string $requested_middle_initial
  * @property string $requested_last_name
  * @property ?string $requested_suffix
@@ -34,6 +35,7 @@ final class StudentProfileChangeRequest extends Model
     protected $fillable = [
         'student_id',
         'requested_first_name',
+        'requested_middle_name',
         'requested_middle_initial',
         'requested_last_name',
         'requested_suffix',

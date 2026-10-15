@@ -26,7 +26,7 @@ final class UpdateStudentProfileRequest extends FormRequest
 
         return [
             'first_name' => ['sometimes', 'string', 'max:255'],
-            'middle_initial' => ['sometimes', 'nullable', 'string', 'max:10'],
+            'middle_name' => ['sometimes', 'nullable', 'string', 'max:100'],
             'last_name' => ['sometimes', 'string', 'max:255'],
             'suffix' => ['sometimes', 'nullable', 'string', 'max:20'],
             'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],

@@ -26,6 +26,7 @@ final class StudentProfileChangeRequestResource extends JsonResource
             'official' => [
                 'name' => $student->user->name,
                 'first_name' => $student->user->first_name ?? '',
+                'middle_name' => $student->user->middle_name,
                 'middle_initial' => $student->user->middle_initial,
                 'last_name' => $student->user->last_name ?? '',
                 'suffix' => $student->user->suffix,
@@ -40,6 +41,7 @@ final class StudentProfileChangeRequestResource extends JsonResource
                     $this->resource->requested_suffix,
                 ),
                 'first_name' => $this->resource->requested_first_name,
+                'middle_name' => $this->resource->requested_middle_name,
                 'middle_initial' => $this->resource->requested_middle_initial,
                 'last_name' => $this->resource->requested_last_name,
                 'suffix' => $this->resource->requested_suffix,

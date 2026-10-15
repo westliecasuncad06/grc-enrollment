@@ -8,8 +8,10 @@ import { toast } from "sonner"
 import { z } from "zod"
 
 import { AdmissionIntakeRequirements } from "@/features/components/portal/admission-intake-requirements"
+import { AdmissionFreshmenPanel } from "@/features/components/portal/admission-freshmen-panel"
 import { AdmissionRequirementsChecklist } from "@/features/components/portal/admission-requirements-checklist"
 import { InvitationStatusBadge } from "@/features/components/portal/invitation-status-badge"
+import { ResendQueueLinkButton } from "@/features/components/portal/resend-queue-link-button"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import {
   DataTable,
@@ -77,7 +79,6 @@ import {
   useNextStudentNumberQuery,
   useProvisionStudentMutation,
   useResendAccountSetupInvitationMutation,
-  useResendQueueLinkMutation,
   useStudentDirectoryQuery,
   useUpdateStudentProfileMutation,
 } from "@/features/hooks/use-student-records"
@@ -102,49 +103,6 @@ const GENDER_OPTIONS = [
   { value: "M", label: "Male" },
 ] as const
 type CreateValues = z.infer<typeof provisionStudentSchema>
-
-/**
- * Sends a freshman's "view the live queue" link again — the old link stops
- * working. Each button owns its own request, so a row in the directory only
- * shows "Resending…" for itself.
- */
-function ResendQueueLinkButton({
-  profile,
-  label = "Resend queue link",
-  size,
-  variant = "outline",
-  onResent,
-}: {
-  profile: StudentProfile
-  label?: string
-  size?: "sm"
-  variant?: "outline" | "secondary"
-  onResent?: (updated: StudentProfile) => void
-}) {
-  const resend = useResendQueueLinkMutation()
-
-  return (
-    <Button
-      type="button"
-      size={size}
-      variant={variant}
-      disabled={resend.isPending}
-      onClick={() =>
-        void resend
-          .mutateAsync(profile.id)
-          .then((updated) => {
-            onResent?.(updated)
-            toast.success(`Queue link resent to ${updated.email}.`)
-          })
-          .catch(() => {
-            toast.error("Failed to resend the queue link.")
-          })
-      }
-    >
-      {resend.isPending ? "Resending…" : label}
-    </Button>
-  )
-}
 
 /** The freshman's queue number and whether the emailed link reached them. */
 function QueueTicketSummary({ profile }: { profile: StudentProfile }) {
@@ -184,11 +142,11 @@ function CreateAccountPanel() {
   // What Admission has typed survives a tab switch, leaving the page and an accidental reload:
   // a long form that is lost halfway is the thing staff complain about.
   const { form, draft } = useDraftForm<CreateValues>({
-    formKey: "admission.create-account.v2",
+    formKey: "admission.create-account.v3",
     resolver: zodResolver(provisionStudentSchema),
     defaultValues: {
       first_name: "",
-      middle_initial: "",
+      middle_name: "",
       last_name: "",
       suffix: "",
       email: "",
@@ -284,7 +242,7 @@ function CreateAccountPanel() {
       reset({
         ...values,
         first_name: "",
-        middle_initial: "",
+        middle_name: "",
         last_name: "",
         suffix: "",
         email: "",
@@ -357,17 +315,20 @@ function CreateAccountPanel() {
                   <Input id="record-last-name" {...register("last_name")} />
                   <FieldError>{errors.last_name?.message}</FieldError>
                 </Field>
-                <Field data-invalid={Boolean(errors.middle_initial)}>
-                  <FieldLabel htmlFor="record-middle-initial">
-                    Middle initial
+                <Field data-invalid={Boolean(errors.middle_name)}>
+                  <FieldLabel htmlFor="record-middle-name">
+                    Middle name
                   </FieldLabel>
                   <Input
-                    id="record-middle-initial"
-                    maxLength={10}
-                    {...register("middle_initial")}
+                    id="record-middle-name"
+                    maxLength={100}
+                    {...register("middle_name")}
                   />
-                  <FieldDescription>Optional.</FieldDescription>
-                  <FieldError>{errors.middle_initial?.message}</FieldError>
+                  <FieldDescription>
+                    Optional. The full name is kept in the student&apos;s
+                    record; everywhere else only its first letter is shown.
+                  </FieldDescription>
+                  <FieldError>{errors.middle_name?.message}</FieldError>
                 </Field>
                 <Field data-invalid={Boolean(errors.suffix)}>
                   <FieldLabel htmlFor="record-suffix">Suffix</FieldLabel>
@@ -915,7 +876,8 @@ function StudentRecordDialog({
     if (!profile) return
     reset({
       first_name: profile.first_name,
-      middle_initial: profile.middle_initial ?? "",
+      // An older account has only the initial; that is what the box shows until a full name is typed.
+      middle_name: profile.middle_name ?? profile.middle_initial ?? "",
       last_name: profile.last_name,
       suffix: profile.suffix ?? "",
       email: profile.email,
@@ -976,15 +938,16 @@ function StudentRecordDialog({
                 <Input id="edit-last-name" {...register("last_name")} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="edit-middle-initial">
-                  Middle initial
-                </FieldLabel>
+                <FieldLabel htmlFor="edit-middle-name">Middle name</FieldLabel>
                 <Input
-                  id="edit-middle-initial"
-                  maxLength={10}
-                  {...register("middle_initial")}
+                  id="edit-middle-name"
+                  maxLength={100}
+                  {...register("middle_name")}
                 />
-                <FieldDescription>Optional.</FieldDescription>
+                <FieldDescription>
+                  Optional. Shown as an initial everywhere except here and on
+                  the student&apos;s own profile.
+                </FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="edit-suffix">Suffix</FieldLabel>
@@ -1647,6 +1610,11 @@ function ChangeRequestsPanel() {
 }
 
 export function StudentRecordsWorkspace() {
+  // The Freshmen tab opens the same record dialog as the directory (edit the email, resend, requirements).
+  const [openedFreshman, setOpenedFreshman] = useState<StudentProfile | null>(
+    null,
+  )
+
   return (
     <WorkspacePage
       title="Student Records"
@@ -1659,6 +1627,7 @@ export function StudentRecordsWorkspace() {
         >
           <TabsTrigger value="create">Create Account</TabsTrigger>
           <TabsTrigger value="directory">Student Directory</TabsTrigger>
+          <TabsTrigger value="freshmen">Freshmen</TabsTrigger>
           <TabsTrigger value="requests">Change Requests</TabsTrigger>
         </TabsList>
         <TabsContent value="create">
@@ -1666,6 +1635,13 @@ export function StudentRecordsWorkspace() {
         </TabsContent>
         <TabsContent value="directory">
           <StudentDirectoryPanel />
+        </TabsContent>
+        <TabsContent value="freshmen">
+          <AdmissionFreshmenPanel onOpenRecord={setOpenedFreshman} />
+          <StudentRecordDialog
+            profile={openedFreshman}
+            onClose={() => setOpenedFreshman(null)}
+          />
         </TabsContent>
         <TabsContent value="requests">
           <ChangeRequestsPanel />

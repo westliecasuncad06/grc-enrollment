@@ -69,7 +69,8 @@ Laravel password-broker storage is also used for initial Student account setup.
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | API resource identifier | |
 | `student_id` | `BIGINT UNSIGNED` | FK → `student_profiles.id`, cascade delete | Owning Student and Admission review | Ownership boundary. Indexed with `status`. |
 | `requested_first_name` | `VARCHAR(255)` | not null | Student request/revision; Admission comparison/decision | Proposed personal data; does not change `users.first_name`/`users.name` until approval. |
-| `requested_middle_initial` | `VARCHAR(10)` | nullable | Student request/revision; Admission comparison/decision | Proposed personal data; optional. |
+| `requested_middle_name` | `VARCHAR(100)` | nullable | Student request/revision; Admission comparison/decision | Proposed full middle name (ADR 0053); optional. Added `2026_10_16_000001`. |
+| `requested_middle_initial` | `VARCHAR(10)` | nullable | Student request/revision; Admission comparison/decision | Initial derived from the proposed middle name; what the proposed display name uses. |
 | `requested_last_name` | `VARCHAR(255)` | not null | Student request/revision; Admission comparison/decision | Proposed personal data. |
 | `requested_suffix` | `VARCHAR(20)` | nullable | Student request/revision; Admission comparison/decision | Proposed personal data; optional. |
 | `requested_email` | `VARCHAR(255)` | not null | Student request/revision; Admission comparison/decision | Proposed personal data; uniqueness is rechecked at approval. |
@@ -107,7 +108,7 @@ Outside this pool: 96 students are already `irregular`, 3,336 have no category y
 
 - `GET /api/v1/student-profile` and Student change-request operations resolve ownership from the Sanctum bearer identity; Students cannot supply another Student ID.
 - Admission-only `/api/v1/student-profiles` routes support paginated name, student-number, and email search, verified corrections, and invitation resend.
-- `StudentProfileResource` serializes approved identity/contact fields (the composed `name` alongside the split `first_name`/`middle_initial`/`last_name`/`suffix` — clients edit the parts, never the composed string), program/curriculum labels, permitted status labels, requirements time, academic editability, and delivery/setup state. It never serializes credential or token fields.
+- `StudentProfileResource` serializes approved identity/contact fields (the composed `name` alongside the split `first_name`/`middle_initial`/`last_name`/`suffix` — clients edit the parts, never the composed string), program/curriculum labels, permitted status labels, requirements time, academic editability, and delivery/setup state. It never serializes credential or token fields. `middle_name` (the full middle name) is sent only to Admission staff and to the student on their own profile; every other role gets null and every display of the name uses `middle_initial` (ADR 0053).
 - Change-request resources show official and proposed identity/contact groups, each with the same composed-plus-split name shape, so clients do not present pending values as already official.
 - Approvals and rejections notify the owning Student. Authorization is enforced by policy in addition to route middleware where applicable.
 

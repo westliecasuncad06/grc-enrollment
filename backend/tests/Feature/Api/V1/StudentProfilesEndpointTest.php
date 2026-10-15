@@ -317,7 +317,7 @@ final class StudentProfilesEndpointTest extends TestCase
 
         $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
             'first_name' => 'juan',
-            'middle_initial' => 'm',
+            'middle_name' => 'mendoza',
             'last_name' => 'DELA CRUZ',
             'suffix' => 'iii',
             'email' => 'casing.student@grc.test',
@@ -337,6 +337,7 @@ final class StudentProfilesEndpointTest extends TestCase
         $response->assertCreated();
         $response->assertJsonPath('data.name', 'Juan M. Dela Cruz III');
         $response->assertJsonPath('data.first_name', 'Juan');
+        $response->assertJsonPath('data.middle_name', 'Mendoza');
         $response->assertJsonPath('data.middle_initial', 'M');
         $response->assertJsonPath('data.last_name', 'Dela Cruz');
         $response->assertJsonPath('data.suffix', 'III');
@@ -345,6 +346,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'email' => 'casing.student@grc.test',
             'name' => 'Juan M. Dela Cruz III',
             'first_name' => 'Juan',
+            'middle_name' => 'Mendoza',
             'middle_initial' => 'M',
             'last_name' => 'Dela Cruz',
             'suffix' => 'III',

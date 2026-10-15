@@ -125,4 +125,49 @@ final class PersonNameTest extends TestCase
             PersonName::split('DELA CRUZ,JUAN(MS)'),
         );
     }
+
+    public function test_a_full_middle_name_is_shown_as_its_first_letter(): void
+    {
+        self::assertSame('R', PersonName::initial('Ramga'));
+        self::assertSame('D', PersonName::initial('dela Cruz'));
+        self::assertSame('Ñ', PersonName::initial('ñoño'));
+        self::assertNull(PersonName::initial(null));
+        self::assertNull(PersonName::initial('  '));
+    }
+
+    public function test_a_new_middle_name_replaces_what_is_stored_and_derives_the_initial(): void
+    {
+        self::assertSame(
+            ['middle_name' => 'Ramga', 'middle_initial' => 'R'],
+            PersonName::middle('ramga', null, null),
+        );
+        self::assertSame(
+            ['middle_name' => 'Dela Cruz', 'middle_initial' => 'D'],
+            PersonName::middle('DELA CRUZ', 'Ramga', 'R'),
+        );
+    }
+
+    public function test_an_empty_middle_name_clears_both(): void
+    {
+        self::assertSame(['middle_name' => null, 'middle_initial' => null], PersonName::middle('  ', 'Ramga', 'R'));
+        self::assertSame(['middle_name' => null, 'middle_initial' => null], PersonName::middle(null, null, 'S'));
+    }
+
+    public function test_a_middle_name_sent_back_unchanged_leaves_what_is_stored_alone(): void
+    {
+        // The same name, however it is typed.
+        self::assertSame(['middle_name' => 'Ramga', 'middle_initial' => 'R'], PersonName::middle('RAMGA', 'Ramga', 'R'));
+        // An older account that only has an initial: the form shows the initial, and sending it back is no change.
+        self::assertSame(['middle_name' => null, 'middle_initial' => 'S'], PersonName::middle('S', null, 'S'));
+        self::assertSame(['middle_name' => null, 'middle_initial' => 'S'], PersonName::middle('s.', null, 'S'));
+        // A bare initial that matches the initial of the stored full name is no change either (an older client).
+        self::assertSame(['middle_name' => 'Ramga', 'middle_initial' => 'R'], PersonName::middle('R', 'Ramga', 'R'));
+    }
+
+    public function test_the_display_name_uses_the_initial_of_a_full_middle_name(): void
+    {
+        $middle = PersonName::middle('Ramga', null, null);
+
+        self::assertSame('West R. Ragma', PersonName::compose('West', $middle['middle_initial'], 'Ragma', null));
+    }
 }

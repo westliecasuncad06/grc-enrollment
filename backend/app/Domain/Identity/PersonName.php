@@ -28,6 +28,51 @@ final class PersonName
     }
 
     /**
+     * What a full middle name is shown as wherever a name is displayed ("Ramga" is "R."). Only
+     * Admission and the student themself ever see the full middle name.
+     */
+    public static function initial(?string $middleName): ?string
+    {
+        $trimmed = trim((string) $middleName);
+
+        return $trimmed === '' ? null : mb_strtoupper(mb_substr($trimmed, 0, 1));
+    }
+
+    /**
+     * The middle name and initial to store when a full middle name is submitted. The initial is
+     * always derived from the name, so the two cannot disagree. A value that is the same as what
+     * is stored changes nothing, however it is typed: an older account has only an initial and no
+     * full name, so the form shows that initial, and sending it back must not turn it into a
+     * "full middle name" (nor wipe it).
+     *
+     * @return array{middle_name: ?string, middle_initial: ?string}
+     */
+    public static function middle(?string $submitted, ?string $currentName, ?string $currentInitial): array
+    {
+        $name = self::normalizeNamePart($submitted);
+        if ($name === null || $name === '') {
+            return ['middle_name' => null, 'middle_initial' => null];
+        }
+
+        $current = $currentName ?? $currentInitial;
+        $key = self::middleKey($name);
+        $unchanged = $current !== null && (
+            $key === self::middleKey($current)
+            // A bare initial that matches the stored name's initial (an older client, an older form).
+            || (mb_strlen($key) === 1 && $key === mb_strtolower((string) self::initial($current)))
+        );
+
+        return $unchanged
+            ? ['middle_name' => $currentName, 'middle_initial' => $currentInitial]
+            : ['middle_name' => $name, 'middle_initial' => self::initial($name)];
+    }
+
+    private static function middleKey(string $value): string
+    {
+        return mb_strtolower(rtrim(trim($value), '.'));
+    }
+
+    /**
      * Best-effort structured parts for a display name that was written without them (a seeder, a
      * script, an import). Same rules the split-name backfill migration applied to existing rows:
      * "SURNAME,GIVEN" or "First [Middle...] Last [Suffix]"; a single word is both first and last.
