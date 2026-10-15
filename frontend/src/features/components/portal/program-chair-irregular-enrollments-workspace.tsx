@@ -220,7 +220,9 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
           lastRevision?.status === "declined"
 
         return (
-          <div className="grid gap-1">
+          // A flex column, not a grid: a badge is `overflow-hidden`, which lets a grid track (and so
+          // the table column) shrink below the badge and the badge spill over the next column.
+          <div className="flex flex-col items-start gap-1">
             <Badge variant={statusBadgeVariant(enrollment.status)}>
               {enrollment.status_label}
             </Badge>

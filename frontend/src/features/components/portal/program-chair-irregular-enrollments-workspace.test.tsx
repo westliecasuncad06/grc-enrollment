@@ -120,6 +120,24 @@ describe("ProgramChairIrregularEnrollmentsWorkspace", () => {
     )
   })
 
+  it("keeps a long status in a flex column so its table column cannot shrink below the badge and spill over Units", async () => {
+    // A badge is overflow-hidden: inside a grid wrapper the column could shrink under it (owner, 2026-10-15,
+    // "Pending Program Head Approval" overlapping the units). jsdom has no layout, so the structure is pinned.
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(listResponse([awaitingProgramHead])),
+    )
+    renderWithSession(<ProgramChairIrregularEnrollmentsWorkspace />, {
+      session: programHeadSession,
+    })
+
+    const table = await screen.findByRole("table")
+    const badge = within(table).getByText("Pending Program Head Approval")
+    const wrapper = badge.parentElement
+
+    expect(wrapper).toHaveClass("flex", "flex-col", "items-start")
+    expect(wrapper).not.toHaveClass("grid")
+  })
+
   it("requires a reason before a rejection is sent as a Program Head decision", async () => {
     const user = userEvent.setup()
     const patchBodies: unknown[] = []
