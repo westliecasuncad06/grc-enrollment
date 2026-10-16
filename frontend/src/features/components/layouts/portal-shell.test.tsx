@@ -8,6 +8,7 @@ import { PortalShell } from "@/features/components/layouts/portal-shell"
 import { PortalModulePage } from "@/features/components/pages/portal-module-page"
 import { PortalOverviewPage } from "@/features/components/pages/portal-overview-page"
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from "@/features/hooks/use-sidebar-collapsed"
+import { guideRoles } from "@/features/lib/user-guide/roles"
 import { isConnectedModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import { routerMock } from "@/tests/navigation-mock"
@@ -104,6 +105,29 @@ describe("PortalShell", () => {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument()
     }
   })
+
+  it.each(guideRoles)(
+    "links %s to their own chapter of the user guide",
+    (role) => {
+      renderShell(role)
+
+      expect(screen.getByRole("link", { name: "User guide" })).toHaveAttribute(
+        "href",
+        `/user-guide?role=${role}`,
+      )
+    },
+  )
+
+  it.each(["it_admin", "queue_kiosk", "super_admin"] as const)(
+    "does not offer the user guide to %s",
+    (role) => {
+      renderShell(role)
+
+      expect(
+        screen.queryByRole("link", { name: "User guide" }),
+      ).not.toBeInTheDocument()
+    },
+  )
 
   it("shows the active academic term and falls back when none is active", async () => {
     fetchMock.mockImplementation((input) => {

@@ -2,6 +2,7 @@
 
 import { useGSAP } from "@gsap/react"
 import {
+  BookOpen,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -48,6 +49,7 @@ import {
   RESTRICTED_STUDENT_MODULE_ID,
   RESTRICTED_STUDENT_MODULE_IDS,
 } from "@/features/lib/enrollment-deadline"
+import { isGuideRole } from "@/features/lib/user-guide/roles"
 import { cn } from "@/features/lib/utils"
 import {
   formatAcademicTerm,
@@ -467,6 +469,17 @@ export function PortalShell({ children }: { children: ReactNode }) {
                     hasReturnedSchedule={hasReturnedSchedule}
                     restricted={restricted}
                   />
+                  {isGuideRole(session.role) && (
+                    <SheetClose asChild>
+                      <Link
+                        className="portal-mobile-guide"
+                        href={`/user-guide?role=${session.role}`}
+                      >
+                        <BookOpen aria-hidden="true" />
+                        User guide
+                      </Link>
+                    </SheetClose>
+                  )}
                 </div>
                 <SheetFooter className="portal-mobile-sheet__footer">
                   <div className="portal-profile">
@@ -508,6 +521,19 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
           <div className="portal-topbar__actions">
             <SuperAdminSwitcher />
+            {isGuideRole(session.role) && (
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="portal-topbar__help"
+              >
+                <Link href={`/user-guide?role=${session.role}`}>
+                  <BookOpen data-icon="inline-start" aria-hidden="true" />
+                  User guide
+                </Link>
+              </Button>
+            )}
             <PortalNotificationSheet />
             {/* Desktop only: whenever the hamburger drawer exists (<= 64rem) it
                 carries Sign out at its bottom instead, so the bell alone takes

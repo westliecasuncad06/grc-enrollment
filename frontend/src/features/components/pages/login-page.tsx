@@ -4,6 +4,7 @@ import { useGSAP } from "@gsap/react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   ArrowLeft,
+  BookOpen,
   LockKeyhole,
   ShieldCheck,
   UsersRound,
@@ -618,6 +619,13 @@ export function LoginPage() {
                 <FieldDescription>{copy.guideDescription}</FieldDescription>
                 <code>{copy.guidePath}</code>
               </div>
+
+              <Button asChild variant="ghost">
+                <Link href="/user-guide">
+                  <BookOpen data-icon="inline-start" aria-hidden="true" />
+                  Open the user guide
+                </Link>
+              </Button>
 
               <Button asChild variant="ghost">
                 <Link href="/">

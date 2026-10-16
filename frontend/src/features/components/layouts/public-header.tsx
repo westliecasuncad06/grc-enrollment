@@ -17,6 +17,7 @@ const navigationItems = [
   { href: "#academics", label: "Academics" },
   { href: "#student-services", label: "Student Services" },
   { href: "#enrollment", label: "Enrollment" },
+  { href: "/user-guide", label: "User Guide" },
 ] as const
 
 function PublicNavigation({ mobile = false }: { mobile?: boolean }) {
