@@ -35,6 +35,11 @@ export function toSession(
             actingContext: user.acting_context ?? null,
           }
         : undefined,
+    privacyNotice: {
+      version: user.privacy_notice.version,
+      acceptedVersion: user.privacy_notice.accepted_version,
+      requiresAcceptance: user.privacy_notice.requires_acceptance,
+    },
   }
 }
 

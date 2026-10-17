@@ -17,6 +17,19 @@ export const actingContextSchema = z
   })
   .strict()
 
+/**
+ * Whether this person has agreed to the current Data Privacy Notice (ADR 0055). The portal shows the notice
+ * before anything else while `requires_acceptance` is true.
+ */
+export const privacyNoticeStatusSchema = z
+  .object({
+    version: z.string().min(1),
+    accepted_version: z.string().min(1).nullable(),
+    accepted_at: z.string().min(1).nullable(),
+    requires_acceptance: z.boolean(),
+  })
+  .strict()
+
 export const userSchema = z
   .object({
     type: z.literal("user"),
@@ -30,9 +43,33 @@ export const userSchema = z
       .nullable()
       .optional(),
     status: z.string().min(1),
+    privacy_notice: privacyNoticeStatusSchema,
     acting_context: actingContextSchema.nullable().optional(),
   })
   .strict()
+
+/** Mirrors backend PrivacyNoticeResource: the public version and contact of the Data Privacy Notice. */
+export const privacyNoticeInfoSchema = z
+  .object({
+    type: z.literal("privacy-notice"),
+    version: z.string().min(1),
+    effective_date: z.string().min(1),
+    controller: z.string().min(1),
+    contact: z
+      .object({
+        name: z.string().min(1).nullable(),
+        email: z.string().min(1),
+        phone: z.string().min(1).nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const privacyNoticeInfoEnvelopeSchema = z
+  .object({ data: privacyNoticeInfoSchema })
+  .strict()
+
+export type PrivacyNoticeInfo = z.infer<typeof privacyNoticeInfoSchema>
 
 /** Mirrors backend AuthResource exactly — a completed sign-in either way,
  * whether reached directly (no OTP required) or via the OTP verify step. */

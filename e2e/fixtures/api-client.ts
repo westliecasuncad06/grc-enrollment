@@ -52,10 +52,44 @@ export async function loginWithEmail(
 
   const body = (await response.json()) as LoginResponse
 
+  await agreeToPrivacyNotice(request, body.data.token)
+
   return {
     token: body.data.token,
     userId: body.data.user.id,
     role: body.data.user.role,
+  }
+}
+
+/**
+ * A person meets the Data Privacy Notice before the portal (ADR 0055). Journeys that are not about
+ * the notice agree to it over the API right after signing in, the way a person would on their first
+ * visit, so they start in the portal. The notice's own journey is in auth.spec.ts.
+ */
+export async function agreeToPrivacyNotice(
+  request: APIRequestContext,
+  token: string,
+): Promise<void> {
+  const info = await request.get(`${API_BASE_URL}/api/v1/privacy-notice`)
+
+  if (!info.ok()) {
+    throw new Error(`privacy-notice failed: ${info.status()} ${await info.text()}`)
+  }
+
+  const { data } = (await info.json()) as { data: { version: string } }
+  const response = await request.post(
+    `${API_BASE_URL}/api/v1/auth/privacy-notice/accept`,
+    {
+      data: { notice_version: data.version },
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    },
+  )
+
+  // The queue kiosk is a device, not a person: it is never asked, and 403 is the right answer.
+  if (!response.ok() && response.status() !== 403) {
+    throw new Error(
+      `privacy-notice accept failed: ${response.status()} ${await response.text()}`,
+    )
   }
 }
 

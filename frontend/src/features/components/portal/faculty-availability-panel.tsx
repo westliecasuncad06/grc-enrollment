@@ -7,6 +7,7 @@ import { Controller, useForm } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataUseNotice } from "@/features/components/privacy/data-use-notice"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -246,6 +247,7 @@ export function FacultyAvailabilityPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
+        <DataUseNotice notice="faculty-availability" />
         {(availabilitiesQuery.isError || requestError) && (
           <Alert variant="destructive">
             <AlertDescription>

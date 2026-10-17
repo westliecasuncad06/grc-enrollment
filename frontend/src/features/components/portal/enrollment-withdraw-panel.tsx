@@ -3,6 +3,7 @@
 import { useState } from "react"
 
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataUseNotice } from "@/features/components/privacy/data-use-notice"
 import { DataTable } from "@/features/components/portal/data-table"
 import {
   AlertDialog,
@@ -209,6 +210,7 @@ export function EnrollmentWithdrawPanel({
               </p>
             )}
           </Field>
+          <DataUseNotice notice="withdrawal" />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={createMutation.isPending}>
               Cancel

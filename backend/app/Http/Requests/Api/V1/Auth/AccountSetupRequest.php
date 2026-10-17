@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\V1\Auth;
 
 use App\Support\Auth\PasswordPolicy;
+use App\Support\Privacy\PrivacyNotice;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class AccountSetupRequest extends FormRequest
@@ -19,6 +20,13 @@ final class AccountSetupRequest extends FormRequest
             'email' => ['required', 'email', 'max:255'],
             'code' => ['required', 'digits:6'],
             'password' => [...PasswordPolicy::rules(), 'confirmed'],
+            ...app(PrivacyNotice::class)->agreementRules(required: false),
         ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return app(PrivacyNotice::class)->agreementMessages('you');
     }
 }

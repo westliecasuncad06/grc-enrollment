@@ -73,6 +73,48 @@ describe("RequireSession", () => {
     expect(routerMock.replace).not.toHaveBeenCalled()
   })
 
+  it("shows the Data Privacy Notice instead of the portal until the person has agreed to it", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockReturnValue(new Promise(() => undefined)),
+    )
+    renderWithSession(<RequireSession>portal content</RequireSession>, {
+      route: "/portal",
+      session: {
+        ...testSession,
+        privacyNotice: {
+          version: "2026-10-18",
+          acceptedVersion: null,
+          requiresAcceptance: true,
+        },
+      },
+    })
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Before you continue, please read how we use your data",
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("portal content")).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it("lets a person who has agreed to the current notice into the portal", () => {
+    renderWithSession(<RequireSession>portal content</RequireSession>, {
+      route: "/portal",
+      session: {
+        ...testSession,
+        privacyNotice: {
+          version: "2026-10-18",
+          acceptedVersion: "2026-10-18",
+          requiresAcceptance: false,
+        },
+      },
+    })
+
+    expect(screen.getByText("portal content")).toBeInTheDocument()
+  })
+
   it("clears a restored kiosk session and redirects it to the device portal", async () => {
     const signOut = vi.fn()
     renderWithSession(<RequireSession>portal content</RequireSession>, {

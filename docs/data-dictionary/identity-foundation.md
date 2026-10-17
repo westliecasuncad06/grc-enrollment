@@ -124,3 +124,18 @@ explicitly; sections and demo enrollments are no-ops until an ongoing term
 exists. None of this is the real GRC catalog.
 See `docs/testing/SEEDED_IDENTITIES.md` for the full list and safety
 guarantees.
+
+## `privacy_notice_acceptances`
+
+Added `2026_10_18_000001` (ADR 0055). Who agreed to which version of the Data Privacy Notice, when and how.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
+| `user_id` | `BIGINT UNSIGNED` | not null, foreign key to `users.id`, on delete cascade | The person the agreement is for. |
+| `notice_version` | `VARCHAR(32)` | not null | The notice version the person was shown (`config/privacy.php`), e.g. `2026-10-18`. |
+| `method` | `VARCHAR(16)` | not null | `self`: the person read the notice and agreed (the only value that stops the sign-in screen from asking again). `assisted`: Admission confirmed, when creating the account, that the applicant was shown the notice. |
+| `recorded_by_user_id` | `BIGINT UNSIGNED` | nullable, foreign key to `users.id`, on delete set null | For `assisted`, the Admission staff member who confirmed it; null for `self`. |
+| `accepted_at` | `TIMESTAMP` | not null | When the agreement was made; the first time, if the same agreement is sent again. |
+
+Unique on `(user_id, notice_version, method)`: agreeing twice is the same record. No timestamps columns, no IP address or browser details are stored (data minimization); the audit log (`privacy_notice.accepted`, `privacy_notice.acknowledged_for_student`) records who and when. The table is on the IT Control delete allow-list, so an account that was only ever recorded by Admission can still be deleted while unused (ADR 0054).

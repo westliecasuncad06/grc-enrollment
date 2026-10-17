@@ -97,6 +97,8 @@ final class AuditableType
 
     public const CHED_REPORT = 'ched_report';
 
+    public const PRIVACY_NOTICE_ACCEPTANCE = 'privacy_notice_acceptance';
+
     /**
      * @return list<string>
      */
@@ -149,6 +151,7 @@ final class AuditableType
             self::USER_ACCOUNT,
             self::STUDENT_DEMOGRAPHICS,
             self::CHED_REPORT,
+            self::PRIVACY_NOTICE_ACCEPTANCE,
         ];
     }
 }

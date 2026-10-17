@@ -1007,6 +1007,25 @@ can reveal that shared secret, so this mechanism must never be reused for a
 personal-user password. Credential reads and rotations are authorized, audited,
 private/no-store, and rotation revokes every active kiosk token.
 
+### 9.7 Data Privacy Notice and Agreement (ADR 0055)
+
+The system processes personal data under the Data Privacy Act of 2012 (RA 10173), including sensitive personal
+information (age and education records). Therefore:
+
+- **One versioned notice** states who it covers (applicants, students of every type, former students, faculty, staff,
+  people who take a queue number), what is kept, why, who sees it, how it is shared, how it is protected, what is
+  asked of the person, staff duties, and the person's rights. It is public (`/privacy`) and states no retention period
+  or Data Protection Officer the school has not published.
+- **Every person reads and agrees** to the current version before using the portal, at the first sign-in and again
+  whenever the version changes. The agreement is recorded with its version and time and audited. The queue-kiosk
+  device is not asked. The screen is not an authorization boundary.
+- **Admission confirms** for each applicant that the notice was shown and agreed to before their details are saved;
+  the confirmation is recorded against the new account, and the student still agrees themself.
+- **Every form that takes personal details** shows a short notice of what it asks for, what it is used for and who
+  can see it, and links to the whole notice. The words come from one source so the screens cannot disagree.
+- New personal data may not be collected by a form unless the notice already covers its purpose; adding a purpose
+  means changing the notice and its version.
+
 ---
 
 ## 10. Data Model

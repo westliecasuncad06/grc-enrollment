@@ -5,6 +5,7 @@ import type { KioskTokenStore } from "@/features/kiosk/kiosk-token"
 import { useQueueKioskSession } from "@/features/hooks/use-queue-kiosk-session"
 import type { AuthenticatedUser } from "@/features/schemas/auth-schema"
 import { setUnauthorizedHandler } from "@/features/services/api-client"
+import { agreedPrivacyNotice } from "@/tests/privacy-notice-fixture"
 
 const kioskUser = {
   type: "user" as const,
@@ -13,6 +14,7 @@ const kioskUser = {
   email: "kiosk@grc.test",
   role: "queue_kiosk" as const,
   role_label: "Queue Kiosk",
+  privacy_notice: agreedPrivacyNotice,
   status: "active",
   college: null,
 }
@@ -24,6 +26,7 @@ const studentUser = {
   email: "student@grc.test",
   role: "student" as const,
   role_label: "Student",
+  privacy_notice: agreedPrivacyNotice,
   status: "active",
   college: "ccs" as const,
 }

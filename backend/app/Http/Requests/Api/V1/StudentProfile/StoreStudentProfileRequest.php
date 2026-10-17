@@ -6,6 +6,7 @@ use App\Actions\Identity\ListApplicableAdmissionRequirements;
 use App\Domain\Identity\FinancialStatus;
 use App\Domain\Identity\Gender;
 use App\Domain\Identity\StudentType;
+use App\Support\Privacy\PrivacyNotice;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -78,6 +79,10 @@ final class StoreStudentProfileRequest extends FormRequest
             'enrollment_category' => ['prohibited'],
             'student_type' => ['required', Rule::enum(StudentType::class)],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
+            // ADR 0055: Admission confirms the applicant was shown the Data Privacy Notice (what is
+            // collected, why, who sees it) and agreed before their details are saved. The version is the
+            // one that was shown, so the record names the wording the person actually saw.
+            ...app(PrivacyNotice::class)->agreementRules(required: true),
         ];
     }
 
@@ -94,6 +99,7 @@ final class StoreStudentProfileRequest extends FormRequest
             'contact_number.regex' => 'Enter a valid contact number (digits, +, spaces, dashes or brackets, 7 to 30 characters).',
             'birth_date.before' => 'The birth date must be in the past.',
             'student_number.prohibited' => 'A student number is assigned automatically. Tick "Student already has a student number" to enter one.',
+            ...app(PrivacyNotice::class)->agreementMessages('the student'),
         ];
     }
 

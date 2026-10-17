@@ -13,7 +13,9 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/features/components/ui/alert"
+import { DataUseNotice } from "@/features/components/privacy/data-use-notice"
 import { Button } from "@/features/components/ui/button"
+import { Checkbox } from "@/features/components/ui/checkbox"
 import {
   Field,
   FieldDescription,
@@ -31,6 +33,10 @@ import {
   SelectValue,
 } from "@/features/components/ui/select"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
+import {
+  AGREEMENT_TEXT,
+  PRIVACY_NOTICE_CONTENT_VERSION,
+} from "@/features/lib/privacy/notice-content"
 import { accountSetupSchema } from "@/features/schemas/admission-schema"
 import { facultyAccountSetupSchema } from "@/features/schemas/faculty-invitation-schema"
 import { staffAccountSetupSchema } from "@/features/schemas/staff-invitation-schema"
@@ -105,6 +111,8 @@ export function AccountSetupPage({
   const needsName = variant !== "student"
   const copy = COPY[variant]
   const [completed, setCompleted] = useState(false)
+  // The person reads the Data Privacy Notice before their details are taken, and agrees (ADR 0055).
+  const [privacyAgreed, setPrivacyAgreed] = useState(false)
   const [requestError, setRequestError] = useState("")
   const [resendStatus, setResendStatus] = useState<
     "idle" | "sending" | "sent" | "error"
@@ -189,34 +197,46 @@ export function AccountSetupPage({
 
   const submit = async (values: AccountSetupFormValues) => {
     setRequestError("")
+    if (!privacyAgreed) {
+      return
+    }
     try {
       if (variant === "faculty") {
-        await setupFacultyAccount({
-          email: values.email,
-          code: values.code,
-          name: values.name ?? "",
-          college: values.college,
-          masters_degree: values.masters_degree?.trim() || undefined,
-          password: values.password,
-          password_confirmation: values.password_confirmation,
-        })
+        await setupFacultyAccount(
+          {
+            email: values.email,
+            code: values.code,
+            name: values.name ?? "",
+            college: values.college,
+            masters_degree: values.masters_degree?.trim() || undefined,
+            password: values.password,
+            password_confirmation: values.password_confirmation,
+          },
+          PRIVACY_NOTICE_CONTENT_VERSION,
+        )
       } else if (variant === "staff") {
-        await setupStaffAccount({
-          email: values.email,
-          code: values.code,
-          name: values.name ?? "",
-          college: values.college,
-          masters_degree: values.masters_degree?.trim() || undefined,
-          password: values.password,
-          password_confirmation: values.password_confirmation,
-        })
+        await setupStaffAccount(
+          {
+            email: values.email,
+            code: values.code,
+            name: values.name ?? "",
+            college: values.college,
+            masters_degree: values.masters_degree?.trim() || undefined,
+            password: values.password,
+            password_confirmation: values.password_confirmation,
+          },
+          PRIVACY_NOTICE_CONTENT_VERSION,
+        )
       } else {
-        await setupStudentAccount({
-          email: values.email,
-          code: values.code,
-          password: values.password,
-          password_confirmation: values.password_confirmation,
-        })
+        await setupStudentAccount(
+          {
+            email: values.email,
+            code: values.code,
+            password: values.password,
+            password_confirmation: values.password_confirmation,
+          },
+          PRIVACY_NOTICE_CONTENT_VERSION,
+        )
       }
       setCompleted(true)
       toast.success("Your account is now active.")
@@ -477,11 +497,32 @@ export function AccountSetupPage({
                     </FieldError>
                   </Field>
                 </FieldGroup>
+                <div className="grid gap-3 pt-2">
+                  <DataUseNotice notice={`account-setup-${variant}`} />
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="setup-privacy-agreement"
+                      checked={privacyAgreed}
+                      disabled={isSubmitting}
+                      onCheckedChange={(value) =>
+                        setPrivacyAgreed(value === true)
+                      }
+                    />
+                    <label
+                      htmlFor="setup-privacy-agreement"
+                      className="text-sm leading-6"
+                    >
+                      {variant === "student"
+                        ? AGREEMENT_TEXT.student
+                        : AGREEMENT_TEXT.staff}
+                    </label>
+                  </div>
+                </div>
                 <Button
                   className="login-submit"
                   type="submit"
                   size="lg"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !privacyAgreed}
                 >
                   {isSubmitting
                     ? "Activating account…"

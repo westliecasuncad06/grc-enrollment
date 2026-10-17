@@ -18,6 +18,7 @@ import {
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { AdmissionPrivacyAcknowledgement } from "@/features/components/privacy/admission-privacy-acknowledgement"
 import {
   Alert,
   AlertDescription,
@@ -87,6 +88,7 @@ import { isApiClientError } from "@/features/services/api-client"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { focusFirstInvalidField } from "@/features/lib/focus-first-invalid"
 import { formatYearLevel } from "@/features/lib/format-year-level"
+import { PRIVACY_NOTICE_CONTENT_VERSION } from "@/features/lib/privacy/notice-content"
 import {
   provisionStudentSchema,
   studentTypeCanHaveExistingNumber,
@@ -136,6 +138,9 @@ function CreateAccountPanel() {
   const mutation = useProvisionStudentMutation()
   const resend = useResendAccountSetupInvitationMutation()
   const [created, setCreated] = useState<StudentProfile | null>(null)
+  // Admission confirms, for each applicant, that the Data Privacy Notice was shown and agreed to (ADR 0055).
+  // Kept out of the saved draft on purpose: it must be a fresh, deliberate confirmation for every student.
+  const [privacyShown, setPrivacyShown] = useState(false)
   // Bumped when the form is reset from code (after a save, or "Clear form"): a Select whose value goes
   // back to nothing otherwise keeps showing the old choice, so each one is mounted again.
   const [formEpoch, setFormEpoch] = useState(0)
@@ -220,9 +225,19 @@ function CreateAccountPanel() {
   }, [canHaveExistingNumber, clearErrors, hasExistingNumber, setValue])
 
   const submit = async (values: CreateValues) => {
+    if (!privacyShown) {
+      // The button is disabled until it is ticked; this guards a submit by the Enter key.
+      return
+    }
+
     try {
-      const profile = await mutation.mutateAsync(values)
+      const profile = await mutation.mutateAsync({
+        input: values,
+        privacyNoticeVersion: PRIVACY_NOTICE_CONTENT_VERSION,
+      })
       setCreated(profile)
+      // The next student needs their own confirmation.
+      setPrivacyShown(false)
       if (profile.queue_ticket_number !== null) {
         // A freshman: a queue number and a live-queue link, not the account setup email.
         if (profile.queue_link_delivery_status === "failed") {
@@ -653,6 +668,13 @@ function CreateAccountPanel() {
                     {errors.requirement_type_ids?.message}
                   </FieldError>
                 </Field>
+                <div className="md:col-span-2">
+                  <AdmissionPrivacyAcknowledgement
+                    checked={privacyShown}
+                    disabled={mutation.isPending}
+                    onCheckedChange={setPrivacyShown}
+                  />
+                </div>
                 {mutation.isError && (
                   <Alert className="md:col-span-2" variant="destructive">
                     <AlertTitle>
@@ -685,7 +707,11 @@ function CreateAccountPanel() {
                 <div className="flex flex-wrap items-center gap-3 md:col-span-2">
                   <Button
                     type="submit"
-                    disabled={mutation.isPending || programsQuery.isPending}
+                    disabled={
+                      mutation.isPending ||
+                      programsQuery.isPending ||
+                      !privacyShown
+                    }
                   >
                     <UserRoundPlus aria-hidden="true" />
                     {mutation.isPending
@@ -703,6 +729,7 @@ function CreateAccountPanel() {
                         onClick={() => {
                           draft.discard()
                           setFormEpoch((epoch) => epoch + 1)
+                          setPrivacyShown(false)
                           clearErrors()
                         }}
                       >

@@ -407,6 +407,93 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/privacy-notice:
+    get:
+      operationId: getPrivacyNotice
+      summary: Read the current Data Privacy Notice version and contact
+      description: >
+        Public and throttled (ADR 0055). The wording of the notice lives in the
+        frontend; the server decides which version is current (a person who
+        agreed to an older version is asked again) and who a person writes to
+        about their data. No Data Protection Officer is named unless one is
+        configured; the contact email defaults to the school's published address.
+      security: []
+      tags:
+        - Auth
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The current notice version, its effective date, and the contact.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivacyNoticeResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/auth/privacy-notice/accept:
+    post:
+      operationId: postAuthPrivacyNoticeAccept
+      summary: Agree to the current Data Privacy Notice
+      description: >
+        The signed-in person agrees to the version they were shown. The request
+        names that version; if the notice has changed since, it is refused (422)
+        and the person reads the current one. Idempotent: the same person and
+        version is one record, kept with its first time. Not available to the
+        queue-kiosk device. Returns the same user payload as `GET /auth/me`.
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - notice_version
+              properties:
+                notice_version:
+                  type: string
+      responses:
+        "200":
+          description: The agreement was recorded (or was already).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: The caller is a device, not a person.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The version named is not the current one.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/programs:
     get:
       operationId: getPrograms
@@ -7380,6 +7467,17 @@ components:
         password_confirmation:
           type: string
           minLength: 8
+        privacy_notice_acknowledged:
+          type: boolean
+          const: true
+          description: >
+            The person read and agreed to the Data Privacy Notice on the setup
+            page (ADR 0055). Optional; sent with `privacy_notice_version`, and
+            then recorded as their own agreement so the first sign-in does not ask
+            again. The faculty and staff setup requests accept the same two fields.
+        privacy_notice_version:
+          type: string
+          description: Required with `privacy_notice_acknowledged`; must be the current version.
     AccountSetupResponse:
       type: object
       additionalProperties: false
@@ -7691,6 +7789,7 @@ components:
         - role_label
         - college
         - status
+        - privacy_notice
       properties:
         type:
           type: string
@@ -7724,6 +7823,73 @@ components:
           enum: [ccs, coe, coa, cbae, null]
         status:
           type: string
+        privacy_notice:
+          $ref: "#/components/schemas/PrivacyNoticeStatus"
+    PrivacyNoticeStatus:
+      type: object
+      additionalProperties: false
+      description: >
+        Where this person stands on the Data Privacy Notice (ADR 0055). The portal
+        shows the notice before anything else while `requires_acceptance` is true.
+        Always false for the queue-kiosk device.
+      required:
+        - version
+        - accepted_version
+        - accepted_at
+        - requires_acceptance
+      properties:
+        version:
+          type: string
+          description: The current notice version.
+        accepted_version:
+          type: [string, 'null']
+          description: The newest version the person agreed to themself.
+        accepted_at:
+          type: [string, 'null']
+          format: date-time
+        requires_acceptance:
+          type: boolean
+    PrivacyNoticeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - type
+            - version
+            - effective_date
+            - controller
+            - contact
+          properties:
+            type:
+              type: string
+              const: privacy-notice
+            version:
+              type: string
+            effective_date:
+              type: string
+              format: date
+            controller:
+              type: string
+            contact:
+              type: object
+              additionalProperties: false
+              required:
+                - name
+                - email
+                - phone
+              properties:
+                name:
+                  type: [string, 'null']
+                  description: The Data Protection Officer, when one is configured.
+                email:
+                  type: string
+                phone:
+                  type: [string, 'null']
     ErrorResponse:
       type: object
       additionalProperties: false
@@ -11867,6 +12033,8 @@ components:
         - program_id
         - year_level
         - student_type
+        - privacy_notice_acknowledged
+        - privacy_notice_version
       properties:
         first_name:
           type: string
@@ -11965,6 +12133,17 @@ components:
         financial_status:
           type: [string, 'null']
           enum: [scholar, payee, null]
+        privacy_notice_acknowledged:
+          type: boolean
+          const: true
+          description: >
+            Admission confirms the applicant was shown the Data Privacy Notice, could read it and ask questions,
+            and agreed (ADR 0055). Required; refused with 422 when absent or false. Recorded against the new
+            account as an `assisted` agreement in the same transaction. The student still agrees themself the
+            first time they sign in, unless they agree on the account-setup page.
+        privacy_notice_version:
+          type: string
+          description: Required. The version of the notice that was shown; must be the current version.
     UpdateStudentProfileRequest:
       type: object
       additionalProperties: false

@@ -78,13 +78,23 @@ function queryString(filters: Record<string, unknown>): string {
   return query.toString()
 }
 
+/**
+ * Admission saves a new student. `privacyNoticeVersion` is the version of the Data Privacy Notice Admission
+ * showed the applicant before saving their details (ADR 0055): the server refuses the request without it and
+ * keeps it against the new account.
+ */
 export async function provisionStudent(
   input: ProvisionStudentInput,
+  privacyNoticeVersion: string,
 ): Promise<StudentProfile> {
   const parsed = parse(provisionStudentSchema, input, "provisioning request")
   const envelope = parse(
     studentProfileEnvelopeSchema,
-    await postAuthenticatedJson(STUDENT_PROFILES_PATH, parsed),
+    await postAuthenticatedJson(STUDENT_PROFILES_PATH, {
+      ...parsed,
+      privacy_notice_acknowledged: true,
+      privacy_notice_version: privacyNoticeVersion,
+    }),
     "created student profile",
   )
   return envelope.data
@@ -282,13 +292,27 @@ export async function decideProfileChangeRequest(
   return envelope.data
 }
 
+/**
+ * `privacyNoticeVersion`: the version of the Data Privacy Notice the student read and agreed to on the setup
+ * page (ADR 0055). Sent only when given, and then kept against the account.
+ */
 export async function setupStudentAccount(
   input: AccountSetupInput,
+  privacyNoticeVersion?: string,
 ): Promise<"active"> {
   const parsed = parse(accountSetupSchema, input, "account setup request")
   const envelope = parse(
     accountSetupEnvelopeSchema,
-    await postJson(ACCOUNT_SETUP_PATH, parsed),
+    await postJson(
+      ACCOUNT_SETUP_PATH,
+      privacyNoticeVersion === undefined
+        ? parsed
+        : {
+            ...parsed,
+            privacy_notice_acknowledged: true,
+            privacy_notice_version: privacyNoticeVersion,
+          },
+    ),
     "account setup response",
   )
   return envelope.data.status

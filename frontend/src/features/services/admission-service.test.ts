@@ -11,6 +11,8 @@ import {
   type ProvisionStudentInput,
 } from "@/features/services/admission-service"
 
+const NOTICE_VERSION = "2026-10-18"
+
 const input: ProvisionStudentInput = {
   first_name: "Amina",
   middle_name: "Santos",
@@ -127,7 +129,7 @@ describe("admission-service", () => {
       new Response(JSON.stringify({ data: profile }), { status: 201 }),
     )
 
-    await expect(provisionStudent(input)).resolves.toEqual(profile)
+    await expect(provisionStudent(input, NOTICE_VERSION)).resolves.toEqual(profile)
     const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
     const body =
       typeof request.body === "string"
@@ -136,7 +138,12 @@ describe("admission-service", () => {
 
     expect(url).toBe("http://127.0.0.1:8000/api/v1/student-profiles")
     expect(request.method).toBe("POST")
-    expect(body).toEqual(input)
+    // What was shown to the applicant travels with the request (ADR 0055): the server refuses it without.
+    expect(body).toEqual({
+      ...input,
+      privacy_notice_acknowledged: true,
+      privacy_notice_version: NOTICE_VERSION,
+    })
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
     expect(body).not.toHaveProperty("entry_year")
@@ -166,7 +173,7 @@ describe("admission-service", () => {
       new Response(JSON.stringify({ data: freshman }), { status: 201 }),
     )
 
-    await expect(provisionStudent(input)).resolves.toMatchObject({
+    await expect(provisionStudent(input, NOTICE_VERSION)).resolves.toMatchObject({
       account_setup_status: "awaiting_payment",
       queue_ticket_number: "Q012",
       queue_link_delivery_status: "sent",
@@ -189,7 +196,7 @@ describe("admission-service", () => {
       new Response(JSON.stringify({ data: older }), { status: 201 }),
     )
 
-    await expect(provisionStudent(input)).resolves.toMatchObject({
+    await expect(provisionStudent(input, NOTICE_VERSION)).resolves.toMatchObject({
       queue_ticket_number: null,
       queue_link_delivery_status: null,
       freshman_payment_confirmed_at: null,
@@ -226,25 +233,32 @@ describe("admission-service", () => {
       student_number: "2024-06-00123",
     }
 
-    await provisionStudent(existing)
+    await provisionStudent(existing, NOTICE_VERSION)
     const [, request] = fetchMock.mock.calls[0] as [string, RequestInit]
     const body =
       typeof request.body === "string"
         ? (JSON.parse(request.body) as Record<string, unknown>)
         : {}
 
-    expect(body).toEqual(existing)
+    expect(body).toEqual({
+      ...existing,
+      privacy_notice_acknowledged: true,
+      privacy_notice_version: NOTICE_VERSION,
+    })
   })
 
   it("refuses an existing student number for a Freshman before calling the API", async () => {
     for (const studentType of ["freshman"] as const) {
       await expect(
-        provisionStudent({
-          ...input,
-          student_type: studentType,
-          has_existing_student_number: true,
-          student_number: "2024-06-00123",
-        }),
+        provisionStudent(
+          {
+            ...input,
+            student_type: studentType,
+            has_existing_student_number: true,
+            student_number: "2024-06-00123",
+          },
+          NOTICE_VERSION,
+        ),
       ).rejects.toThrow()
     }
     expect(fetchMock).not.toHaveBeenCalled()
@@ -252,7 +266,7 @@ describe("admission-service", () => {
 
   it("refuses a student number sent without the existing-number option", async () => {
     await expect(
-      provisionStudent({ ...input, student_number: "2024-06-00123" }),
+      provisionStudent({ ...input, student_number: "2024-06-00123" }, NOTICE_VERSION),
     ).rejects.toThrow()
     expect(fetchMock).not.toHaveBeenCalled()
   })

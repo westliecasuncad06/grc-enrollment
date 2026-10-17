@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  acceptPrivacyNotice,
   AUTH_LOGIN_PATH,
+  AUTH_PRIVACY_NOTICE_ACCEPT_PATH,
   fetchCurrentUser,
+  fetchPrivacyNoticeInfo,
   login,
   logout,
+  PRIVACY_NOTICE_PATH,
 } from "@/features/services/auth-service"
 import { setAuthTokenProvider } from "@/features/services/api-client"
+import { agreedPrivacyNotice } from "@/tests/privacy-notice-fixture"
 
 const validUser = {
   type: "user" as const,
@@ -15,6 +20,7 @@ const validUser = {
   email: "registrar-head.seed@grc.test",
   role: "registrar_head",
   role_label: "Registrar Head",
+  privacy_notice: agreedPrivacyNotice,
   status: "active",
 }
 
@@ -95,6 +101,63 @@ describe("auth-service", () => {
 
     await expect(fetchCurrentUser()).rejects.toMatchObject({
       kind: "contract",
+    })
+  })
+
+  it("fetchCurrentUser rejects a user that carries no privacy notice status", async () => {
+    const { privacy_notice: _status, ...incomplete } = validUser
+    void _status
+
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: incomplete }), { status: 200 }),
+    )
+
+    await expect(fetchCurrentUser()).rejects.toMatchObject({
+      kind: "contract",
+    })
+  })
+
+  it("reads the public Data Privacy Notice version and contact", async () => {
+    const info = {
+      type: "privacy-notice" as const,
+      version: "2026-10-18",
+      effective_date: "2026-10-18",
+      controller: "Global Reciprocal Colleges",
+      contact: { name: null, email: "info@grc.edu.ph", phone: null },
+    }
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: info }), { status: 200 }),
+    )
+
+    await expect(fetchPrivacyNoticeInfo()).resolves.toEqual(info)
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://127.0.0.1:8000${PRIVACY_NOTICE_PATH}`,
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  it("agrees to the version that was read and returns the updated user", async () => {
+    const updated = {
+      ...validUser,
+      privacy_notice: {
+        version: "2026-10-18",
+        accepted_version: "2026-10-18",
+        accepted_at: "2026-10-18T01:02:03Z",
+        requires_acceptance: false,
+      },
+    }
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: updated }), { status: 200 }),
+    )
+
+    await expect(acceptPrivacyNotice("2026-10-18")).resolves.toEqual(updated)
+
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`http://127.0.0.1:8000${AUTH_PRIVACY_NOTICE_ACCEPT_PATH}`)
+    expect(request.method).toBe("POST")
+    expect(typeof request.body).toBe("string")
+    expect(JSON.parse(request.body as string)).toEqual({
+      notice_version: "2026-10-18",
     })
   })
 

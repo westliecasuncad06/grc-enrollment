@@ -212,6 +212,7 @@ final class StudentMiddleNameTest extends TestCase
             'town_city' => 'Caloocan City', 'province' => 'Metro Manila',
             'program_id' => $program->id, 'year_level' => 1,
             'requirements_verified' => true, 'student_type' => StudentType::Freshman->value,
+            'privacy_notice_acknowledged' => true, 'privacy_notice_version' => config('privacy.notice_version'),
         ];
     }
 

@@ -126,7 +126,17 @@ function useInvalidateStudentRecords() {
 
 export function useProvisionStudentMutation() {
   const invalidate = useInvalidateStudentRecords()
-  return useMutation({ mutationFn: provisionStudent, onSuccess: invalidate })
+  return useMutation({
+    // `privacyNoticeVersion`: the Data Privacy Notice version Admission showed the applicant (ADR 0055).
+    mutationFn: ({
+      input,
+      privacyNoticeVersion,
+    }: {
+      input: ProvisionStudentInput
+      privacyNoticeVersion: string
+    }) => provisionStudent(input, privacyNoticeVersion),
+    onSuccess: invalidate,
+  })
 }
 
 export function useUpdateStudentProfileMutation() {

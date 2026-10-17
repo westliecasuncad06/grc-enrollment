@@ -53,6 +53,8 @@ final class ProvisionStudentAuditTest extends TestCase
                 'program_id' => $program->id,
                 'year_level' => 2,
                 'requirements_verified' => true,
+                'privacy_notice_acknowledged' => true,
+                'privacy_notice_version' => config('privacy.notice_version'),
                 'student_type' => 'transferee',
             ]);
 
@@ -170,6 +172,8 @@ final class ProvisionStudentAuditTest extends TestCase
                     'program_id' => $program->id,
                     'year_level' => 3,
                     'requirements_verified' => true,
+                    'privacy_notice_acknowledged' => true,
+                    'privacy_notice_version' => config('privacy.notice_version'),
                     'student_type' => 'transferee',
                 ]);
         } catch (RuntimeException $exception) {

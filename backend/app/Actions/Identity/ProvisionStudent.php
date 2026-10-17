@@ -2,6 +2,7 @@
 
 namespace App\Actions\Identity;
 
+use App\Actions\Privacy\RecordPrivacyNoticeAcceptance;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
@@ -37,10 +38,11 @@ final class ProvisionStudent
         private readonly AuditRecorder $auditRecorder,
         private readonly ListApplicableAdmissionRequirements $applicableRequirements,
         private readonly AssignStudentNumber $assignStudentNumber,
+        private readonly RecordPrivacyNoticeAcceptance $recordPrivacyNotice,
     ) {}
 
     /**
-     * @param  array{first_name: string, middle_name?: ?string, last_name: string, suffix?: ?string, email: string, gender: string, birth_date: string, citizenship: string, contact_number: string, street_barangay: string, town_city: string, province: string, has_existing_student_number?: bool, student_number?: ?string, program_id: int, year_level: int, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>}  $data
+     * @param  array{first_name: string, middle_name?: ?string, last_name: string, suffix?: ?string, email: string, gender: string, birth_date: string, citizenship: string, contact_number: string, street_barangay: string, town_city: string, province: string, has_existing_student_number?: bool, student_number?: ?string, program_id: int, year_level: int, student_type: string, financial_status?: ?string, requirement_type_ids?: ?list<int>, privacy_notice_version?: ?string}  $data
      */
     public function handle(
         array $data,
@@ -145,6 +147,13 @@ final class ProvisionStudent
                     : null,
             ]);
             $profile->refresh();
+
+            // Admission confirmed the applicant was shown the Data Privacy Notice before their details were
+            // saved (ADR 0055). Kept with the account in this transaction, so no account exists without it.
+            // The student still agrees themself at first sign-in.
+            if (($data['privacy_notice_version'] ?? null) !== null) {
+                $this->recordPrivacyNotice->recordShownByStaff($user, $actor, $context);
+            }
 
             // The requirements Admission ticked off on the Create Account form are recorded as
             // handed in: the same rows the student's own checklist reads (ADR 0037).

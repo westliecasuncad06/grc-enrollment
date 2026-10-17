@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\V1\Auth\GoogleLoginController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
+use App\Http\Controllers\Api\V1\Auth\PrivacyNoticeAcceptanceController;
 use App\Http\Controllers\Api\V1\Auth\ResendLoginOtpController;
 use App\Http\Controllers\Api\V1\Auth\ResendStudentAccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
@@ -71,6 +72,7 @@ use App\Http\Controllers\Api\V1\ItControl\StudentAccountController as ItControlS
 use App\Http\Controllers\Api\V1\LectureLabAdjacencyController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
+use App\Http\Controllers\Api\V1\PrivacyNoticeController;
 use App\Http\Controllers\Api\V1\ProgramController;
 use App\Http\Controllers\Api\V1\ProspectusController;
 use App\Http\Controllers\Api\V1\PublicQueueViewController;
@@ -120,6 +122,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         ->where('token', '[A-Za-z0-9]{48}')
         ->middleware('throttle:public-queue-view')
         ->name('public.queue-view.show');
+
+    // ADR 0055: the Data Privacy Notice's version and contact. Public — it is read before anyone signs in.
+    Route::get('/privacy-notice', PrivacyNoticeController::class)
+        ->middleware('throttle:60,1')
+        ->name('privacy-notice');
 
     Route::prefix('auth')->name('auth.')->group(function (): void {
         Route::post('/account-setup', AccountSetupController::class)
@@ -178,6 +185,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::middleware(['auth:sanctum', EnsureUserIsActive::class, ApplySuperAdminActingContext::class, EnsureQueueKioskUsesDeviceSurface::class])->group(function (): void {
             Route::post('/logout', LogoutController::class)->name('logout');
             Route::get('/me', MeController::class)->name('me');
+            // ADR 0055: the signed-in person agrees to the current Data Privacy Notice.
+            Route::post('/privacy-notice/accept', [PrivacyNoticeAcceptanceController::class, 'store'])
+                ->middleware('throttle:30,1')
+                ->name('privacy-notice.accept');
         });
     });
 

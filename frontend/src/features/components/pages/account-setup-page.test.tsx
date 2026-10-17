@@ -17,10 +17,22 @@ function urlOf(input: RequestInfo | URL): string {
       : input.url
 }
 
+/** The Data Privacy Notice has to be agreed to before an account is set up (ADR 0055). */
+async function agreeToPrivacyNotice(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    screen.getByRole("checkbox", {
+      name: /I have read and understood the Data Privacy Notice/,
+    }),
+  )
+}
+
 async function completeForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Email address"), "student@grc.test")
   await user.type(screen.getByLabelText("One-time setup code"), "123456")
-  await user.type(screen.getByLabelText("New password"), "New-Secure-Password1!")
+  await user.type(
+    screen.getByLabelText("New password"),
+    "New-Secure-Password1!",
+  )
   await user.type(
     screen.getByLabelText("Confirm new password"),
     "New-Secure-Password1!",
@@ -30,6 +42,38 @@ async function completeForm(user: ReturnType<typeof userEvent.setup>) {
 describe("AccountSetupPage", () => {
   beforeEach(() => vi.clearAllMocks())
   afterEach(() => vi.unstubAllGlobals())
+
+  it("says what is asked and why, and cannot be submitted until the Data Privacy Notice is agreed to", async () => {
+    const user = userEvent.setup()
+    renderWithAuthProvider(<AccountSetupPage />, { route: "/account-setup" })
+
+    expect(
+      screen.getByRole("complementary", { name: "Data privacy" }),
+    ).toHaveTextContent(/a password you choose.*Who can see it/)
+    const submit = screen.getByRole("button", {
+      name: "Create password and activate",
+    })
+    expect(submit).toBeDisabled()
+
+    await agreeToPrivacyNotice(user)
+
+    expect(submit).toBeEnabled()
+  })
+
+  it("tells a professor that their name, college and degree are kept to build schedules", () => {
+    renderWithAuthProvider(<AccountSetupPage variant="faculty" />, {
+      route: "/faculty-account-setup",
+    })
+
+    expect(
+      screen.getByRole("complementary", { name: "Data privacy" }),
+    ).toHaveTextContent(/your name, college or department, master’s degree/)
+    expect(
+      screen.getByRole("checkbox", {
+        name: /keep the personal data of students/,
+      }),
+    ).toBeInTheDocument()
+  })
 
   it("submits the separate code and redirects to login after successful activation", async () => {
     const fetchMock = vi
@@ -44,6 +88,7 @@ describe("AccountSetupPage", () => {
     renderWithAuthProvider(<AccountSetupPage />, { route: "/account-setup" })
 
     await completeForm(user)
+    await agreeToPrivacyNotice(user)
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
     )
@@ -62,6 +107,9 @@ describe("AccountSetupPage", () => {
       code: "123456",
       password: "New-Secure-Password1!",
       password_confirmation: "New-Secure-Password1!",
+      // The Data Privacy Notice the person read and agreed to travels with the setup (ADR 0055).
+      privacy_notice_acknowledged: true,
+      privacy_notice_version: "2026-10-18",
     })
     const requestUrl = fetchMock.mock.calls[0]?.[0]
     expect(requestUrl ? urlOf(requestUrl) : "").not.toContain("123456")
@@ -95,6 +143,7 @@ describe("AccountSetupPage", () => {
     renderWithAuthProvider(<AccountSetupPage />, { route: "/account-setup" })
 
     await completeForm(user)
+    await agreeToPrivacyNotice(user)
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
     )
@@ -165,11 +214,15 @@ describe("AccountSetupPage", () => {
 
     await user.type(screen.getByLabelText("Email address"), "student@grc.test")
     await user.type(codeInput, "12345")
-    await user.type(screen.getByLabelText("New password"), "New-Secure-Password1!")
+    await user.type(
+      screen.getByLabelText("New password"),
+      "New-Secure-Password1!",
+    )
     await user.type(
       screen.getByLabelText("Confirm new password"),
       "New-Secure-Password1!",
     )
+    await agreeToPrivacyNotice(user)
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
     )
@@ -192,6 +245,7 @@ describe("AccountSetupPage", () => {
       screen.getByLabelText("Confirm new password"),
       "alllowercase1!",
     )
+    await agreeToPrivacyNotice(user)
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
     )
@@ -235,7 +289,9 @@ describe("AccountSetupPage", () => {
     expect(requestUrl ? urlOf(requestUrl) : "").toContain(
       "/api/v1/auth/resend-student-account-setup",
     )
-    const body: unknown = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)
+    const body: unknown = JSON.parse(
+      fetchMock.mock.calls[0]?.[1]?.body as string,
+    )
     expect(body).toEqual({ email: "student@grc.test" })
   })
 
@@ -261,11 +317,15 @@ describe("AccountSetupPage", () => {
     )
     await user.type(screen.getByLabelText("One-time setup code"), "123456")
     await user.type(screen.getByLabelText("Full name"), "Prof. Juan Dela Cruz")
-    await user.type(screen.getByLabelText("New password"), "New-Secure-Password1!")
+    await user.type(
+      screen.getByLabelText("New password"),
+      "New-Secure-Password1!",
+    )
     await user.type(
       screen.getByLabelText("Confirm new password"),
       "New-Secure-Password1!",
     )
+    await agreeToPrivacyNotice(user)
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
     )
@@ -288,6 +348,9 @@ describe("AccountSetupPage", () => {
       name: "Prof. Juan Dela Cruz",
       password: "New-Secure-Password1!",
       password_confirmation: "New-Secure-Password1!",
+      // The Data Privacy Notice the person read and agreed to travels with the setup (ADR 0055).
+      privacy_notice_acknowledged: true,
+      privacy_notice_version: "2026-10-18",
     })
   })
 
@@ -310,11 +373,15 @@ describe("AccountSetupPage", () => {
     await user.type(screen.getByLabelText("Email address"), "dean@grc.test")
     await user.type(screen.getByLabelText("One-time setup code"), "123456")
     await user.type(screen.getByLabelText("Full name"), "Aurora Dean Santos")
-    await user.type(screen.getByLabelText("New password"), "New-Secure-Password1!")
+    await user.type(
+      screen.getByLabelText("New password"),
+      "New-Secure-Password1!",
+    )
     await user.type(
       screen.getByLabelText("Confirm new password"),
       "New-Secure-Password1!",
     )
+    await agreeToPrivacyNotice(user)
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
     )
@@ -337,6 +404,9 @@ describe("AccountSetupPage", () => {
       name: "Aurora Dean Santos",
       password: "New-Secure-Password1!",
       password_confirmation: "New-Secure-Password1!",
+      // The Data Privacy Notice the person read and agreed to travels with the setup (ADR 0055).
+      privacy_notice_acknowledged: true,
+      privacy_notice_version: "2026-10-18",
     })
   })
 })

@@ -103,6 +103,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'transferee',
         ]);
 
@@ -193,6 +195,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => $yearLevel,
             'requirement_type_ids' => $requirementTypeIds,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
         ];
     }
 
@@ -331,6 +335,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'freshman',
         ]);
 
@@ -403,6 +409,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => 'A single address text a client made up',
             'student_type' => 'freshman',
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
         ]);
 
         // Admission chooses the student type, but the Regular / Irregular category is decided by the
@@ -437,6 +445,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'transferee',
         ])->assertCreated();
 
@@ -507,6 +517,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'transferee',
         ])->assertCreated();
 
@@ -559,6 +571,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'transferee',
         ]);
 
@@ -613,6 +627,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'year_level' => 1,
             'financial_status' => 'scholar',
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'freshman',
         ]);
         $scholar->assertCreated();
@@ -633,6 +649,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'freshman',
         ]);
         $unset->assertCreated();
@@ -875,6 +893,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'year_level' => 1,
             'student_type' => 'freshman',
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
         ]);
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
@@ -906,6 +926,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'freshman',
         ]);
 
@@ -949,6 +971,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 4,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'freshman',
         ]);
 
@@ -978,6 +1002,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'freshman',
         ]);
 
@@ -1005,6 +1031,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'year_level' => 1,
             'requirements_verified' => true,
+            'privacy_notice_acknowledged' => true,
+            'privacy_notice_version' => config('privacy.notice_version'),
             'student_type' => 'freshman',
         ]);
 

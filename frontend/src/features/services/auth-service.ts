@@ -2,18 +2,23 @@ import {
   authEnvelopeSchema,
   loginOtpChallengeEnvelopeSchema,
   loginResponseEnvelopeSchema,
+  privacyNoticeInfoEnvelopeSchema,
   userEnvelopeSchema,
   type AuthenticatedUser,
+  type PrivacyNoticeInfo,
 } from "@/features/schemas/auth-schema"
 import {
   ApiClientError,
   type AuthenticatedRequestOptions,
   getAuthenticatedJson,
+  getJson,
   postAuthenticatedJson,
   postJson,
 } from "@/features/services/api-client"
 
 export const AUTH_LOGIN_PATH = "/api/v1/auth/login"
+export const PRIVACY_NOTICE_PATH = "/api/v1/privacy-notice"
+export const AUTH_PRIVACY_NOTICE_ACCEPT_PATH = "/api/v1/auth/privacy-notice/accept"
 export const AUTH_LOGOUT_PATH = "/api/v1/auth/logout"
 export const AUTH_ME_PATH = "/api/v1/auth/me"
 export const AUTH_VERIFY_LOGIN_OTP_PATH = "/api/v1/auth/login/verify-otp"
@@ -156,6 +161,44 @@ export async function fetchCurrentUser(
 ): Promise<AuthenticatedUser> {
   const payload = await getAuthenticatedJson(AUTH_ME_PATH, signal, options)
   const parsed = userEnvelopeSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw contractError(parsed.error)
+  }
+
+  return parsed.data.data
+}
+
+/** The Data Privacy Notice's current version and contact. Public: it is read before anyone signs in. */
+export async function fetchPrivacyNoticeInfo(
+  signal?: AbortSignal,
+): Promise<PrivacyNoticeInfo> {
+  const parsed = privacyNoticeInfoEnvelopeSchema.safeParse(
+    await getJson(PRIVACY_NOTICE_PATH, signal),
+  )
+
+  if (!parsed.success) {
+    throw contractError(parsed.error)
+  }
+
+  return parsed.data.data
+}
+
+/**
+ * The signed-in person agrees to the version they were shown. The answer is the same user payload as
+ * `GET /auth/me`, so the session is updated from it.
+ */
+export async function acceptPrivacyNotice(
+  noticeVersion: string,
+  signal?: AbortSignal,
+): Promise<AuthenticatedUser> {
+  const parsed = userEnvelopeSchema.safeParse(
+    await postAuthenticatedJson(
+      AUTH_PRIVACY_NOTICE_ACCEPT_PATH,
+      { notice_version: noticeVersion },
+      signal,
+    ),
+  )
 
   if (!parsed.success) {
     throw contractError(parsed.error)

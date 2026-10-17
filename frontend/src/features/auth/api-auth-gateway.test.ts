@@ -9,6 +9,7 @@ import {
   setAuthTokenProvider,
   setUnauthorizedHandler,
 } from "@/features/services/api-client"
+import { agreedPrivacyNotice } from "@/tests/privacy-notice-fixture"
 
 function createMemoryStorage(): TokenStorageLike {
   const values = new Map<string, string>()
@@ -31,6 +32,7 @@ const validUser = {
   email: "student.seed@grc.test",
   role: "student",
   role_label: "Student",
+  privacy_notice: agreedPrivacyNotice,
   status: "active",
 }
 
@@ -242,6 +244,38 @@ describe("createApiAuthGateway", () => {
     const session = await gateway.restore?.()
 
     expect(session).toMatchObject({ userId: "1", role: "student" })
+  })
+
+  it("restore carries where the person stands on the Data Privacy Notice, so the portal can ask", async () => {
+    const tokenStore = createAuthTokenStore(createMemoryStorage())
+    tokenStore.write("1|plaintext-token")
+    setAuthTokenProvider(() => tokenStore.read())
+    const gateway = createApiAuthGateway(tokenStore)
+
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            ...validUser,
+            privacy_notice: {
+              version: "2026-10-18",
+              accepted_version: "2025-01-01",
+              accepted_at: "2025-01-01T00:00:00Z",
+              requires_acceptance: true,
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    )
+
+    const session = await gateway.restore?.()
+
+    expect(session?.privacyNotice).toEqual({
+      version: "2026-10-18",
+      acceptedVersion: "2025-01-01",
+      requiresAcceptance: true,
+    })
   })
 
   it("restore clears an unverifiable token and returns null", async () => {

@@ -7,6 +7,17 @@ export interface SuperAdminSessionState {
   } | null
 }
 
+/**
+ * Where the signed-in person stands on the Data Privacy Notice (ADR 0055). `requiresAcceptance` makes the
+ * portal show the notice before anything else. Absent only in hand-built test sessions: a real session always
+ * carries it, because the API sends it with every user.
+ */
+export interface PrivacyNoticeState {
+  version: string
+  acceptedVersion: string | null
+  requiresAcceptance: boolean
+}
+
 export interface AuthSession {
   userId: string
   displayName: string
@@ -14,6 +25,7 @@ export interface AuthSession {
   college?: "ccs" | "coe" | "coa" | "cbae" | null
   signedInAt: string
   superAdmin?: SuperAdminSessionState
+  privacyNotice?: PrivacyNoticeState
 }
 
 export interface Credentials {

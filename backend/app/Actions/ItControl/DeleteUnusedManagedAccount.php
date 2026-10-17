@@ -38,6 +38,8 @@ final class DeleteUnusedManagedAccount
         'faculty_subject_preferences',
         'faculty_specializations',
         'faculty_load_overrides',
+        // The person's own record of having read the Data Privacy Notice (ADR 0055).
+        'privacy_notice_acceptances',
     ];
 
     /**

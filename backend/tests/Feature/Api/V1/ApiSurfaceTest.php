@@ -100,6 +100,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/notifications',
             'GET|HEAD api/v1/payment-discount-settings',
             'GET|HEAD api/v1/payments',
+            'GET|HEAD api/v1/privacy-notice',
             'GET|HEAD api/v1/programs',
             'GET|HEAD api/v1/programs/{program}/current-curriculum-subjects',
             'GET|HEAD api/v1/prospectus',
@@ -193,6 +194,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/auth/login/resend-otp',
             'POST api/v1/auth/login/verify-otp',
             'POST api/v1/auth/logout',
+            'POST api/v1/auth/privacy-notice/accept',
             'POST api/v1/auth/resend-student-account-setup',
             'POST api/v1/auth/reset-password',
             'POST api/v1/auth/staff-account-setup',
@@ -258,6 +260,7 @@ final class ApiSurfaceTest extends TestCase
         $guarded = [
             'api.v1.auth.logout',
             'api.v1.auth.me',
+            'api.v1.auth.privacy-notice.accept',
             'api.v1.cashier-payment-candidates.show',
             'api.v1.cashier-transactions.index',
             'api.v1.analytics.attrition',

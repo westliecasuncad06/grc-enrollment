@@ -8,6 +8,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  ShieldCheck,
 } from "lucide-react"
 import Link from "next/link"
 import { useParams, usePathname, useRouter } from "next/navigation"
@@ -480,6 +481,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
                       </Link>
                     </SheetClose>
                   )}
+                  <SheetClose asChild>
+                    <Link className="portal-mobile-guide" href="/privacy">
+                      <ShieldCheck aria-hidden="true" />
+                      Data privacy
+                    </Link>
+                  </SheetClose>
                 </div>
                 <SheetFooter className="portal-mobile-sheet__footer">
                   <div className="portal-profile">
@@ -534,6 +541,17 @@ export function PortalShell({ children }: { children: ReactNode }) {
                 </Link>
               </Button>
             )}
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="portal-topbar__help"
+            >
+              <Link href="/privacy">
+                <ShieldCheck data-icon="inline-start" aria-hidden="true" />
+                Data privacy
+              </Link>
+            </Button>
             <PortalNotificationSheet />
             {/* Desktop only: whenever the hamburger drawer exists (<= 64rem) it
                 carries Sign out at its bottom instead, so the bell alone takes

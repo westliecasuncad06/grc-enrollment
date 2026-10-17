@@ -6,6 +6,7 @@ import { type FormEvent, useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataUseNotice } from "@/features/components/privacy/data-use-notice"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
@@ -166,6 +167,7 @@ export function StaffInvitationWorkspace() {
                 </p>
               </CardHeader>
               <CardContent className="grid gap-4">
+                <DataUseNotice notice="invite-staff" />
                 <form onSubmit={addInvite} className="flex flex-wrap items-end gap-2">
                   <Field className="min-w-64 flex-1">
                     <FieldLabel htmlFor="invite-email">Email</FieldLabel>

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { QueueKioskSignOutDialog } from "./queue-kiosk-sign-out-dialog"
+import { agreedPrivacyNotice } from "@/tests/privacy-notice-fixture"
 
 describe("QueueKioskSignOutDialog", () => {
   const fetchMock = vi.fn<typeof fetch>()
@@ -48,6 +49,7 @@ describe("QueueKioskSignOutDialog", () => {
                 email: "queue@grc.com",
                 role: "queue_kiosk",
                 role_label: "Queue Kiosk",
+                privacy_notice: agreedPrivacyNotice,
                 college: null,
                 status: "active",
               },

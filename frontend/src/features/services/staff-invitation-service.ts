@@ -70,10 +70,24 @@ export async function resendStaffInvitation(
   })
 }
 
+/**
+ * `privacyNoticeVersion`: the version of the Data Privacy Notice the staff member read and agreed to on the
+ * setup page (ADR 0055). Sent only when given, and then kept against the account.
+ */
 export async function setupStaffAccount(
   input: StaffAccountSetupInput,
+  privacyNoticeVersion?: string,
 ): Promise<"active"> {
-  const payload = await postJson(STAFF_ACCOUNT_SETUP_PATH, input)
+  const payload = await postJson(
+    STAFF_ACCOUNT_SETUP_PATH,
+    privacyNoticeVersion === undefined
+      ? input
+      : {
+          ...input,
+          privacy_notice_acknowledged: true,
+          privacy_notice_version: privacyNoticeVersion,
+        },
+  )
   const result = staffAccountSetupEnvelopeSchema.safeParse(payload)
 
   if (result.success) return result.data.data.status

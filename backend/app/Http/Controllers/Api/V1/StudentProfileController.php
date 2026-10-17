@@ -87,6 +87,8 @@ final class StudentProfileController extends Controller
             'financial_status' => $request->validated('financial_status'),
             // Null when the caller sent no list, so the older single confirmation still works.
             'requirement_type_ids' => $request->validated('requirement_type_ids'),
+            // Validated against the current version: Admission showed the applicant the Data Privacy Notice.
+            'privacy_notice_version' => $request->validated('privacy_notice_version'),
         ], $actor, $contextFactory->fromRequest($request));
 
         $profile = $admitted->profile;

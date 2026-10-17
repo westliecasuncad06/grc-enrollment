@@ -65,10 +65,24 @@ export async function resendFacultyInvitation(
   })
 }
 
+/**
+ * `privacyNoticeVersion`: the version of the Data Privacy Notice the professor read and agreed to on the setup
+ * page (ADR 0055). Sent only when given, and then kept against the account.
+ */
 export async function setupFacultyAccount(
   input: FacultyAccountSetupInput,
+  privacyNoticeVersion?: string,
 ): Promise<"active"> {
-  const payload = await postJson(FACULTY_ACCOUNT_SETUP_PATH, input)
+  const payload = await postJson(
+    FACULTY_ACCOUNT_SETUP_PATH,
+    privacyNoticeVersion === undefined
+      ? input
+      : {
+          ...input,
+          privacy_notice_acknowledged: true,
+          privacy_notice_version: privacyNoticeVersion,
+        },
+  )
   const result = facultyAccountSetupEnvelopeSchema.safeParse(payload)
 
   if (result.success) return result.data.data.status

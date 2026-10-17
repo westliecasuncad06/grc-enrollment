@@ -96,6 +96,10 @@ final class AuditAction
 
     public const STUDENT_ACCOUNT_ACTIVATED = 'student_account.activated';
 
+    public const PRIVACY_NOTICE_ACCEPTED = 'privacy_notice.accepted';
+
+    public const PRIVACY_NOTICE_ACKNOWLEDGED_FOR_STUDENT = 'privacy_notice.acknowledged_for_student';
+
     public const FACULTY_ACCOUNT_SETUP_INVITATION_SENT = 'faculty_account.setup_invitation_sent';
 
     public const FACULTY_ACCOUNT_SETUP_INVITATION_FAILED = 'faculty_account.setup_invitation_failed';
@@ -382,6 +386,8 @@ final class AuditAction
             self::STUDENT_ACCOUNT_SETUP_INVITATION_SENT,
             self::STUDENT_ACCOUNT_SETUP_INVITATION_FAILED,
             self::STUDENT_ACCOUNT_ACTIVATED,
+            self::PRIVACY_NOTICE_ACCEPTED,
+            self::PRIVACY_NOTICE_ACKNOWLEDGED_FOR_STUDENT,
             self::STUDENT_PROFILE_CHANGE_REQUESTED,
             self::STUDENT_PROFILE_CHANGE_REQUEST_UPDATED,
             self::STUDENT_PROFILE_CHANGE_REQUEST_CANCELLED,

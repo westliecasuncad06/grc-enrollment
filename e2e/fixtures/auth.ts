@@ -21,6 +21,26 @@ export async function signInViaUi(page: Page, role: SeedRole): Promise<void> {
   await page.getByLabel("Password", { exact: true }).fill(SEED_PASSWORD)
   await page.getByRole("button", { name: "Sign in" }).click()
   await expect(page).toHaveURL(/\/portal/)
+  await agreeToPrivacyNoticeIfAsked(page)
+}
+
+/**
+ * The first sign-in of an account that has not agreed to the Data Privacy Notice shows the notice
+ * before the portal (ADR 0055). Reads it and agrees, the way a person would; does nothing when the
+ * account has already agreed.
+ */
+export async function agreeToPrivacyNoticeIfAsked(page: Page): Promise<void> {
+  const agree = page.getByRole("button", { name: "I agree and continue" })
+
+  if (await agree.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await page
+      .getByRole("checkbox", {
+        name: /I have read and understood the Data Privacy Notice/,
+      })
+      .check()
+    await agree.click()
+    await expect(agree).toBeHidden()
+  }
 }
 
 /**

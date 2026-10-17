@@ -4,6 +4,7 @@ import { FileText, Trash2, Upload } from "lucide-react"
 import { useRef, useState } from "react"
 
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataUseNotice } from "@/features/components/privacy/data-use-notice"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -197,6 +198,8 @@ export function StudentTorUpload({ enabled = true }: { enabled?: boolean }) {
           before you enroll.
         </p>
       </div>
+
+      <DataUseNotice notice="tor-upload" />
 
       {error && (
         <Alert variant="destructive">

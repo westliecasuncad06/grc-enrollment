@@ -10,6 +10,7 @@ import {
 import { renderWithSession } from "@/tests/render-app"
 import * as superAdminService from "@/features/services/super-admin-service"
 import type { AuthenticatedUser } from "@/features/schemas/auth-schema"
+import { agreedPrivacyNotice } from "@/tests/privacy-notice-fixture"
 
 describe("SuperAdminSwitcher and SuperAdminBanner", () => {
   it("does not render switcher or banner for non-super-admin users", () => {
@@ -90,6 +91,7 @@ describe("SuperAdminSwitcher and SuperAdminBanner", () => {
         email: "westlie@grc.edu.ph",
         role: "dean",
         role_label: "Dean",
+        privacy_notice: agreedPrivacyNotice,
         college: "ccs",
         status: "active",
         acting_context: { role: "dean", college: "ccs" },
@@ -137,6 +139,7 @@ describe("SuperAdminSwitcher and SuperAdminBanner", () => {
         email: "westlie@grc.edu.ph",
         role: "super_admin",
         role_label: "Super Admin",
+        privacy_notice: agreedPrivacyNotice,
         college: null,
         status: "active",
         acting_context: null,

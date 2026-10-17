@@ -234,6 +234,14 @@ async function fillAccountBasics(user: ReturnType<typeof userEvent.setup>) {
       name: "BSIT — Bachelor of Science in Information Technology",
     }),
   )
+  await agreeToPrivacyNotice(user)
+}
+
+/** Admission confirms the student was shown the Data Privacy Notice before saving (ADR 0055). */
+async function agreeToPrivacyNotice(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    screen.getByRole("checkbox", { name: /I showed this Data Privacy Notice/ }),
+  )
 }
 
 async function chooseStudentType(
@@ -414,6 +422,7 @@ describe("Student Records workspace", () => {
     const scrollIntoView = vi
       .spyOn(window.HTMLElement.prototype, "scrollIntoView")
       .mockImplementation(() => undefined)
+    await agreeToPrivacyNotice(user)
     await user.click(submit)
     expect(
       await screen.findByText("Select the student's gender."),
@@ -525,6 +534,74 @@ describe("Student Records workspace", () => {
     expect(body).not.toHaveProperty("curriculum_id")
     expect(body).not.toHaveProperty("entry_year")
     expect(body).not.toHaveProperty("student_number")
+  })
+
+  describe("the Data Privacy Notice (ADR 0055)", () => {
+    it("tells Admission what the student is told, and cannot save until Admission confirms the student agreed", async () => {
+      const user = userEvent.setup()
+      renderWorkspace()
+      await fillAccountBasics(user)
+      await chooseStudentType(user, "Transferee")
+
+      // Filling the form ticked the box (the helper); undo it to see the starting state.
+      const confirmation = screen.getByRole("checkbox", {
+        name: /I showed this Data Privacy Notice/,
+      })
+      await user.click(confirmation)
+      expect(confirmation).not.toBeChecked()
+
+      expect(
+        screen.getByText("Data privacy: show this to the student first"),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole("link", {
+          name: /Open the Data Privacy Notice for the student/,
+        }),
+      ).toHaveAttribute("href", "/privacy")
+      const submit = screen.getByRole("button", {
+        name: "Create account and email setup",
+      })
+      expect(submit).toBeDisabled()
+
+      await user.click(confirmation)
+      expect(submit).toBeEnabled()
+    })
+
+    it("sends the version of the notice that was shown with the student's details", async () => {
+      const user = userEvent.setup()
+      renderWorkspace()
+      await fillAccountBasics(user)
+      await chooseStudentType(user, "Transferee")
+      await user.click(
+        screen.getByRole("button", { name: "Create account and email setup" }),
+      )
+      await waitFor(() => expect(toast.success).toHaveBeenCalled())
+
+      expect(provisioningBody()).toMatchObject({
+        privacy_notice_acknowledged: true,
+        privacy_notice_version: "2026-10-18",
+      })
+    })
+
+    it("asks again for the next student: one confirmation is never carried over", async () => {
+      const user = userEvent.setup()
+      renderWorkspace()
+      await fillAccountBasics(user)
+      await chooseStudentType(user, "Transferee")
+      await user.click(
+        screen.getByRole("button", { name: "Create account and email setup" }),
+      )
+      await waitFor(() => expect(toast.success).toHaveBeenCalled())
+
+      expect(
+        screen.getByRole("checkbox", {
+          name: /I showed this Data Privacy Notice/,
+        }),
+      ).not.toBeChecked()
+      expect(
+        screen.getByRole("button", { name: "Create account and email setup" }),
+      ).toBeDisabled()
+    })
   })
 
   describe("a freshman pays first", () => {

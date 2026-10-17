@@ -5,6 +5,7 @@ import { useEffect, useRef, type ReactNode } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { GrcLoadingLogo } from "@/features/components/portal/grc-loading-logo"
+import { PrivacyAgreementGate } from "@/features/components/privacy/privacy-agreement-gate"
 import { getSafeReturnPath } from "@/features/router/safe-return-path"
 
 function SessionRestoreState() {
@@ -65,6 +66,12 @@ export function RequireSession({ children }: { children: ReactNode }) {
 
   if (redirectTo !== null) {
     return null
+  }
+
+  // ADR 0055: nobody sees the portal until they have read and agreed to the current Data Privacy Notice. Not a
+  // security boundary (the API answers regardless); it is where the person is told what is collected and why.
+  if (session?.privacyNotice?.requiresAcceptance) {
+    return <PrivacyAgreementGate />
   }
 
   return <>{children}</>

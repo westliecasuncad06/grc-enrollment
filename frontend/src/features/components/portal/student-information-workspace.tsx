@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form"
 import { AccordionCard } from "@/features/components/portal/accordion-card"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { DataUseNotice } from "@/features/components/privacy/data-use-notice"
 import { formatYearLevel } from "@/features/lib/format-year-level"
 import {
   Alert,
@@ -342,6 +343,10 @@ export function StudentInformationWorkspace() {
                     </FieldDescription>
                     <FieldError>{errors.reason?.message}</FieldError>
                   </Field>
+                  <DataUseNotice
+                    className="md:col-span-2"
+                    notice="profile-change"
+                  />
                   {(create.isError || revise.isError) && (
                     <Alert className="md:col-span-2" variant="destructive">
                       <AlertDescription>

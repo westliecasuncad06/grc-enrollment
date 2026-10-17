@@ -11,6 +11,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/features/components/ui/alert"
+import { DataUseNotice } from "@/features/components/privacy/data-use-notice"
 import { Button } from "@/features/components/ui/button"
 import {
   Field,
@@ -185,6 +186,7 @@ export function ForgotPasswordPage() {
                     </FieldError>
                   </Field>
                 </FieldGroup>
+                <DataUseNotice notice="forgot-password" />
                 <Button
                   className="login-submit"
                   type="submit"

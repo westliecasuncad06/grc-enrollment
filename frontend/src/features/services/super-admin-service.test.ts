@@ -6,6 +6,7 @@ import {
   switchActingContext,
 } from "@/features/services/super-admin-service"
 import * as apiClient from "@/features/services/api-client"
+import { agreedPrivacyNotice } from "@/tests/privacy-notice-fixture"
 
 describe("super-admin-service", () => {
   const validUserResponse = {
@@ -16,6 +17,7 @@ describe("super-admin-service", () => {
       email: "westlie@grc.edu.ph",
       role: "dean",
       role_label: "Dean",
+      privacy_notice: agreedPrivacyNotice,
       college: "ccs",
       status: "active",
       acting_context: {
@@ -50,6 +52,7 @@ describe("super-admin-service", () => {
         email: "westlie@grc.edu.ph",
         role: "super_admin",
         role_label: "Super Admin",
+        privacy_notice: agreedPrivacyNotice,
         college: null,
         status: "active",
         acting_context: null,

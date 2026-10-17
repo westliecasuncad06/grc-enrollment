@@ -14,6 +14,7 @@ import { axe } from "vitest-axe"
 import { kioskTokenStorageKey } from "@/features/kiosk/kiosk-token"
 import { QueueKioskPage } from "@/features/components/pages/queue-kiosk-page"
 import { QUEUE_KIOSK_AUTO_DONE_SECONDS } from "@/features/components/kiosk/queue-kiosk-student-session"
+import { agreedPrivacyNotice } from "@/tests/privacy-notice-fixture"
 
 const kioskUser = {
   type: "user" as const,
@@ -22,6 +23,7 @@ const kioskUser = {
   email: "kiosk@grc.test",
   role: "queue_kiosk" as const,
   role_label: "Queue Kiosk",
+  privacy_notice: agreedPrivacyNotice,
   status: "active",
   college: null,
 }
@@ -33,6 +35,7 @@ const studentUser = {
   email: "student@grc.test",
   role: "student" as const,
   role_label: "Student",
+  privacy_notice: agreedPrivacyNotice,
   status: "active",
   college: "ccs" as const,
 }

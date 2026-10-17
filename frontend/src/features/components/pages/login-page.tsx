@@ -18,6 +18,7 @@ import { z } from "zod"
 import { useAuth } from "@/features/auth/use-auth"
 import { isAuthError } from "@/features/auth/auth-error"
 import { isLoginOtpRequiredError } from "@/features/auth/login-otp-error"
+import { DataUseNotice } from "@/features/components/privacy/data-use-notice"
 import { Button } from "@/features/components/ui/button"
 import { GoogleSignInButton } from "@/features/components/ui/google-sign-in-button"
 import {
@@ -591,6 +592,8 @@ export function LoginPage() {
                     </Link>
                   </Field>
                 </FieldGroup>
+
+                <DataUseNotice notice="sign-in" />
 
                 <Button
                   className="login-submit"
