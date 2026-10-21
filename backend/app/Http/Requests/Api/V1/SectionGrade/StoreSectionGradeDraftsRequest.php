@@ -24,7 +24,7 @@ final class StoreSectionGradeDraftsRequest extends FormRequest
         return [
             'grades' => ['required', 'array', 'min:1'],
             'grades.*.student_id' => ['required', 'integer', 'distinct', 'exists:student_profiles,id'],
-            'grades.*.mark' => ['required', Rule::enum(GradeMark::class)],
+            'grades.*.mark' => ['required', Rule::enum(GradeMark::class)->except(GradeMark::Withdrawn)],
             'grades.*.remarks' => ['sometimes', 'nullable', 'string'],
             'grades.*.subject_id' => ['prohibited'],
             'grades.*.academic_term_id' => ['prohibited'],

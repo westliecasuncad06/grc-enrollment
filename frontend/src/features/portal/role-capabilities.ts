@@ -358,6 +358,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         FileSearch,
       ),
       portalModule(
+        "subject-withdrawals",
+        "Subject Withdrawals",
+        "Withdraw a student from one or more enrolled subjects; each shows as W on their prospectus.",
+        UserMinus,
+      ),
+      portalModule(
         "graduates",
         "Graduates",
         "View and search the official register of graduated students across all programs and school years.",

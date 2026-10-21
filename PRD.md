@@ -200,6 +200,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 - Review and approve enrollment submissions, and open a student's profile from the approvals queue.
 - Approve, reject or return transferee credit mappings that the Program Chair has endorsed (ADR 0026, amended).
 - Perform logged override or void actions for authorized edge cases.
+- Withdraw an enrolled student from individual subjects with a reason: the subject leaves the enrollment, its seat is released, and the Prospectus shows it as W (Withdrawn) until the student takes it again (ADR 0056).
 - View predictive attrition analytics.
 - Generate government compliance reports.
 - Preview and download, as CSV or as CHED's own template filled in (Excel), the CHED Enrollment List and the NSTP Form 2-B (enrollment and graduates) and Form 2-A (summary) for a term; every view and download is audited (ADR 0049).

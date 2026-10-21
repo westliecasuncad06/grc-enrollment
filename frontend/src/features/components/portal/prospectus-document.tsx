@@ -297,7 +297,9 @@ function ProspectusYears({
       (sum, s) =>
         sum +
         s.entries.filter(
-          (e) => e.mark !== null || e.credit?.status === "approved",
+          (e) =>
+            (e.mark !== null && e.mark !== "W") ||
+            e.credit?.status === "approved",
         ).length,
       0,
     )

@@ -99,6 +99,7 @@ use App\Http\Controllers\Api\V1\StudentSchedulePreferenceController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Controllers\Api\V1\SubjectOfferingController;
 use App\Http\Controllers\Api\V1\SubjectWaiverController;
+use App\Http\Controllers\Api\V1\SubjectWithdrawalController;
 use App\Http\Controllers\Api\V1\SuperAdmin\ActingContextController;
 use App\Http\Controllers\Api\V1\SuperAdmin\UserAccountController;
 use App\Http\Controllers\Api\V1\TorDocumentController;
@@ -634,6 +635,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::post('/students/{studentProfile}/subject-waivers', [SubjectWaiverController::class, 'store'])
                 ->whereNumber('studentProfile')
                 ->name('students.subject-waivers.store');
+            // The Registrar Head withdraws a student's enrolled subjects; each shows as W on the Prospectus.
+            Route::get('/students/{studentProfile}/subject-withdrawals', [SubjectWithdrawalController::class, 'index'])
+                ->whereNumber('studentProfile')
+                ->name('students.subject-withdrawals.index');
+            Route::post('/students/{studentProfile}/subject-withdrawals', [SubjectWithdrawalController::class, 'store'])
+                ->whereNumber('studentProfile')
+                ->name('students.subject-withdrawals.store');
             Route::delete('/subject-waivers/{waiver}', [SubjectWaiverController::class, 'destroy'])
                 ->whereNumber('waiver')
                 ->name('subject-waivers.destroy');

@@ -63,6 +63,7 @@ const expectedModuleIds = {
     "section-change-requests",
     "grade-approvals",
     "academic-transcripts",
+    "subject-withdrawals",
     "graduates",
     "cor-records",
     "enrollment-requests",

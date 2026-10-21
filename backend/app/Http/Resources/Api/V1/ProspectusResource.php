@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\Prospectus;
 use App\Domain\Academic\ProspectusEntry;
 use App\Domain\Academic\ProspectusSemester;
@@ -213,7 +214,7 @@ final class ProspectusResource extends JsonResource
             'mark_label' => $grade?->mark?->label(),
             'final_grade' => $grade?->final_grade,
             'status' => $grade?->status->value,
-            'status_label' => $grade?->status->label(),
+            'status_label' => $grade?->mark === GradeMark::Withdrawn ? 'Withdrawn' : $grade?->status->label(),
             'academic_term_id' => $grade?->academic_term_id,
             'term_label' => $term !== null ? "{$term->school_year} · {$term->semester}" : null,
             'attempt_count' => count($entry->attempts),
@@ -269,7 +270,7 @@ final class ProspectusResource extends JsonResource
             'mark_label' => $grade->mark?->label(),
             'final_grade' => $grade->final_grade,
             'status' => $grade->status->value,
-            'status_label' => $grade->status->label(),
+            'status_label' => $grade->mark === GradeMark::Withdrawn ? 'Withdrawn' : $grade->status->label(),
             'academic_term_id' => $grade->academic_term_id,
             'term_label' => "{$term->school_year} · {$term->semester}",
         ];

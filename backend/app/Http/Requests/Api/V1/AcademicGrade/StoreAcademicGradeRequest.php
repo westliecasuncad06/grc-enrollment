@@ -41,7 +41,7 @@ final class StoreAcademicGradeRequest extends FormRequest
             'subject_id' => ['required', 'integer', 'exists:subjects,id'],
             'section_id' => ['required', 'integer', 'exists:sections,id'],
             'academic_term_id' => ['required', 'integer', 'exists:academic_terms,id'],
-            'mark' => ['sometimes', 'nullable', Rule::enum(GradeMark::class)],
+            'mark' => ['sometimes', 'nullable', Rule::enum(GradeMark::class)->except(GradeMark::Withdrawn)],
             'remarks' => ['sometimes', 'nullable', 'string'],
         ];
     }

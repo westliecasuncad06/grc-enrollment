@@ -8,7 +8,9 @@ namespace App\Domain\Academic;
  * this enum is demonstrable-scale, not yet signed off). Descending numeric
  * scale — 1.00 is the highest mark, 5.00 is failed — plus four non-numeric
  * marks: `C`/`NC` (used exclusively by completion-only subjects, see
- * `CompletionOnlySubjectRule`), `INC` (Incomplete), and `DRP` (Dropped).
+ * `CompletionOnlySubjectRule`), `INC` (Incomplete), `DRP` (Dropped), and `W` (Withdrawn). `W` is entered only
+ * by the Registrar Head's subject withdrawal (`WithdrawEnrolledSubjects`) and
+ * is never accepted from grade encoding.
  *
  * `academic_grades.final_grade` mirrors this enum's `numericValue()` — NULL
  * for every non-numeric mark. That mirroring is maintained by the actions
@@ -31,6 +33,7 @@ enum GradeMark: string
     case NotComplete = 'NC';
     case Incomplete = 'INC';
     case Dropped = 'DRP';
+    case Withdrawn = 'W';
 
     public function label(): string
     {
@@ -49,6 +52,7 @@ enum GradeMark: string
             self::NotComplete => 'Not Complete',
             self::Incomplete => 'Incomplete',
             self::Dropped => 'Dropped',
+            self::Withdrawn => 'Withdrawn',
         };
     }
 
@@ -63,7 +67,7 @@ enum GradeMark: string
             self::Excellent, self::HighDistinction, self::WithDistinction,
             self::VeryGood, self::Good, self::VerySatisfactory,
             self::Satisfactory, self::Fair, self::Passed, self::Failed => (float) $this->value,
-            self::Complete, self::NotComplete, self::Incomplete, self::Dropped => null,
+            self::Complete, self::NotComplete, self::Incomplete, self::Dropped, self::Withdrawn => null,
         };
     }
 
@@ -108,7 +112,7 @@ enum GradeMark: string
     public function blocksRegularStanding(): bool
     {
         return match ($this) {
-            self::Failed, self::NotComplete, self::Incomplete, self::Dropped => true,
+            self::Failed, self::NotComplete, self::Incomplete, self::Dropped, self::Withdrawn => true,
             default => false,
         };
     }
@@ -126,7 +130,7 @@ enum GradeMark: string
      */
     public static function completionCases(): array
     {
-        return [self::Complete, self::NotComplete, self::Incomplete, self::Dropped];
+        return [self::Complete, self::NotComplete, self::Incomplete, self::Dropped, self::Withdrawn];
     }
 
     /**

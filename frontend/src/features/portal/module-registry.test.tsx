@@ -75,6 +75,7 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "ched-reports": "CHED Reports",
   "professor-information": "My Information",
   "freshman-enrollees": "Freshmen enrollees",
+  "subject-withdrawals": "Subject withdrawals",
 }
 
 const unmigratedRegionNames: Partial<Record<string, string>> = {}

@@ -120,6 +120,11 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "destructive",
     icon: Ban,
   },
+  subject_withdrawn: {
+    label: "Subject withdrawn",
+    tone: "neutral",
+    icon: FileCheck,
+  },
   transferee_credit_approved: {
     label: "Transferee credit approved",
     tone: "success",
@@ -381,6 +386,9 @@ export function notificationDestinationPath(
     case "withdrawal_request_approved":
     case "withdrawal_request_rejected":
       return role === "student" ? "/portal/enrollment" : null
+    // The Registrar Head withdrew a subject: the student sees it as W on the Grades page.
+    case "subject_withdrawn":
+      return role === "student" ? "/portal/grades" : null
     case "transferee_credit_requested":
       return role === "program_chair" ? "/portal/credit-mappings" : null
     case "transferee_credit_endorsed":

@@ -48,7 +48,7 @@ final class UpdateAcademicGradeRequest extends FormRequest
     {
         return [
             'action' => ['sometimes', 'string', Rule::in(array_keys(self::REQUIRED_CURRENT_STATUS_FOR_ACTION))],
-            'mark' => ['prohibited_if:action,submit,lock', 'sometimes', 'nullable', Rule::enum(GradeMark::class)],
+            'mark' => ['prohibited_if:action,submit,lock', 'sometimes', 'nullable', Rule::enum(GradeMark::class)->except(GradeMark::Withdrawn)],
             'remarks' => ['prohibited_if:action,submit,lock', 'sometimes', 'nullable', 'string'],
         ];
     }

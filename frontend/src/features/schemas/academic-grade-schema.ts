@@ -18,6 +18,7 @@ export const gradeMarkValues = [
   "NC",
   "INC",
   "DRP",
+  "W",
 ] as const
 
 /** Leadership subjects use only Complete or Incomplete marks. */

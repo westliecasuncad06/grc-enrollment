@@ -168,6 +168,8 @@ final class AuditAction
 
     public const ENROLLMENT_SUBJECT_WAIVER_REVOKED = 'enrollment_subject_waiver.revoked';
 
+    public const ENROLLMENT_SUBJECT_WITHDRAWN = 'enrollment_subject.withdrawn';
+
     public const ADMISSION_REQUIREMENT_UPDATED = 'admission_requirement.updated';
 
     public const ADMISSION_REQUIREMENT_TYPE_CREATED = 'admission_requirement_type.created';
@@ -414,6 +416,7 @@ final class AuditAction
             self::FEE_SCHEDULE_UPDATED,
             self::ENROLLMENT_SUBJECT_WAIVER_GRANTED,
             self::ENROLLMENT_SUBJECT_WAIVER_REVOKED,
+            self::ENROLLMENT_SUBJECT_WITHDRAWN,
             self::ADMISSION_REQUIREMENT_UPDATED,
             self::ADMISSION_REQUIREMENT_TYPE_CREATED,
             self::ACADEMIC_GRADE_CREATED,

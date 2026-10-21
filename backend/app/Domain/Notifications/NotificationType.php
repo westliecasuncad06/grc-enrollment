@@ -19,6 +19,8 @@ enum NotificationType: string
     case WithdrawalRequestSubmitted = 'withdrawal_request_submitted';
     case WithdrawalRequestApproved = 'withdrawal_request_approved';
     case WithdrawalRequestRejected = 'withdrawal_request_rejected';
+    /** The Registrar Head withdrew one or more of the student's subjects (shown as W on the Prospectus). */
+    case SubjectWithdrawn = 'subject_withdrawn';
     case TransfereeCreditApproved = 'transferee_credit_approved';
     case TransfereeCreditRejected = 'transferee_credit_rejected';
     case TransfereeCreditRequested = 'transferee_credit_requested';

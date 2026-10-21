@@ -37,6 +37,12 @@ describe("markTone", () => {
     expect(markTone("5.00")).toBe("failed")
   })
 
+  it("treats W as withdrawn, with its own badge and row tint", () => {
+    expect(markTone("W")).toBe("withdrawn")
+    expect(markToneBadgeVariant("withdrawn")).toBe("secondary")
+    expect(markToneRowClass("withdrawn")).not.toBe("")
+  })
+
   it.each(["NC", "INC", "DRP"] as const)("treats %s as incomplete", (mark) => {
     expect(markTone(mark)).toBe("incomplete")
   })

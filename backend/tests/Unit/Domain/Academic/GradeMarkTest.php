@@ -10,7 +10,7 @@ final class GradeMarkTest extends TestCase
     public function test_scale_values_match_grc_descending_scale(): void
     {
         self::assertSame(
-            ['1.00', '1.25', '1.50', '1.75', '2.00', '2.25', '2.50', '2.75', '3.00', '5.00', 'C', 'NC', 'INC', 'DRP'],
+            ['1.00', '1.25', '1.50', '1.75', '2.00', '2.25', '2.50', '2.75', '3.00', '5.00', 'C', 'NC', 'INC', 'DRP', 'W'],
             array_column(GradeMark::cases(), 'value'),
         );
     }
@@ -31,6 +31,7 @@ final class GradeMarkTest extends TestCase
         self::assertSame('Not Complete', GradeMark::NotComplete->label());
         self::assertSame('Incomplete', GradeMark::Incomplete->label());
         self::assertSame('Dropped', GradeMark::Dropped->label());
+        self::assertSame('Withdrawn', GradeMark::Withdrawn->label());
     }
 
     public function test_only_the_ten_numeric_marks_are_numeric(): void
@@ -52,8 +53,8 @@ final class GradeMarkTest extends TestCase
         $completion = GradeMark::completionCases();
 
         self::assertCount(10, $numeric);
-        self::assertSame(['C', 'NC', 'INC', 'DRP'], array_column($completion, 'value'));
-        self::assertCount(14, [...$numeric, ...$completion]);
+        self::assertSame(['C', 'NC', 'INC', 'DRP', 'W'], array_column($completion, 'value'));
+        self::assertCount(15, [...$numeric, ...$completion]);
     }
 
     public function test_is_passing_agrees_with_the_configured_3_00_threshold(): void

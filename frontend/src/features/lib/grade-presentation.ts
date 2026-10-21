@@ -36,6 +36,7 @@ export const gradeMarkLabel: Record<GradeMarkValue, string> = {
   NC: "Not Complete",
   INC: "Incomplete",
   DRP: "Dropped",
+  W: "Withdrawn",
 }
 
 /**
@@ -54,11 +55,17 @@ export function allowedMarksForSubject(
  * itself). Drives color coding on the prospectus and grade slip so a
  * student can spot a problem mark or an unattempted subject at a glance.
  */
-export type MarkTone = "passed" | "failed" | "incomplete" | "not-taken"
+export type MarkTone =
+  | "passed"
+  | "failed"
+  | "incomplete"
+  | "withdrawn"
+  | "not-taken"
 
 export function markTone(mark: GradeMarkValue | null): MarkTone {
   if (mark === null) return "not-taken"
   if (mark === "5.00") return "failed"
+  if (mark === "W") return "withdrawn"
   if (mark === "NC" || mark === "INC" || mark === "DRP") return "incomplete"
   return "passed"
 }
@@ -66,9 +73,10 @@ export function markTone(mark: GradeMarkValue | null): MarkTone {
 /** Maps a mark's tone onto the shared `Badge` component's `variant` prop. */
 export function markToneBadgeVariant(
   tone: MarkTone,
-): "success" | "destructive" | "warning" | "outline" {
+): "success" | "destructive" | "warning" | "secondary" | "outline" {
   if (tone === "failed") return "destructive"
   if (tone === "incomplete") return "warning"
+  if (tone === "withdrawn") return "secondary"
   if (tone === "not-taken") return "outline"
   return "success"
 }
@@ -81,6 +89,7 @@ export function markToneBadgeVariant(
 export function markToneRowClass(tone: MarkTone): string {
   if (tone === "failed") return "bg-destructive/5"
   if (tone === "incomplete") return "bg-warning/5"
+  if (tone === "withdrawn") return "bg-muted/60"
   if (tone === "not-taken") return "bg-muted/40"
   return ""
 }
