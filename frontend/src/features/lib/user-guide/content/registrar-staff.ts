@@ -6,7 +6,7 @@ export const registrarStaffChapter: GuideChapter = {
   tagline: "Approve enrollments and keep enrollment records in order",
   intro: [
     "Registrar Staff approve or reject the enrollments students submit, so that students can go on to payment. You also follow credit mappings, handle withdrawal requests and look up Certificates of Registration. The Registrar Head makes the overrides and the credit decisions: you cannot.",
-    "Your menu has seven pages: Enrollment Approvals, Freshmen Enrollees, Credit Mappings, Enrollment Requests, COR Records, Graduates and Enrollment Dashboard.",
+    "Your menu has seven pages: Enrollment Approvals, Students, Credit Mappings, Enrollment Requests, COR Records, Graduates and Enrollment Dashboard.",
   ],
   sections: [
     {
@@ -73,25 +73,18 @@ export const registrarStaffChapter: GuideChapter = {
       ],
     },
     {
-      id: "freshmen",
-      title: "Freshmen Enrollees",
+      id: "students",
+      title: "Students",
       blocks: [
         {
           kind: "paragraph",
-          text: "A read-only list of freshmen who paid the Cashier first, including those who are waiting for a section to open.",
-        },
-        {
-          kind: "figure",
-          shot: "registrar-staff-freshman-enrollees",
-          caption: "Freshmen and where each one is.",
+          text: "A read-only list of every student, with their program, year level, category and academic standing.",
         },
         {
           kind: "bullets",
           items: [
-            "Use the tabs **All freshmen**, **Enrolled**, **Awaiting a section**, **Awaiting approval** and **Awaiting payment** to filter the list.",
-            "**Awaiting payment**: the freshman has a queue number but has not paid.",
-            "**Awaiting a section**: the first payment is on file and every section is full.",
-            "**Awaiting approval**: a section was given, and your approval enrolls them.",
+            "Search by student number or name to find one student.",
+            "Only the Registrar Head can open a student's details from this list.",
           ],
         },
       ],

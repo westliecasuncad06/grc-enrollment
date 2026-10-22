@@ -843,12 +843,6 @@
     "height": 800,
     "alt": "The Faculty Workforce page as a Registrar Head sees it."
   },
-  "registrar-head-freshman-enrollees": {
-    "src": "/user-guide/registrar-head-freshman-enrollees.jpg",
-    "width": 1280,
-    "height": 800,
-    "alt": "The Freshmen Enrollees page as a Registrar Head sees it."
-  },
   "registrar-head-grade-approvals": {
     "src": "/user-guide/registrar-head-grade-approvals.jpg",
     "width": 1280,
@@ -1039,12 +1033,6 @@
     "width": 1280,
     "height": 800,
     "alt": "The Enrollment Requests page as a Registrar Staff sees it."
-  },
-  "registrar-staff-freshman-enrollees": {
-    "src": "/user-guide/registrar-staff-freshman-enrollees.jpg",
-    "width": 1280,
-    "height": 800,
-    "alt": "The Freshmen Enrollees page as a Registrar Staff sees it."
   },
   "registrar-staff-graduates": {
     "src": "/user-guide/registrar-staff-graduates.jpg",

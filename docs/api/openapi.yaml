@@ -2929,27 +2929,22 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
-  /api/v1/freshman-enrollees:
+  /api/v1/students:
     get:
-      operationId: getFreshmanEnrollees
-      summary: List the freshmen who pay first
+      operationId: getRegistrarStudents
+      summary: List every student
       description: >
-        Registrar Staff and the Registrar Head only; read-only (ADR 0043). A
-        freshman's enrollment needs no Registrar approval, so this is where the
-        Registrar sees who was enrolled and in which section, who is waiting
-        for a section to open, and who has not paid yet. Newest payment first.
+        Registrar Staff and the Registrar Head only; read-only. It replaced the
+        freshmen-only list (ADR 0043), which showed historical records as
+        freshmen. The Registrar Head opens a row's details with
+        `GET /api/v1/students/{studentProfile}/registrar-profile`. Ordered by
+        student number.
       security:
         - bearerAuth: []
       tags:
         - Enrollment
       parameters:
         - $ref: "#/components/parameters/RequestId"
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [enrolled, enrolling, awaiting_section, awaiting_payment]
         - name: search
           in: query
           required: false
@@ -2983,7 +2978,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PaginatedFreshmanEnrolleeCollection"
+                $ref: "#/components/schemas/PaginatedRegistrarStudentCollection"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -12063,7 +12058,7 @@ components:
         held_amount:
           type: [string, 'null']
           description: Decimal string; how much is held as credit when `outcome` is `awaiting_section`, otherwise null.
-    PaginatedFreshmanEnrolleeCollection:
+    PaginatedRegistrarStudentCollection:
       type: object
       additionalProperties: false
       required:
@@ -12074,12 +12069,12 @@ components:
         data:
           type: array
           items:
-            $ref: "#/components/schemas/FreshmanEnrolleeResource"
+            $ref: "#/components/schemas/RegistrarStudentResource"
         links:
           $ref: "#/components/schemas/PaginationLinks"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
-    FreshmanEnrolleeResource:
+    RegistrarStudentResource:
       type: object
       additionalProperties: false
       required:
@@ -12089,16 +12084,13 @@ components:
         - name
         - program_code
         - year_level
-        - status
-        - status_label
-        - block_code
-        - amount_paid
-        - ticket_number
-        - payment_confirmed_at
+        - enrollment_category
+        - academic_standing
+        - academic_standing_label
       properties:
         type:
           type: string
-          const: freshman_enrollee
+          const: registrar_student
         id:
           type: integer
           description: The student profile ID.
@@ -12110,28 +12102,13 @@ components:
           type: string
         year_level:
           type: integer
-        status:
+        enrollment_category:
+          type: [string, 'null']
+          description: "`regular` or `irregular`; null when the student has no grade record yet."
+        academic_standing:
           type: string
-          enum: [enrolled, enrolling, awaiting_section, awaiting_payment]
-          description: >
-            `enrolled`; `enrolling` (paid, with an enrollment in progress, for
-            example the section that opened for a waiting freshman, awaiting
-            Registrar Staff approval); `awaiting_section` (paid, held until a
-            section opens); `awaiting_payment` (queue number issued, first
-            payment not confirmed yet).
-        status_label:
+        academic_standing_label:
           type: string
-        block_code:
-          type: [string, 'null']
-          description: The section the freshman is in; null while waiting.
-        amount_paid:
-          type: [string, 'null']
-          description: Decimal string; everything the freshman has paid, including held credit. Null before payment.
-        ticket_number:
-          type: [string, 'null']
-        payment_confirmed_at:
-          type: [string, 'null']
-          format: date-time
     StoreStudentProfileRequest:
       type: object
       additionalProperties: false

@@ -172,25 +172,18 @@ export const registrarHeadChapter: GuideChapter = {
       ],
     },
     {
-      id: "freshmen",
-      title: "Freshmen Enrollees",
+      id: "students",
+      title: "Students",
       blocks: [
         {
           kind: "paragraph",
-          text: "A read-only list of freshmen who paid the Cashier first, including those still waiting for a section to open.",
-        },
-        {
-          kind: "figure",
-          shot: "registrar-head-freshman-enrollees",
-          caption: "Freshmen and where each one is.",
+          text: "A read-only list of every student, with their program, year level, category and academic standing.",
         },
         {
           kind: "bullets",
           items: [
-            "Use the tabs **All freshmen**, **Enrolled**, **Awaiting a section**, **Awaiting approval** and **Awaiting payment** to filter the list.",
-            "**Awaiting payment**: the freshman has a queue number but has not paid yet.",
-            "**Awaiting a section**: the first payment is on file and every section is full. They enroll when seats open.",
-            "**Awaiting approval**: a section was given and Registrar approval will enroll them.",
+            "Search by student number or name to find one student.",
+            "Select a student's name to open their details: program, curriculum, student type, standing and more.",
           ],
         },
       ],

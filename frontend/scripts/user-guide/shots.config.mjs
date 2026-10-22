@@ -52,7 +52,7 @@ const labels = {
   "institution-dashboard": "Institution Dashboard",
   "academic-terms": "Enrollment",
   "enrollment-approvals": "Enrollment Approvals",
-  "freshman-enrollees": "Freshmen Enrollees",
+  students: "Students",
   "submitted-schedules": "Submitted Schedules",
   "section-change-requests": "Schedule Change Requests",
   "grade-approvals": "Grade Approvals",
@@ -146,7 +146,7 @@ const roles = {
     modules: [
       "academic-terms",
       "enrollment-approvals",
-      "freshman-enrollees",
+      "students",
       "credit-mappings",
       "submitted-schedules",
       "section-change-requests",
@@ -171,7 +171,7 @@ const roles = {
     label: "Registrar Staff",
     modules: [
       "enrollment-approvals",
-      "freshman-enrollees",
+      "students",
       "credit-mappings",
       "enrollment-requests",
       "cor-records",

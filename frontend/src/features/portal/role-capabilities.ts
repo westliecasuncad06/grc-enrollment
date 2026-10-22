@@ -322,10 +322,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         ClipboardCheck,
       ),
       portalModule(
-        "freshman-enrollees",
-        "Freshmen Enrollees",
-        "View the freshmen who paid first and were enrolled automatically, and those still waiting for a section.",
-        UserCheck,
+        "students",
+        "Students",
+        "Search every student. The Registrar Head can open a student's details.",
+        Users,
       ),
       portalModule(
         "credit-mappings",
@@ -448,10 +448,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         ClipboardCheck,
       ),
       portalModule(
-        "freshman-enrollees",
-        "Freshmen Enrollees",
-        "View the freshmen who paid first and were enrolled automatically, and those still waiting for a section.",
-        UserCheck,
+        "students",
+        "Students",
+        "Search every student. The Registrar Head can open a student's details.",
+        Users,
       ),
       portalModule(
         "credit-mappings",

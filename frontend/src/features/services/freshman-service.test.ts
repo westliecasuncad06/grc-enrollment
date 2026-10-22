@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   confirmFreshmanPayment,
   getFreshmanPaymentPreview,
-  listFreshmanEnrollees,
 } from "@/features/services/freshman-service"
 
 const preview = {
@@ -161,48 +160,6 @@ describe("freshman-service", () => {
     ).rejects.toThrow()
 
     expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it("lists the freshmen with the chosen status and search", async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          data: [
-            {
-              type: "freshman_enrollee",
-              id: 12,
-              student_number: "2026-10-00012",
-              name: "Juan Dela Cruz",
-              program_code: "BSIT",
-              year_level: 1,
-              status: "enrolled",
-              status_label: "Enrolled",
-              block_code: "IT101",
-              amount_paid: "1000.00",
-              ticket_number: "Q003",
-              payment_confirmed_at: "2026-10-04T01:00:00Z",
-            },
-          ],
-          links: {
-            first: "http://localhost/api/v1/freshman-enrollees?page=1",
-            last: "http://localhost/api/v1/freshman-enrollees?page=1",
-            prev: null,
-            next: null,
-          },
-          meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 },
-        }),
-      ),
-    )
-
-    const page = await listFreshmanEnrollees({
-      status: "enrolled",
-      search: "Juan",
-    })
-
-    expect(page.data[0]?.block_code).toBe("IT101")
-    const [url] = fetchMock.mock.calls[0] ?? []
-    expect(urlOf(url)).toContain("status=enrolled")
-    expect(urlOf(url)).toContain("search=Juan")
   })
 
   it("reads the full-payment quote from the preview, and defaults it for an older response", async () => {

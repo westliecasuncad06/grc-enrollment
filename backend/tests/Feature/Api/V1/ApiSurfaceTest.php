@@ -88,7 +88,6 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/faculty-subject-preferences',
             'GET|HEAD api/v1/faculty-teaching-history',
             'GET|HEAD api/v1/fee-schedules',
-            'GET|HEAD api/v1/freshman-enrollees',
             'GET|HEAD api/v1/grade-slip',
             'GET|HEAD api/v1/graduates',
             'GET|HEAD api/v1/health',
@@ -132,6 +131,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/student-profiles/{studentProfile}/freshman-payment-preview',
             'GET|HEAD api/v1/student-profiles/{studentProfile}/transferee-credits/suggestions',
             'GET|HEAD api/v1/student-schedule-preferences',
+            'GET|HEAD api/v1/students',
             'GET|HEAD api/v1/students/{studentProfile}/registrar-profile',
             'GET|HEAD api/v1/students/{studentProfile}/subject-waivers',
             'GET|HEAD api/v1/students/{studentProfile}/subject-withdrawals',
@@ -370,6 +370,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.schedule-proposals.update',
             'api.v1.student-profile.show',
             'api.v1.student-account.show-own',
+            'api.v1.students.index',
             'api.v1.students.account.show',
             'api.v1.students.account-payments.store',
             'api.v1.students.registrar-profile.show',
@@ -391,7 +392,6 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.student-profiles.queue-link-resends.store',
             'api.v1.student-profiles.freshman-payment-preview.show',
             'api.v1.student-profiles.freshman-payment.store',
-            'api.v1.freshman-enrollees.index',
             'api.v1.student-profiles.admission-requirements.show',
             'api.v1.student-profiles.admission-requirements.update',
             'api.v1.admission-requirement-types.index',
@@ -606,7 +606,7 @@ final class ApiSurfaceTest extends TestCase
         }
     }
 
-    public function test_freshman_payment_routes_are_for_accounting_and_the_enrollee_list_is_for_the_registrar(): void
+    public function test_freshman_payment_routes_are_for_accounting_and_the_student_list_is_for_the_registrar(): void
     {
         foreach ([
             'api.v1.student-profiles.freshman-payment-preview.show',
@@ -618,7 +618,7 @@ final class ApiSurfaceTest extends TestCase
             $this->assertContains('role:accounting_staff', $route->gatherMiddleware());
         }
 
-        $list = Route::getRoutes()->getByName('api.v1.freshman-enrollees.index');
+        $list = Route::getRoutes()->getByName('api.v1.students.index');
         $this->assertNotNull($list);
         $this->assertContains('role:registrar_head,registrar_staff', $list->gatherMiddleware());
     }

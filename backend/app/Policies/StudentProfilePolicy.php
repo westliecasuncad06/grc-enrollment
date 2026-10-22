@@ -93,11 +93,10 @@ final class StudentProfilePolicy
     }
 
     /**
-     * The read-only list of freshmen who pay first (ADR 0043): Registrar Staff and the
-     * Registrar Head, who no longer approve a freshman's enrollment but still see it.
+     * The read-only list of every student: Registrar Staff and the Registrar Head.
      * A class-level ability: it lists many profiles.
      */
-    public function viewFreshmanEnrollees(User $user): bool
+    public function viewRegistrarStudents(User $user): bool
     {
         return in_array($user->role, [UserRole::RegistrarStaff, UserRole::RegistrarHead], true);
     }

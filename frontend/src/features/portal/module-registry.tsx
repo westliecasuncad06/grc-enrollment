@@ -268,10 +268,9 @@ const CashierCorRecordsWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/cashier-cor-records-workspace"),
   "CashierCorRecordsWorkspace",
 )
-const RegistrarFreshmanEnrolleesWorkspace = lazyWorkspace(
-  () =>
-    import("@/features/components/portal/registrar-freshman-enrollees-workspace"),
-  "RegistrarFreshmanEnrolleesWorkspace",
+const RegistrarStudentsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/registrar-students-workspace"),
+  "RegistrarStudentsWorkspace",
 )
 const ProfessorInformationWorkspace = lazyWorkspace(
   () => import("@/features/components/portal/professor-information-workspace"),
@@ -353,7 +352,7 @@ export type ConnectedModuleId =
   | "advance-payment"
   | "statement-of-account"
   | "admission-requirements"
-  | "freshman-enrollees"
+  | "students"
   | "subject-withdrawals"
 
 export type PortalModuleComponent = ComponentType
@@ -416,7 +415,7 @@ export const connectedModuleIds = [
   "graduates",
   "ched-reports",
   "professor-information",
-  "freshman-enrollees",
+  "students",
   "subject-withdrawals",
 ] as const satisfies readonly ConnectedModuleId[]
 
@@ -555,7 +554,7 @@ export const connectedModuleRegistry: Readonly<
   "ched-reports": ChedReportsWorkspace,
   "professor-information": ProfessorInformationWorkspace,
   "irregular-enrollments": ProgramChairIrregularEnrollmentsWorkspace,
-  "freshman-enrollees": RegistrarFreshmanEnrolleesWorkspace,
+  students: RegistrarStudentsWorkspace,
   "subject-withdrawals": RegistrarSubjectWithdrawalsWorkspace,
 }
 

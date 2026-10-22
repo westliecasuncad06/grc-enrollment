@@ -1,5 +1,42 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-22 — Registrar "Freshmen Enrollees" became "Students" (BUILT, NOT COMMITTED, NOT DEPLOYED)
+
+- **Owner request:** check whether the people on the Registrar Head's Freshmen Enrollees page are really freshmen; if they are students, rename the navigation to Students, make the name clickable for the student's details, and make the data students' data, not freshmen's.
+- **Finding (read-only counts on production):** every one of the 3,000 `student_type = freshman` profiles is a historical `HIST-` record (2,750 in 4th year, 169 in 2nd, 81 in 1st), none paid, none has a queue ticket. The list filtered on type only, so it showed them all as "Awaiting payment". Admission's list already avoids this with the `intake=pay_first` filter. Production has no real pay-first freshman yet.
+- **Done:** replaced `GET /api/v1/freshman-enrollees` with `GET /api/v1/students` (`RegistrarStudentController`, `ListRegistrarStudents`, `RegistrarStudentResource`, policy `viewRegistrarStudents`; Registrar Head + Registrar Staff, search by number or name, order by student number). Frontend module `freshman-enrollees` -> `students` (workspace, hook, service, schema); the Registrar Head clicks a name to open the existing `StudentInfoDialog`; Registrar Staff see plain names because `registrar-profile` is Registrar-Head-only. Removed the freshman-enrollee code, tests, OpenAPI path and the two stale user-guide screenshots; the guide text and `shots.config.mjs` follow. ADR 0043 has an amendment note.
+- **My calls (not asked):** columns are Student, Program · year, Category (Regular/Irregular), Standing; no type filter, because the historical rows are typed "freshman" and a filter would repeat the confusion; Registrar Staff list without clickable names.
+- **Checks that ran and passed:** backend on PHP 8.3.36 + private MariaDB :3310: `RegistrarStudentsEndpointTest` (4), `ApiSurfaceTest`, `tests/Feature/Policies`, `StudentProfilesEndpointTest` (91 passed in the last run); Pint clean on the new files (it flags pre-existing SuperAdmin files I did not touch); PHPStan clean on the three new classes; frontend `tsc --noEmit` clean, ESLint `--max-warnings=0` and Prettier clean, vitest for the new workspace (8), service, portal registry/capabilities, portal-module-page, user guide and pay-first contract (all passed).
+- **Not done:** the full backend and frontend suites, and a real-browser pass; no new user-guide screenshot (the guide section is text only until `frontend/scripts/user-guide/` is rerun on an anonymized scratch DB).
+
+## 2026-10-22 (night) — Presentation database restored on Local and Production VPS (Term 6 current, 26,023 locked grades, ahead data purged, counter reset to 1930 / preview 1931) (DONE)
+
+- **User request:**
+  - Make `2025-2026 · 2nd` the current academic term.
+  - Colleges CCS, COE, COA, and CBAE have PUBLISHED schedules.
+  - Term-wide enrollment closed in May/June (`2026-05-31`).
+  - All students in `2025-2026 · 2nd` have locked grades (26,023 locked, 0 unlocked).
+  - All data real and preserved.
+  - Delete all data produced ahead of 2025-2026 (subsequent terms, sections, forecasts, generated test student accounts, queue tickets, rooms) to ensure clean database ready for system presentation.
+- **Production Hostinger VPS Database (`201.18.211.197`):**
+  - Verified backup taken: `/root/pre-presentation-restore-20261022142913.sql.gz` (7.6 MB).
+  - Applied presentation restore script (`restore_presentation_term6.php --apply --notifications`):
+    - Term #6 restored to `semester_ongoing`, current slot set to Term #6.
+    - Purged ahead terms 44 and 45 (along with 556 sections, 193 forecasts, 806 faculty recommendations).
+    - Purged 6 test student accounts (#7124, #7125, #7126, #7128, #7129, #7130).
+    - Reverted category flip on real student #3010 back to regular.
+    - 2026 student counter returned to **1930** (so next assigned number is `2026-10-01931`).
+    - Queue cycles #12, #13, #14 deleted; cycle #6 reopened.
+    - Re-cached Laravel config & routes (`config:cache`, `route:cache`).
+    - Verified: `https://api.grc-enrollment.tech/api/v1/health` (200 OK).
+    - Verified preview: `AssignStudentNumber::preview()` ➔ `2026-10-01931`.
+- **Local Dev Database (:3306):**
+  - Repaired local Composer autoload platform check requirement for PHP 8.2 compatibility on dev machine.
+  - Applied presentation restore script locally (`php backend/scripts/restore_presentation_term6.php --apply --notifications`):
+    - Term #6 confirmed `semester_ongoing`, current slot pointing to Term #6.
+    - 26,023 locked grades, 757 published sections, 0 test accounts.
+    - Counter returned to **1930**; verified preview ➔ `2026-10-01931`.
+
 ## 2026-10-22 — Registrar Head password login got 500 on every page, IT Control worked (FIXED IN CODE, deploying)
 
 - **Owner report:** the Registrar Head's own account showed "Something went wrong … Request 278a873b-…" and the "Start the first school year" form (the terms list had failed, so it looked empty) while IT Control acting as Registrar Head was fine.

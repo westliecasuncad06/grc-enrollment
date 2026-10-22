@@ -60,7 +60,6 @@ use App\Http\Controllers\Api\V1\FacultyProfileController;
 use App\Http\Controllers\Api\V1\FacultySpecializationController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
-use App\Http\Controllers\Api\V1\FreshmanEnrolleeController;
 use App\Http\Controllers\Api\V1\FreshmanPaymentController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\GraduateController;
@@ -79,6 +78,7 @@ use App\Http\Controllers\Api\V1\PublicQueueViewController;
 use App\Http\Controllers\Api\V1\QueueCycleController;
 use App\Http\Controllers\Api\V1\QueueKioskCredentialController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
+use App\Http\Controllers\Api\V1\RegistrarStudentController;
 use App\Http\Controllers\Api\V1\RoomCatalogEntryController;
 use App\Http\Controllers\Api\V1\RoomOccupancyController;
 use App\Http\Controllers\Api\V1\RoomOccupancySummaryController;
@@ -761,9 +761,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::post('/student-profiles/{studentProfile}/freshman-payment', [FreshmanPaymentController::class, 'store'])->whereNumber('studentProfile')->name('student-profiles.freshman-payment.store');
         });
 
-        // ADR 0043: the Registrar's read-only list of freshmen who pay first (no approval step for them).
-        Route::get('/freshman-enrollees', [FreshmanEnrolleeController::class, 'index'])
+        // The Registrar's read-only list of every student (it replaced the freshmen-only list of ADR 0043).
+        Route::get('/students', [RegistrarStudentController::class, 'index'])
             ->middleware('role:registrar_head,registrar_staff')
-            ->name('freshman-enrollees.index');
+            ->name('students.index');
     });
 });

@@ -1,14 +1,10 @@
 import {
   confirmFreshmanPaymentInputSchema,
-  freshmanEnrolleeFiltersSchema,
   freshmanPaymentEnvelopeSchema,
   freshmanPaymentPreviewEnvelopeSchema,
-  paginatedFreshmanEnrolleesSchema,
   type ConfirmFreshmanPaymentInput,
-  type FreshmanEnrolleeFilters,
   type FreshmanPayment,
   type FreshmanPaymentPreview,
-  type PaginatedFreshmanEnrollees,
 } from "@/features/schemas/freshman-schema"
 import {
   ApiClientError,
@@ -17,7 +13,6 @@ import {
 } from "@/features/services/api-client"
 
 const STUDENT_PROFILES_PATH = "/api/v1/student-profiles"
-export const FRESHMAN_ENROLLEES_PATH = "/api/v1/freshman-enrollees"
 
 function parse<T>(
   schema: {
@@ -73,28 +68,4 @@ export async function confirmFreshmanPayment(
     ),
     "freshman payment confirmation",
   ).data
-}
-
-/** The Registrar's read-only list of freshmen who paid first, including those waiting for a section. */
-export async function listFreshmanEnrollees(
-  filters: FreshmanEnrolleeFilters,
-  signal?: AbortSignal,
-): Promise<PaginatedFreshmanEnrollees> {
-  const parsed = parse(
-    freshmanEnrolleeFiltersSchema,
-    filters,
-    "freshman enrollee filter",
-  )
-  const query = new URLSearchParams()
-  for (const [key, value] of Object.entries(parsed)) {
-    if (value !== undefined && value !== "") query.set(key, String(value))
-  }
-  return parse(
-    paginatedFreshmanEnrolleesSchema,
-    await getAuthenticatedJson(
-      `${FRESHMAN_ENROLLEES_PATH}?${query.toString()}`,
-      signal,
-    ),
-    "freshman enrollee list",
-  )
 }

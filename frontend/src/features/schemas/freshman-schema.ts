@@ -151,76 +151,10 @@ export const freshmanPaymentEnvelopeSchema = z
   .object({ data: freshmanPaymentSchema })
   .strict()
 
-// `enrolling`: paid, and enrolling in the section that opened — waiting for Registrar Staff to approve.
-export const freshmanEnrolleeStatusSchema = z.enum([
-  "enrolled",
-  "enrolling",
-  "awaiting_section",
-  "awaiting_payment",
-])
-
-export const freshmanEnrolleeSchema = z
-  .object({
-    type: z.literal("freshman_enrollee"),
-    id: z.number().int().positive(),
-    student_number: z.string().min(1),
-    name: z.string().min(1),
-    program_code: z.string().min(1),
-    year_level: z.number().int().positive(),
-    status: freshmanEnrolleeStatusSchema,
-    status_label: z.string().min(1),
-    block_code: z.string().min(1).nullable(),
-    amount_paid: z.string().nullable(),
-    ticket_number: z.string().min(1).nullable(),
-    payment_confirmed_at: z.iso.datetime().nullable(),
-  })
-  .strict()
-
-const paginationLinksSchema = z
-  .object({
-    first: z.string().url(),
-    last: z.string().url(),
-    prev: z.string().url().nullable(),
-    next: z.string().url().nullable(),
-  })
-  .strict()
-const paginationMetaSchema = z
-  .object({
-    current_page: z.number().int().positive(),
-    last_page: z.number().int().positive(),
-    per_page: z.number().int().min(1).max(100),
-    total: z.number().int().nonnegative(),
-  })
-  .passthrough()
-
-export const paginatedFreshmanEnrolleesSchema = z
-  .object({
-    data: z.array(freshmanEnrolleeSchema),
-    links: paginationLinksSchema,
-    meta: paginationMetaSchema,
-  })
-  .strict()
-
-export const freshmanEnrolleeFiltersSchema = z
-  .object({
-    status: freshmanEnrolleeStatusSchema.optional(),
-    search: z.string().trim().max(255).optional(),
-    page: z.number().int().positive().default(1),
-    per_page: z.number().int().min(1).max(100).default(20),
-  })
-  .strict()
-
 export type FreshmanPaymentPreview = z.infer<
   typeof freshmanPaymentPreviewSchema
 >
 export type FreshmanPayment = z.infer<typeof freshmanPaymentSchema>
 export type ConfirmFreshmanPaymentInput = z.input<
   typeof confirmFreshmanPaymentInputSchema
->
-export type FreshmanEnrollee = z.infer<typeof freshmanEnrolleeSchema>
-export type FreshmanEnrolleeFilters = z.input<
-  typeof freshmanEnrolleeFiltersSchema
->
-export type PaginatedFreshmanEnrollees = z.infer<
-  typeof paginatedFreshmanEnrolleesSchema
 >

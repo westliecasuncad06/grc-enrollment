@@ -3,15 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
-import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type {
   ConfirmFreshmanPaymentInput,
-  FreshmanEnrolleeFilters,
 } from "@/features/schemas/freshman-schema"
 import {
   confirmFreshmanPayment,
   getFreshmanPaymentPreview,
-  listFreshmanEnrollees,
 } from "@/features/services/freshman-service"
 
 export const freshmanPaymentPreviewQueryKey = (
@@ -63,26 +60,5 @@ export function useConfirmFreshmanPaymentMutation() {
         queryClient.invalidateQueries({ queryKey: ["enrollments", userId] }),
         queryClient.invalidateQueries({ queryKey: ["cashier-transactions"] }),
       ]),
-  })
-}
-
-export const freshmanEnrolleesQueryKey = (
-  userId: string | null,
-  filters: FreshmanEnrolleeFilters,
-) => ["freshman-enrollees", userId, filters] as const
-
-/** The Registrar's read-only list of freshmen who paid first, refreshed every 15 s. */
-export function useFreshmanEnrolleesQuery(filters: FreshmanEnrolleeFilters) {
-  const { session } = useAuth()
-  const authorized =
-    session?.role === "registrar_staff" || session?.role === "registrar_head"
-
-  return useQuery({
-    queryKey: freshmanEnrolleesQueryKey(session?.userId ?? null, filters),
-    queryFn: ({ signal }) => listFreshmanEnrollees(filters, signal),
-    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
-    enabled: authorized,
-    refetchInterval: 15_000,
-    refetchOnWindowFocus: "always",
   })
 }
