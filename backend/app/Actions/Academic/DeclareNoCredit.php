@@ -2,6 +2,7 @@
 
 namespace App\Actions\Academic;
 
+use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
@@ -22,8 +23,9 @@ use Illuminate\Validation\ValidationException;
  * student can go on to enroll (ADR 0026 / 0050, amended).
  *
  * The student is pinned to the caller. Only a Transferee or a Returnee has a credit mapping to finish, and
- * a student who already has subjects in their credit list (saved or sent) is told to submit those instead,
- * so the two routes never disagree. Idempotent: the profile row is locked first, so a double tap or a second
+ * a student who already has a subject in their credit list (saved, sent, endorsed or approved) is told to submit
+ * those instead, so the two routes never disagree. A credit the Chair rejected no longer counts: a Returnee whose
+ * only credits were all rejected has nothing left to credit and is otherwise stuck. Idempotent: the profile row is locked first, so a double tap or a second
  * tab finds the same declaration, changes nothing and notifies nobody again.
  */
 final readonly class DeclareNoCredit
@@ -55,7 +57,10 @@ final readonly class DeclareNoCredit
                 return $existing->load('student.user');
             }
 
-            if (TransfereeCredit::query()->where('student_id', $locked->id)->exists()) {
+            if (TransfereeCredit::query()
+                ->where('student_id', $locked->id)
+                ->where('status', '!=', TransfereeCreditStatus::Rejected->value)
+                ->exists()) {
                 throw ValidationException::withMessages([
                     'student_id' => 'You already have subjects in your credit list. Submit them to your Program Head instead.',
                 ]);

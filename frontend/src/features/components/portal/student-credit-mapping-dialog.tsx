@@ -251,8 +251,12 @@ export function StudentCreditMappingDialog() {
 
   const allCredits = creditsQuery.data?.data ?? []
   const noCreditDeclaration = declarationQuery.data ?? null
-  // Only a student with no subject in the list at all can say they have none to credit.
-  const canDeclareNoCredit = creditsQuery.isSuccess && allCredits.length === 0
+  // Only a student with nothing left that counts can say they have none to credit: no subject in the list, or
+  // every one of them rejected by the Program Head.
+  const hasNothingLeft = allCredits.every(
+    (credit) => credit.status === "rejected",
+  )
+  const canDeclareNoCredit = creditsQuery.isSuccess && hasNothingLeft
   const drafts = allCredits.filter((credit) => credit.status === "draft")
   const sentCredits = allCredits.filter((credit) => credit.status !== "draft")
 
@@ -292,7 +296,7 @@ export function StudentCreditMappingDialog() {
         )}
 
         {(canDeclareNoCredit || noCreditDeclaration !== null) &&
-          allCredits.length === 0 && (
+          hasNothingLeft && (
             <section
               aria-labelledby="no-credit-heading"
               className="grid gap-2 rounded-lg border p-3"

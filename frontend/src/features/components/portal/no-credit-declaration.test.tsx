@@ -161,6 +161,43 @@ describe("no subject to credit", () => {
       expect(screen.getByText(/You can go on to enroll/)).toBeInTheDocument()
     })
 
+    it("still offers it to a student whose every credit was rejected by the Program Head", async () => {
+      const user = userEvent.setup()
+      route({
+        credits: [
+          {
+            type: "transferee_credit",
+            id: 1,
+            student_id: 4,
+            student_number: "2026-10-00007",
+            source_institution: "Other University",
+            source_subject_code: "N/A",
+            source_subject_title: "N/A",
+            source_grade: "0",
+            credited_units: 3,
+            source_school_year: "2014",
+            source_semester: "2026",
+            subject_id: null,
+            subject_code: null,
+            status: "rejected",
+            status_label: "Rejected",
+            processed_at: null,
+            created_at: "2026-10-01T00:00:00Z",
+          },
+        ],
+      })
+      renderWithSession(<StudentCreditMappingDialog />, {
+        session: studentSession,
+      })
+      await openDialog(user)
+
+      expect(
+        await screen.findByRole("button", {
+          name: "I have no subject to credit",
+        }),
+      ).toBeInTheDocument()
+    })
+
     it("does not offer it to a student who already has subjects in their list", async () => {
       const user = userEvent.setup()
       route({

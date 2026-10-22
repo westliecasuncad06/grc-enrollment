@@ -155,6 +155,51 @@ final class NoCreditDeclarationEndpointTest extends TestCase
         self::assertSame(0, NoCreditDeclaration::query()->count());
     }
 
+    public function test_a_returnee_whose_every_credit_was_rejected_may_say_they_have_nothing_to_credit(): void
+    {
+        $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs));
+        foreach (['EXT101', 'EXT102'] as $code) {
+            TransfereeCredit::create([
+                'student_id' => $student->id, 'source_institution' => 'Other University', 'source_subject_code' => $code,
+                'source_subject_title' => 'Subject '.$code, 'credited_units' => 3, 'requested_by' => $student->user_id,
+                'status' => TransfereeCreditStatus::Rejected,
+            ]);
+        }
+        // Rejected credits leave a Returnee held back: nothing was credited and nothing is left to map.
+        self::assertFalse((new EvaluateCreditMappingStatus)->execute($student->refresh())->isCompleted);
+        $chairToken = $this->tokenFor($this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs));
+        $studentToken = $this->tokenFor($student->user);
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($studentToken)->postJson('/api/v1/no-credit-declaration')->assertCreated();
+        self::assertFalse((new EvaluateCreditMappingStatus)->execute($student->refresh())->isCompleted);
+
+        $this->app['auth']->forgetGuards();
+        $declaration = NoCreditDeclaration::query()->firstOrFail();
+        $this->withToken($chairToken)->postJson("/api/v1/no-credit-declarations/{$declaration->id}/confirm")->assertOk();
+
+        self::assertTrue((new EvaluateCreditMappingStatus)->execute($student->refresh())->isCompleted);
+    }
+
+    public function test_a_credit_the_chair_approved_or_a_pending_one_still_blocks_declaring(): void
+    {
+        foreach ([TransfereeCreditStatus::Pending, TransfereeCreditStatus::Endorsed, TransfereeCreditStatus::Approved] as $status) {
+            $student = $this->makeStudent($this->makeCurriculum(CollegeCode::Ccs), StudentType::Transferee);
+            TransfereeCredit::create([
+                'student_id' => $student->id, 'source_institution' => 'Other University', 'source_subject_code' => 'EXT1',
+                'source_subject_title' => 'Subject '.$status->value, 'credited_units' => 3, 'requested_by' => $student->user_id,
+                'status' => $status,
+            ]);
+            $token = $this->tokenFor($student->user);
+            $this->app['auth']->forgetGuards();
+
+            $this->withToken($token)->postJson('/api/v1/no-credit-declaration')->assertUnprocessable();
+            $this->app['auth']->forgetGuards();
+        }
+
+        self::assertSame(0, NoCreditDeclaration::query()->count());
+    }
+
     public function test_only_a_transferee_or_a_returnee_may_declare(): void
     {
         $curriculum = $this->makeCurriculum(CollegeCode::Ccs);

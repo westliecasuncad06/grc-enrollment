@@ -444,7 +444,9 @@ export function EnrollmentWorkspace() {
     // The Program Head confirmed there is nothing to credit: the mapping is complete with no credit row.
     if (
       noCreditConfirmed &&
-      credits.every((credit) => credit.status === "draft")
+      credits.every(
+        (credit) => credit.status === "draft" || credit.status === "rejected",
+      )
     ) {
       return false
     }

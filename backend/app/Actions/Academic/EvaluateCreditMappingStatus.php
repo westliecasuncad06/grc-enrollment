@@ -21,8 +21,8 @@ use App\Models\TransfereeCredit;
  *
  * A student with nothing to credit says so ("no subject to credit", `NoCreditDeclaration`): while it
  * waits for the Program Chair the student is held back, and once the Chair confirms it the mapping is
- * complete with no credit rows at all. It only counts while the student has no sent credit; a credit
- * that is sent takes over.
+ * complete with no credit rows at all. It only counts while the student has no sent credit (a Returnee whose
+ * credits were all rejected counts as having none); a credit that is sent takes over.
  */
 final readonly class EvaluateCreditMappingStatus
 {
@@ -60,13 +60,14 @@ final readonly class EvaluateCreditMappingStatus
             ->where('student_id', $student->id)
             ->exists();
 
-        // Only read when it can matter: a student with no sent credit.
-        $noCreditDeclaration = $totalCredits === 0
+        // Only read when it can matter: a student with no credit left that counts. A credit the Chair rejected
+        // counts for nothing, so a Returnee whose every credit was rejected may still say they have none.
+        $noCreditDeclaration = $totalCredits - $rejectedCredits === 0
             ? NoCreditDeclaration::query()->where('student_id', $student->id)->first()
             : null;
 
         if ($studentType === StudentType::Transferee) {
-            if ($noCreditDeclaration !== null) {
+            if ($noCreditDeclaration !== null && $totalCredits === 0) {
                 return $this->noCreditResult($noCreditDeclaration, $hasCurriculumMigration);
             }
 
