@@ -1,0 +1,9 @@
+# Production build (Dokploy / Nixpacks). Nixpacks pins an old nixpkgs snapshot by default, which
+# ships PHP 8.2.27 (affected by CVE-2026-109618 / CVE-2026-109619, the Hostinger "php2shell"
+# advisory). This revision of nixos-unstable-small has php83 8.3.36, the patched release, and is a
+# Hydra-built channel revision so the binaries come from cache. composer.json requires ^8.3 so
+# Nixpacks picks php83. To move to a newer PHP later, bump the revision from
+# https://channels.nixos.org/nixos-unstable-small/git-revision and check
+# pkgs/development/interpreters/php/default.nix at that revision.
+[phases.setup]
+nixpkgsArchive = "dce1caf58d1a943af38b376e824a0d036ec3eea7"

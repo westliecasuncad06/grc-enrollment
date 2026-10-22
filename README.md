@@ -50,7 +50,7 @@ Local development runs the frontend on port 3000 (`npm run dev`) and the API on 
 
 The initial workstation audit found:
 
-- PHP 8.2.12 and Composer 2.9.2
+- PHP 8.3.36 or newer (8.3 is required since 2026-10-22; the PHP 8.2 line is unpatched against CVE-2026-109618/-109619) and Composer 2.9.2
 - Node.js 24.14.1 and npm 11.11.0
 - Python 3.14.3 and Python 3.11.9
 - XAMPP MariaDB 10.4.32

@@ -6,7 +6,7 @@
     "keywords": ["grc", "enrollment", "laravel", "api"],
     "license": "proprietary",
     "require": {
-        "php": "^8.2",
+        "php": "^8.3",
         "ext-bcmath": "*",
         "barryvdh/laravel-dompdf": "*",
         "firebase/php-jwt": "*",
