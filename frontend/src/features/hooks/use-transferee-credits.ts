@@ -113,9 +113,17 @@ function useInvalidateTransfereeCreditQueries() {
   const queryClient = useQueryClient()
 
   return () =>
-    queryClient.invalidateQueries({
-      queryKey: ["transferee-credits", session?.userId ?? null],
-    })
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["transferee-credits", session?.userId ?? null],
+      }),
+      // The number on the Program Chair's Credit Mappings tab.
+      queryClient.invalidateQueries({
+        queryKey: ["program-chair-review-counts"],
+      }),
+      // Saving a credit replaces a "no subject to credit" that was not confirmed yet.
+      queryClient.invalidateQueries({ queryKey: ["no-credit-declaration"] }),
+    ])
 }
 
 export function useCreateTransfereeCreditMutation() {
@@ -234,6 +242,10 @@ function useInvalidateStudentCreditQueries() {
       }),
       queryClient.invalidateQueries({
         queryKey: ["credit-mapping-workspace", session?.userId ?? null],
+      }),
+      // The number on the Program Chair's Credit Mappings tab.
+      queryClient.invalidateQueries({
+        queryKey: ["program-chair-review-counts"],
       }),
     ])
 }

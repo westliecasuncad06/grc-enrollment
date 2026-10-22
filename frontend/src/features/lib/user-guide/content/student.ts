@@ -148,7 +148,7 @@ export const studentChapter: GuideChapter = {
             {
               text: "Watch the unit counter at the top of the table.",
               detail:
-                "It shows your units against the regular load and the maximum. An overload needs the Program Head to acknowledge it.",
+                "It shows your units against the regular load and the maximum. An overload needs the Program Head to acknowledge it. If you choose more than the maximum, you can still submit: you are asked whether you are sure, and your Program Head then checks it and may change your subjects and schedule to a load that fits.",
             },
             {
               text: "Select **Submit enrollment**, then **Confirm submission**.",
@@ -305,7 +305,7 @@ export const studentChapter: GuideChapter = {
         },
         {
           kind: "paragraph",
-          text: "If you took subjects at another school, select **Request Credit Mapping** and list them. Your list goes to your Program Head, who maps each subject to your curriculum. The Registrar Head then approves it. The Prospectus marks credits that still wait for approval.",
+          text: "If you took subjects at another school, select **Request Credit Mapping** and list them. Your list goes to your Program Head, who maps each subject to your curriculum. The Registrar Head then approves it. The Prospectus marks credits that still wait for approval. If you are a Transferee or a Returnee with nothing to credit, select **I have no subject to credit** in the same window instead: your Program Head reviews it, and you can go on to enroll once they confirm it.",
         },
         {
           kind: "figure",

@@ -11,6 +11,7 @@ use App\Domain\Notifications\NotificationType;
 use App\Models\Notification;
 use App\Models\QueueTicket;
 use App\Models\StudentProfile;
+use App\Models\TransfereeCredit;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -57,12 +58,18 @@ final readonly class IssueTransfereeQueueTicket
 
             $issued = $this->issueTicket->execute($locked, $actor, $context, source: 'transferee_credit_mapping_closed');
 
+            // A student with no credit row at all is the "no subject to credit" case: there is nothing for the Registrar Head to approve.
+            $hasCredits = TransfereeCredit::query()->where('student_id', $locked->id)->exists();
+
             Notification::create([
                 'user_id' => $locked->user_id,
                 'type' => NotificationType::TransfereeQueueNumberIssued,
-                'message' => "Your credits were passed on to the Registrar Head, so you can enroll now. Your queue number is {$issued->ticket->ticket_number}. ".
-                    'Choose your subjects on the Enrollment page, then pay at the Cashier with this number; the Registrar approves once you have paid. '.
-                    'The Registrar Head still has to approve your credits.',
+                'message' => ($hasCredits
+                    ? 'Your credits were passed on to the Registrar Head, so you can enroll now. '
+                    : 'Your Program Head confirmed that you have no subject to credit, so you can enroll now. ').
+                    "Your queue number is {$issued->ticket->ticket_number}. ".
+                    'Choose your subjects on the Enrollment page, then pay at the Cashier with this number; the Registrar approves once you have paid.'.
+                    ($hasCredits ? ' The Registrar Head still has to approve your credits.' : ''),
             ]);
 
             $outbox?->add($issued);

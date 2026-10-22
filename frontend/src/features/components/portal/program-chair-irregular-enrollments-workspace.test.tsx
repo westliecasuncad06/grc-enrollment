@@ -120,6 +120,65 @@ describe("ProgramChairIrregularEnrollmentsWorkspace", () => {
     )
   })
 
+  it("flags an enrollment that is over the unit maximum and can narrow the list to those", async () => {
+    const user = userEvent.setup()
+    const over = {
+      ...awaitingProgramHead,
+      id: 22,
+      student_number: "2026-0301",
+      student_name: "Overloaded Student",
+      total_units: 38.5,
+      requires_overload_approval: true,
+      unit_maximum: 30.5,
+      exceeds_unit_maximum: true,
+    }
+    fetchMock.mockImplementation((input) => {
+      const target = urlOf(input)
+      if (!target.includes("/enrollments")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+      }
+      return Promise.resolve(
+        listResponse(
+          target.includes("exceeds_unit_maximum=1")
+            ? [over]
+            : [awaitingProgramHead, over],
+        ),
+      )
+    })
+    renderWithSession(<ProgramChairIrregularEnrollmentsWorkspace />, {
+      session: programHeadSession,
+    })
+
+    const table = await screen.findByRole("table")
+    const row = within(table).getByText("Overloaded Student").closest("tr")!
+    expect(
+      within(row).getByText("Over the 30.5 unit maximum"),
+    ).toBeInTheDocument()
+    // The other student is within the maximum and carries no such flag.
+    const other = within(table).getByText("Irregular Student").closest("tr")!
+    expect(within(other).queryByText(/unit maximum/)).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole("button", { name: "Over the unit maximum" }),
+    )
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          urlOf(input).includes("exceeds_unit_maximum=1"),
+        ),
+      ).toBe(true),
+    )
+    await waitFor(() =>
+      expect(
+        within(table).queryByText("Irregular Student"),
+      ).not.toBeInTheDocument(),
+    )
+    expect(
+      screen.getByRole("button", { name: "Over the unit maximum" }),
+    ).toHaveAttribute("aria-pressed", "true")
+  })
+
   it("keeps a long status in a flex column so its table column cannot shrink below the badge and spill over Units", async () => {
     // A badge is overflow-hidden: inside a grid wrapper the column could shrink under it (owner, 2026-10-15,
     // "Pending Program Head Approval" overlapping the units). jsdom has no layout, so the structure is pinned.

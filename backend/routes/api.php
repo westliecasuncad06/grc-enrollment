@@ -69,9 +69,11 @@ use App\Http\Controllers\Api\V1\ItControl\AccountController as ItControlAccountC
 use App\Http\Controllers\Api\V1\ItControl\FacultyAccountController;
 use App\Http\Controllers\Api\V1\ItControl\StudentAccountController as ItControlStudentAccountController;
 use App\Http\Controllers\Api\V1\LectureLabAdjacencyController;
+use App\Http\Controllers\Api\V1\NoCreditDeclarationController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\PrivacyNoticeController;
+use App\Http\Controllers\Api\V1\ProgramChairReviewCountsController;
 use App\Http\Controllers\Api\V1\ProgramController;
 use App\Http\Controllers\Api\V1\ProspectusController;
 use App\Http\Controllers\Api\V1\PublicQueueViewController;
@@ -414,6 +416,19 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::patch('/transferee-credits/{transfereeCredit}', [TransfereeCreditController::class, 'update'])->name('transferee-credits.update');
         Route::delete('/transferee-credits/{transfereeCredit}', [TransfereeCreditController::class, 'destroy'])->name('transferee-credits.destroy');
         Route::get('/transferee-credits/{transfereeCredit}/suggestions', [TransfereeCreditController::class, 'suggestions'])->name('transferee-credits.suggestions');
+
+        // A Transferee or Returnee with nothing to credit says so, and the Program Chair confirms it so they can
+        // enroll (ADR 0026 / 0050, amended). Policy-gated, no `role:`, like the credit routes above.
+        Route::get('/no-credit-declaration', [NoCreditDeclarationController::class, 'show'])->name('no-credit-declaration.show');
+        Route::post('/no-credit-declaration', [NoCreditDeclarationController::class, 'store'])->name('no-credit-declaration.store');
+        Route::get('/no-credit-declarations', [NoCreditDeclarationController::class, 'index'])->name('no-credit-declarations.index');
+        Route::post('/no-credit-declarations/{noCreditDeclaration}/confirm', [NoCreditDeclarationController::class, 'confirm'])
+            ->whereNumber('noCreditDeclaration')
+            ->name('no-credit-declarations.confirm');
+        // The numbers on the Program Chair's Enrollment tabs: what is waiting for them.
+        Route::get('/program-chair/review-counts', ProgramChairReviewCountsController::class)
+            ->middleware('role:program_chair')
+            ->name('program-chair.review-counts');
 
         // The student-level steps of the same flow (ADR 0026, amended): the
         // Program Chair's bulk suggestions and "send this student to the Registrar

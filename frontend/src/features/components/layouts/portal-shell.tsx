@@ -62,6 +62,7 @@ import {
   type RolePortalDefinition,
 } from "@/features/portal/role-capabilities"
 import { useReducedMotion } from "@/features/hooks/use-reduced-motion"
+import { useProgramChairReviewCountsQuery } from "@/features/hooks/use-program-chair-review-counts"
 import { useSidebarCollapsed } from "@/features/hooks/use-sidebar-collapsed"
 import { gsap } from "@/features/lib/gsap"
 import { isConnectedModuleId } from "@/features/portal/module-registry"
@@ -83,6 +84,7 @@ function NavigationLink({
   label,
   badge,
   href,
+  alsoActiveOn = [],
   mobile = false,
   attention = false,
   collapsed = false,
@@ -92,6 +94,8 @@ function NavigationLink({
   label?: string
   badge?: ReactNode
   href: string
+  /** Other paths that belong to this entry: its nested pages, for which it shows as the current page. */
+  alsoActiveOn?: readonly string[]
   mobile?: boolean
   /** Shows a dot on the icon while the labels are folded away (a returned
       schedule would otherwise lose its "Returned" badge). */
@@ -101,7 +105,7 @@ function NavigationLink({
   const pathname = usePathname()
   // react-router's NavLink used `end` only for "/portal"; module routes have no
   // children, so an exact comparison reproduces both cases.
-  const isActive = pathname === href
+  const isActive = pathname === href || alsoActiveOn.includes(pathname)
   const linkRef = useRef<HTMLAnchorElement>(null)
   const [hoverRect, setHoverRect] = useState<{
     top: number
@@ -198,6 +202,13 @@ function PortalNavigation({
   hasReturnedSchedule?: boolean
   collapsed?: boolean
 }) {
+  // The Program Head's Irregular Advising and Credit Mappings live inside Enrollment, so the number waiting for
+  // them shows on the Enrollment entry too (and per tab, on the page).
+  const reviewCounts = useProgramChairReviewCountsQuery().data
+  const waitingForChair =
+    (reviewCounts?.irregular_advising ?? 0) +
+    (reviewCounts?.credit_mappings ?? 0)
+
   return (
     <nav
       className="portal-navigation"
@@ -218,6 +229,7 @@ function PortalNavigation({
         </NavigationLink>
       )}
       {definition.modules
+        .filter((module) => module.nestedUnder === undefined)
         .filter((module) => isConnectedModuleId(module.id))
         .filter(
           (module) =>
@@ -230,6 +242,13 @@ function PortalNavigation({
           const Icon = module.icon
           const isReturned =
             hasReturnedSchedule && module.id === "program-chair-enrollment"
+          const waiting =
+            module.id === "program-chair-enrollment" && !isReturned
+              ? waitingForChair
+              : 0
+          const nestedHrefs = definition.modules
+            .filter((candidate) => candidate.nestedUnder === module.id)
+            .map((candidate) => `/portal/${candidate.id}`)
 
           return (
             <NavigationLink
@@ -238,11 +257,16 @@ function PortalNavigation({
               mobile={mobile}
               collapsed={collapsed}
               label={module.label}
+              alsoActiveOn={nestedHrefs}
               icon={<Icon data-icon="inline-start" aria-hidden="true" />}
               badge={
                 isReturned ? (
                   <Badge variant="destructive" className="shrink-0">
                     Returned
+                  </Badge>
+                ) : waiting > 0 ? (
+                  <Badge variant="destructive" className="shrink-0">
+                    {waiting > 99 ? "99+" : waiting}
                   </Badge>
                 ) : undefined
               }
@@ -254,6 +278,16 @@ function PortalNavigation({
                 {isReturned && (
                   <Badge variant="destructive" className="shrink-0">
                     Returned
+                  </Badge>
+                )}
+                {waiting > 0 && (
+                  <Badge variant="destructive" className="shrink-0">
+                    <span aria-hidden="true">
+                      {waiting > 99 ? "99+" : waiting}
+                    </span>
+                    <span className="sr-only">
+                      {waiting} waiting for your review
+                    </span>
                   </Badge>
                 )}
               </span>

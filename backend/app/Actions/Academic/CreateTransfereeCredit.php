@@ -7,6 +7,7 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\UserRole;
+use App\Models\NoCreditDeclaration;
 use App\Models\StudentProfile;
 use App\Models\TransfereeCredit;
 use App\Models\User;
@@ -87,6 +88,12 @@ final readonly class CreateTransfereeCredit
                 'requested_by' => $actor->id,
                 'status' => $isStudent ? TransfereeCreditStatus::Draft : TransfereeCreditStatus::Pending,
             ]);
+
+            // A credit that now exists replaces a "no subject to credit" the Program Chair has not confirmed yet.
+            NoCreditDeclaration::query()
+                ->where('student_id', $student->id)
+                ->whereNull('confirmed_at')
+                ->delete();
 
             $this->auditRecorder->record(
                 $actor,

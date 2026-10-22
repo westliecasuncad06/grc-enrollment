@@ -12,6 +12,7 @@ import {
 import { EnrollmentReviewDialog } from "@/features/components/portal/enrollment-review-dialog"
 import { Paginator } from "@/features/components/portal/paginator"
 import { ProspectusDocument } from "@/features/components/portal/prospectus-document"
+import { ProgramChairEnrollmentTabs } from "@/features/components/portal/program-chair-enrollment-tabs"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
@@ -69,6 +70,8 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
     | "rejected"
     | "all"
   >("pending_program_head_approval")
+  // Narrow the list to the students who submitted more units than the maximum.
+  const [overMaximumOnly, setOverMaximumOnly] = useState(false)
 
   const [reviewingEnrollment, setReviewingEnrollment] =
     useState<Enrollment | null>(null)
@@ -93,6 +96,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
     {
       page,
       status: statusFilter === "all" ? undefined : statusFilter,
+      ...(overMaximumOnly ? { exceeds_unit_maximum: true } : {}),
     },
     { enabled: authorized },
   )
@@ -244,8 +248,14 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
       render: (enrollment) => (
         <div className="flex items-center gap-2">
           <span>{enrollment.total_units} units</span>
-          {enrollment.requires_overload_approval && (
-            <Badge variant="warning">Overload</Badge>
+          {enrollment.exceeds_unit_maximum ? (
+            <Badge variant="destructive">
+              Over the {enrollment.unit_maximum} unit maximum
+            </Badge>
+          ) : (
+            enrollment.requires_overload_approval && (
+              <Badge variant="warning">Overload</Badge>
+            )
           )}
         </div>
       ),
@@ -329,6 +339,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
       title="Irregular Student Advising & Approvals"
       description="Check submitted schedules for irregular students, verify their curriculum prospectus, and approve or reject submissions. If you change a student's subjects, they go back to the student to accept first. Approved submissions go on to the Registrar."
     >
+      <ProgramChairEnrollmentTabs current="irregular-advising" />
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -435,6 +446,18 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
               }}
             >
               All
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={overMaximumOnly ? "default" : "outline"}
+              aria-pressed={overMaximumOnly}
+              onClick={() => {
+                setOverMaximumOnly((current) => !current)
+                setPage(1)
+              }}
+            >
+              Over the unit maximum
             </Button>
           </div>
         </CardHeader>

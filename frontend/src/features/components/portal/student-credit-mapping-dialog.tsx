@@ -26,6 +26,10 @@ import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import { StudentTorUpload } from "@/features/components/portal/tor-documents-panel"
 import {
+  useDeclareNoCreditMutation,
+  useMyNoCreditDeclarationQuery,
+} from "@/features/hooks/use-no-credit-declaration"
+import {
   useCreateTransfereeCreditMutation,
   useDeleteTransfereeCreditMutation,
   useSubmitTransfereeCreditsMutation,
@@ -97,11 +101,14 @@ export function StudentCreditMappingDialog() {
   const updateMutation = useUpdateTransfereeCreditMutation()
   const deleteMutation = useDeleteTransfereeCreditMutation()
   const submitMutation = useSubmitTransfereeCreditsMutation()
+  const declarationQuery = useMyNoCreditDeclarationQuery({ enabled: open })
+  const declareMutation = useDeclareNoCreditMutation()
   const busy =
     createMutation.isPending ||
     updateMutation.isPending ||
     deleteMutation.isPending ||
-    submitMutation.isPending
+    submitMutation.isPending ||
+    declareMutation.isPending
 
   const resetSubjectFields = () => {
     setEditingId(null)
@@ -225,7 +232,27 @@ export function StudentCreditMappingDialog() {
     }
   }
 
+  const handleDeclareNoCredit = async () => {
+    setError("")
+    setSuccessMessage("")
+    try {
+      await declareMutation.mutateAsync()
+      setSuccessMessage(
+        "Your Program Head was told you have no subject to credit. Once they confirm it, you can go on to enroll.",
+      )
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to send this to your Program Head. Please try again.",
+      )
+    }
+  }
+
   const allCredits = creditsQuery.data?.data ?? []
+  const noCreditDeclaration = declarationQuery.data ?? null
+  // Only a student with no subject in the list at all can say they have none to credit.
+  const canDeclareNoCredit = creditsQuery.isSuccess && allCredits.length === 0
   const drafts = allCredits.filter((credit) => credit.status === "draft")
   const sentCredits = allCredits.filter((credit) => credit.status !== "draft")
 
@@ -263,6 +290,53 @@ export function StudentCreditMappingDialog() {
             <AlertDescription>{successMessage}</AlertDescription>
           </Alert>
         )}
+
+        {(canDeclareNoCredit || noCreditDeclaration !== null) &&
+          allCredits.length === 0 && (
+            <section
+              aria-labelledby="no-credit-heading"
+              className="grid gap-2 rounded-lg border p-3"
+            >
+              <h4
+                id="no-credit-heading"
+                className="text-sm font-semibold text-foreground"
+              >
+                Nothing to credit?
+              </h4>
+              {noCreditDeclaration === null ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    If you have no subject from another school to credit, tell
+                    your Program Head. They review it, and then you can go on to
+                    enroll.
+                  </p>
+                  <div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || declarationQuery.isPending}
+                      onClick={() => void handleDeclareNoCredit()}
+                    >
+                      I have no subject to credit
+                    </Button>
+                  </div>
+                </>
+              ) : noCreditDeclaration.status === "pending" ? (
+                <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <Badge variant="outline">Awaiting Program Head</Badge>
+                  You told your Program Head you have no subject to credit. You
+                  can enroll once they confirm it.
+                </p>
+              ) : (
+                <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <Badge variant="secondary">Confirmed</Badge>
+                  Your Program Head confirmed that you have no subject to
+                  credit. You can go on to enroll.
+                </p>
+              )}
+            </section>
+          )}
 
         <StudentTorUpload enabled={open} />
 

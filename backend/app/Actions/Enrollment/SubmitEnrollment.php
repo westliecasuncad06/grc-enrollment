@@ -134,10 +134,12 @@ final readonly class SubmitEnrollment
                 ? OverloadVerdict::WithinRegular
                 : OverloadEvaluator::evaluate($totalUnits, $maxRegularUnits, $overloadMaxUnits);
 
+            // An irregular student may submit a load over the maximum once they have confirmed they are sure
+            // (`StoreEnrollmentRequest` asks for that confirmation). It is not refused: it goes to the Program Chair
+            // like any overload, and the enrollment keeps the maximum it was measured against (`unit_maximum`) so the
+            // Chair can see it is over and set the right units and schedule.
             if ($overloadVerdict === OverloadVerdict::Rejected) {
-                throw ValidationException::withMessages([
-                    'sections' => "This selection totals {$totalUnits} units, exceeding the maximum allowed load. Refresh and try again.",
-                ]);
+                $overloadVerdict = OverloadVerdict::RequiresApproval;
             }
 
             // Regular students taking their prescribed block (or classified
@@ -159,6 +161,7 @@ final readonly class SubmitEnrollment
                     : $afterReview,
                 'total_units' => $totalUnits,
                 'requires_overload_approval' => $overloadVerdict === OverloadVerdict::RequiresApproval,
+                'unit_maximum' => $overloadMaxUnits ?? $maxRegularUnits,
                 'submitted_at' => now(),
             ]);
 

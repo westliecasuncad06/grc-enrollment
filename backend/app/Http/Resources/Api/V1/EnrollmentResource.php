@@ -51,6 +51,8 @@ final class EnrollmentResource extends JsonResource
      *     status_label: string,
      *     total_units: float,
      *     requires_overload_approval: bool,
+     *     unit_maximum: ?float,
+     *     exceeds_unit_maximum: bool,
      *     program_head_comment: ?string,
      *     submitted_at: ?string,
      *     program_head_decided_at: ?string,
@@ -118,6 +120,10 @@ final class EnrollmentResource extends JsonResource
             'status_label' => $this->resource->status->label(),
             'total_units' => $this->resource->total_units,
             'requires_overload_approval' => $this->resource->requires_overload_approval,
+            // The maximum the student was measured against, and whether the load is over it (an irregular student may
+            // submit one after confirming; the Program Chair then corrects it).
+            'unit_maximum' => $this->resource->unit_maximum,
+            'exceeds_unit_maximum' => $this->resource->unit_maximum !== null && $this->resource->total_units > $this->resource->unit_maximum,
             'program_head_comment' => $this->resource->program_head_comment,
             'submitted_at' => $this->resource->submitted_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'program_head_decided_at' => $this->resource->program_head_decided_at?->utc()->format('Y-m-d\TH:i:s\Z'),

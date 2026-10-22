@@ -7,6 +7,7 @@ use App\Actions\Enrollment\BuildEligibleSubjectPool;
 use App\Actions\Enrollment\BuildEnrollmentBlockPool;
 use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentBlock;
+use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentWindowResolver;
 use App\Domain\Enrollment\OverloadEvaluator;
@@ -57,6 +58,8 @@ final class StoreEnrollmentRequest extends FormRequest
             'sections' => ['required_without:block_code', 'prohibits:block_code', 'array', 'min:1'],
             'sections.*.section_id' => ['required', 'integer', 'distinct', 'exists:sections,id'],
             'block_code' => ['required_without:sections', 'prohibits:sections', 'string', 'max:32'],
+            // The student's "yes, I am sure" for a load over the unit maximum (see `rejectOverload`).
+            'units_confirmed' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -393,11 +396,28 @@ final class StoreEnrollmentRequest extends FormRequest
 
         $verdict = OverloadEvaluator::evaluate($totalUnits, $maxRegularUnits, $overloadMaxUnits);
 
-        if ($verdict === OverloadVerdict::Rejected) {
-            $cap = $overloadMaxUnits ?? $maxRegularUnits;
+        if ($verdict !== OverloadVerdict::Rejected) {
+            return;
+        }
+
+        $cap = $overloadMaxUnits ?? $maxRegularUnits;
+
+        // A Regular student's load is their curriculum's, so it still cannot pass the maximum. An irregular student
+        // may: they are asked whether they are sure (`units_confirmed`), and the Program Chair then sees the load is
+        // over and sets the right units and schedule (`SubmitEnrollment` sends it to them).
+        if ($student?->enrollment_category === EnrollmentCategory::Regular->value) {
             $validator->errors()->add(
                 'sections',
                 sprintf('This selection totals %s units, exceeding the maximum allowed load of %s units.', $totalUnits, $cap),
+            );
+
+            return;
+        }
+
+        if (! $this->boolean('units_confirmed')) {
+            $validator->errors()->add(
+                'units_confirmed',
+                sprintf('This selection totals %s units, over the %s unit maximum. Confirm that you are sure about these units to submit it for your Program Head to review.', $totalUnits, $cap),
             );
         }
     }

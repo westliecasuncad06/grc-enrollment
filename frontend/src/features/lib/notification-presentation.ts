@@ -153,6 +153,17 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "warning",
     icon: FileCheck,
   },
+  // A Transferee or Returnee has no subject to credit (to the Program Chair), and the Chair's confirmation (to the student).
+  transferee_no_credit_declared: {
+    label: "No subject to credit",
+    tone: "neutral",
+    icon: FileCheck,
+  },
+  transferee_no_credit_confirmed: {
+    label: "No credit confirmed",
+    tone: "success",
+    icon: BadgeCheck,
+  },
   // A transferee's credit mapping closed: they hold a queue number and may choose their subjects (2026-10-05).
   transferee_queue_number_issued: {
     label: "Your queue number",
@@ -395,6 +406,10 @@ export function notificationDestinationPath(
       return role === "registrar_head" ? "/portal/credit-mappings" : null
     case "transferee_credit_returned":
       return role === "program_chair" ? "/portal/credit-mappings" : null
+    case "transferee_no_credit_declared":
+      return role === "program_chair" ? "/portal/credit-mappings" : null
+    case "transferee_no_credit_confirmed":
+      return role === "student" ? "/portal/enrollment" : null
     // The student reads their number and chooses their subjects in Enrollment.
     case "transferee_queue_number_issued":
       return role === "student" ? "/portal/enrollment" : null

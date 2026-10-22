@@ -36,6 +36,7 @@ import {
 } from "@/features/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/features/components/ui/alert"
 import { StudentCreditMappingDialog } from "@/features/components/portal/student-credit-mapping-dialog"
+import { useMyNoCreditDeclarationQuery } from "@/features/hooks/use-no-credit-declaration"
 import { useTransfereeCreditsQuery } from "@/features/hooks/use-transferee-credits"
 import { isCreditMappingIncomplete } from "@/features/lib/credit-mapping"
 import {
@@ -420,6 +421,12 @@ export function EnrollmentWorkspace() {
     { page: 1, per_page: 50 },
     { enabled: isTransferee },
   )
+  // A transferee with nothing to credit says so, and their Program Head confirms it.
+  const noCreditDeclarationQuery = useMyNoCreditDeclarationQuery({
+    enabled: isTransferee,
+  })
+  const noCreditConfirmed =
+    noCreditDeclarationQuery.data?.status === "confirmed"
 
   // Stable empty-array fallbacks (`useMemo`, not `?? []` inline) so the
   // `effectiveSelections`/`effectiveSelectedBlockCode` memos below don't see
@@ -433,9 +440,22 @@ export function EnrollmentWorkspace() {
   const creditMappingIncomplete = useMemo(() => {
     if (!isTransferee) return false
     if (!transfereeCreditsQuery.isSuccess) return false
+    const credits = transfereeCreditsQuery.data?.data ?? []
+    // The Program Head confirmed there is nothing to credit: the mapping is complete with no credit row.
+    if (
+      noCreditConfirmed &&
+      credits.every((credit) => credit.status === "draft")
+    ) {
+      return false
+    }
     // Saved drafts count for nothing until the student sends them (`isCreditMappingIncomplete`).
-    return isCreditMappingIncomplete(transfereeCreditsQuery.data?.data ?? [])
-  }, [isTransferee, transfereeCreditsQuery.isSuccess, transfereeCreditsQuery.data])
+    return isCreditMappingIncomplete(credits)
+  }, [
+    isTransferee,
+    noCreditConfirmed,
+    transfereeCreditsQuery.isSuccess,
+    transfereeCreditsQuery.data,
+  ])
 
   const creditMappingBlocked = useMemo(() => {
     if (requiresCreditMapping && creditMappingIncomplete) return true
@@ -593,13 +613,15 @@ export function EnrollmentWorkspace() {
     ? null
     : findUnpairedComponent(selectedEntries, subjects)
 
+  // An irregular student may submit a load over the unit maximum once they confirm they are sure (the Program
+  // Head then sees it is over and sets the right units and schedule), so being over is a warning, not an error.
+  const overMaximumUnits = !isRegularAudience && totalUnits > effectiveMaxUnits
+
   const validationError = isRegularAudience
     ? null
-    : totalUnits > effectiveMaxUnits
-      ? `Total units (${totalUnits}) exceeds the maximum allowed limit of ${effectiveMaxUnits.toFixed(1)} units. Please remove some subjects before submitting.`
-      : scheduleConflict
-        ? `Schedule conflict detected: ${scheduleConflict.subjectA.code} conflicts with ${scheduleConflict.subjectB.code}. Please choose non-conflicting sections.`
-        : unpairedComponent
+    : scheduleConflict
+      ? `Schedule conflict detected: ${scheduleConflict.subjectA.code} conflicts with ${scheduleConflict.subjectB.code}. Please choose non-conflicting sections.`
+      : unpairedComponent
 
   // One source for both the dialog's sentence and its Confirm button. The
   // sentence used to read the pruned selection while the button read the raw
@@ -620,6 +642,7 @@ export function EnrollmentWorkspace() {
     mutationFn: (payload: {
       blockCode: string | null
       sectionIds: readonly number[]
+      unitsConfirmed?: boolean
     }) =>
       payload.blockCode
         ? createEnrollment({
@@ -631,6 +654,7 @@ export function EnrollmentWorkspace() {
             sections: payload.sectionIds.map((sectionId) => ({
               section_id: sectionId,
             })),
+            ...(payload.unitsConfirmed ? { units_confirmed: true } : {}),
           }),
     onSuccess: async () => {
       await Promise.all([
@@ -721,7 +745,11 @@ export function EnrollmentWorkspace() {
     }
 
     try {
-      let payload: { blockCode: string | null; sectionIds: readonly number[] }
+      let payload: {
+        blockCode: string | null
+        sectionIds: readonly number[]
+        unitsConfirmed?: boolean
+      }
 
       if (isRegularAudience) {
         if (!selectedBlockCode) {
@@ -770,6 +798,10 @@ export function EnrollmentWorkspace() {
         payload = {
           blockCode: null,
           sectionIds: freshEntries.map((entry) => entry.section.id),
+          // Measured on the fresh selection that is actually sent, not on what the page showed a moment ago.
+          unitsConfirmed:
+            freshEntries.reduce((sum, entry) => sum + entry.subject.units, 0) >
+            effectiveMaxUnits,
         }
       }
 
@@ -848,7 +880,6 @@ export function EnrollmentWorkspace() {
       totalUnitsValue <= effectiveMaxUnits
     const hasBlocker =
       totalUnitsValue === 0 ||
-      isExceeded ||
       scheduleConflict !== null ||
       unpairedComponent !== null ||
       creditMappingBlocked
@@ -861,9 +892,7 @@ export function EnrollmentWorkspace() {
               Total units
             </span>
             <Badge
-              variant={
-                isExceeded ? "destructive" : isOverload ? "warning" : "default"
-              }
+              variant={isExceeded || isOverload ? "warning" : "default"}
               className="text-base font-semibold"
             >
               {totalUnitsValue}
@@ -873,8 +902,8 @@ export function EnrollmentWorkspace() {
             <Badge variant="warning">Overload (requires approval)</Badge>
           )}
           {isExceeded && (
-            <Badge variant="destructive">
-              Exceeds {effectiveMaxUnits.toFixed(1)} unit maximum
+            <Badge variant="warning">
+              Over the {effectiveMaxUnits.toFixed(1)} unit maximum
             </Badge>
           )}
         </div>
@@ -1174,6 +1203,19 @@ export function EnrollmentWorkspace() {
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {overMaximumUnits && !nothingToSubmit && (
+            <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <AlertTitle>Are you sure about these units?</AlertTitle>
+              <AlertDescription>
+                You chose {totalUnits} units, which is{" "}
+                {(totalUnits - effectiveMaxUnits).toFixed(1)} over the{" "}
+                {effectiveMaxUnits.toFixed(1)} unit maximum. Your Program Head
+                will check it and may change your subjects and schedule to a
+                load that fits.
+              </AlertDescription>
+            </Alert>
+          )}
           {enrollmentWindowClosed && (
             <Alert variant="destructive">
               <AlertDescription>
@@ -1207,7 +1249,11 @@ export function EnrollmentWorkspace() {
               }
               onClick={() => void submit()}
             >
-              {mutation.isPending ? "Submitting" : "Confirm submission"}
+              {mutation.isPending
+                ? "Submitting"
+                : overMaximumUnits
+                  ? "Yes, I am sure — submit"
+                  : "Confirm submission"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

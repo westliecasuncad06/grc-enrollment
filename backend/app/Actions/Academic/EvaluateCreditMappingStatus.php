@@ -6,6 +6,7 @@ use App\Domain\Academic\CreditMappingStatusResult;
 use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Identity\StudentType;
 use App\Models\CurriculumMigration;
+use App\Models\NoCreditDeclaration;
 use App\Models\StudentProfile;
 use App\Models\TransfereeCredit;
 
@@ -17,6 +18,11 @@ use App\Models\TransfereeCredit;
  * Head (`endorsed`) the student may go on to enrol; the Head's approval no longer gates enrolment.
  * An endorsed credit counts for the student provisionally (`ResolveCreditedSubjectIds`) and the
  * Prospectus marks it as awaiting the Head, who still approves or rejects it afterwards.
+ *
+ * A student with nothing to credit says so ("no subject to credit", `NoCreditDeclaration`): while it
+ * waits for the Program Chair the student is held back, and once the Chair confirms it the mapping is
+ * complete with no credit rows at all. It only counts while the student has no sent credit; a credit
+ * that is sent takes over.
  */
 final readonly class EvaluateCreditMappingStatus
 {
@@ -54,7 +60,16 @@ final readonly class EvaluateCreditMappingStatus
             ->where('student_id', $student->id)
             ->exists();
 
+        // Only read when it can matter: a student with no sent credit.
+        $noCreditDeclaration = $totalCredits === 0
+            ? NoCreditDeclaration::query()->where('student_id', $student->id)->first()
+            : null;
+
         if ($studentType === StudentType::Transferee) {
+            if ($noCreditDeclaration !== null) {
+                return $this->noCreditResult($noCreditDeclaration, $hasCurriculumMigration);
+            }
+
             if ($totalCredits === 0) {
                 return new CreditMappingStatusResult(
                     isCompleted: false,
@@ -99,6 +114,10 @@ final readonly class EvaluateCreditMappingStatus
         }
 
         // Returnee logic (remaining case)
+        if ($noCreditDeclaration !== null && ! $hasCurriculumMigration) {
+            return $this->noCreditResult($noCreditDeclaration, false);
+        }
+
         if ($pendingCredits > 0) {
             return new CreditMappingStatusResult(
                 isCompleted: false,
@@ -139,6 +158,18 @@ final readonly class EvaluateCreditMappingStatus
             approvedCredits: $approvedCredits,
             rejectedCredits: $rejectedCredits,
             hasCurriculumMigration: false,
+        );
+    }
+
+    private function noCreditResult(NoCreditDeclaration $declaration, bool $hasCurriculumMigration): CreditMappingStatusResult
+    {
+        return new CreditMappingStatusResult(
+            isCompleted: $declaration->isConfirmed(),
+            requiresCreditMapping: true,
+            reason: $declaration->isConfirmed()
+                ? null
+                : 'You told your Program Head you have no subject to credit. Please wait for your Program Head to review it.',
+            hasCurriculumMigration: $hasCurriculumMigration,
         );
     }
 }

@@ -305,7 +305,7 @@ final class EnrollmentsEndpointTest extends TestCase
                 'type', 'id', 'student_id', 'student_number', 'student_name', 'student_year_level',
                 'student_financial_status', 'student_financial_status_label',
                 'student_enrollment_category', 'is_irregular', 'is_late_enrollee', 'academic_term_id',
-                'status', 'status_label', 'total_units', 'requires_overload_approval', 'program_head_comment',
+                'status', 'status_label', 'total_units', 'requires_overload_approval', 'unit_maximum', 'exceeds_unit_maximum', 'program_head_comment',
                 'submitted_at', 'program_head_decided_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at',
                 'subjects', 'revisions', 'queue_ticket', 'assessment',
             ],
@@ -872,7 +872,7 @@ final class EnrollmentsEndpointTest extends TestCase
             'sections' => [['section_id' => $section->id]],
         ]);
         $overLimit->assertUnprocessable();
-        self::assertArrayHasKey('sections', $overLimit->json('error.errors'));
+        self::assertArrayHasKey('units_confirmed', $overLimit->json('error.errors'));
         $this->assertDatabaseCount('enrollments', 0);
 
         config(['enrollment.max_regular_units' => null, 'enrollment.overload_max_units' => null]);
@@ -906,7 +906,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $this->assertDatabaseCount('enrollments', 1);
     }
 
-    public function test_a_submission_beyond_the_overload_allowance_is_still_rejected(): void
+    public function test_an_irregular_student_beyond_the_unit_maximum_is_asked_to_confirm_then_goes_to_the_program_chair_flagged(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -918,12 +918,90 @@ final class EnrollmentsEndpointTest extends TestCase
 
         config(['enrollment.max_regular_units' => 1, 'enrollment.overload_max_units' => 2]);
 
+        // Without the student's "I am sure" it is not submitted, and the message names the units and the maximum.
         $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
             'academic_term_id' => $term->id,
             'sections' => [['section_id' => $section->id]],
         ]);
 
         $response->assertUnprocessable();
+        self::assertStringContainsString('3 units, over the 2 unit maximum', $response->json('error.errors.units_confirmed.0'));
+        $this->assertDatabaseCount('enrollments', 0);
+
+        // Once they confirm, it is no longer refused: it goes to the Program Chair, flagged as over the maximum.
+        $confirmed = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+            'units_confirmed' => true,
+        ]);
+
+        $confirmed->assertCreated();
+        $confirmed->assertJsonPath('data.status', 'pending_program_head_approval');
+        $confirmed->assertJsonPath('data.requires_overload_approval', true);
+        $confirmed->assertJsonPath('data.unit_maximum', 2);
+        $confirmed->assertJsonPath('data.exceeds_unit_maximum', true);
+        $this->assertDatabaseCount('enrollments', 1);
+    }
+
+    public function test_the_list_can_be_narrowed_to_the_enrollments_over_the_unit_maximum(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $big = $this->makeSubject('CS101', 3.0);
+        $small = $this->makeSubject('CS102', 1.0);
+        $this->placeSubject($curriculum, $big);
+        $this->placeSubject($curriculum, $small);
+        $bigSection = $this->makeSection($term, $big);
+        $smallSection = $this->makeSection($term, $small);
+        $over = $this->makeStudent($curriculum);
+        $within = $this->makeStudentWithEmail($curriculum, 'within.max@grc.test', '2026-0002');
+        config(['enrollment.max_regular_units' => 1, 'enrollment.overload_max_units' => 2]);
+
+        $overToken = $this->tokenFor($over);
+        $withinToken = $this->tokenFor($within);
+        $this->app['auth']->forgetGuards();
+        $this->withToken($overToken)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $bigSection->id]],
+            'units_confirmed' => true,
+        ])->assertCreated();
+        $this->app['auth']->forgetGuards();
+        $this->withToken($withinToken)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $smallSection->id]],
+        ])->assertCreated();
+        $this->app['auth']->forgetGuards();
+
+        $headToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.head.overmax@grc.test');
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($headToken)->getJson('/api/v1/enrollments')->assertOk()->assertJsonCount(2, 'data');
+        $narrowed = $this->withToken($headToken)->getJson('/api/v1/enrollments?exceeds_unit_maximum=1')->assertOk();
+        self::assertSame(['2026-0001'], collect($narrowed->json('data'))->pluck('student_number')->all());
+        self::assertTrue($narrowed->json('data.0.exceeds_unit_maximum'));
+    }
+
+    public function test_a_regular_student_still_cannot_pass_the_unit_maximum(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101', 3.0);
+        $this->placeSubject($curriculum, $subject);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $student->update(['enrollment_category' => 'regular']);
+        $token = $this->tokenFor($student);
+
+        config(['enrollment.max_regular_units' => 1, 'enrollment.overload_max_units' => 2]);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+            'units_confirmed' => true,
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('sections', $response->json('error.errors'));
         $this->assertDatabaseCount('enrollments', 0);
     }
 

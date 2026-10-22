@@ -204,6 +204,10 @@ function useInvalidateEnrollmentQueries() {
         queryKey: ["cashier-payment-candidate", session?.userId ?? null],
       }),
       queryClient.invalidateQueries({ queryKey: ["payment-quote"] }),
+      // The number on the Program Chair's Irregular Advising tab.
+      queryClient.invalidateQueries({
+        queryKey: ["program-chair-review-counts"],
+      }),
     ])
 }
 

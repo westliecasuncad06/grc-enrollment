@@ -182,6 +182,11 @@ export const enrollmentSchema = z
     status_label: z.string().min(1),
     total_units: z.number().nonnegative(),
     requires_overload_approval: z.boolean(),
+    // The unit maximum the student was measured against, and whether the load is over it (an irregular
+    // student may submit one after confirming; the Program Chair then corrects it). Optional so a response
+    // from a server that predates them still parses.
+    unit_maximum: z.number().nonnegative().nullable().optional(),
+    exceeds_unit_maximum: z.boolean().optional(),
     program_head_comment: z.string().nullable(),
     submitted_at: z.iso.datetime().nullable(),
     program_head_decided_at: z.iso.datetime().nullable(),
@@ -230,6 +235,8 @@ export const enrollmentFiltersSchema = z
     status: z.enum(enrollmentStatusValues).optional(),
     academic_term_id: z.number().int().positive().optional(),
     search: z.string().trim().optional(),
+    // Only the enrollments whose load is over the unit maximum they were measured against.
+    exceeds_unit_maximum: z.boolean().optional(),
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(100).default(20),
   })
@@ -248,6 +255,8 @@ export const storeEnrollmentInputSchema = z.union([
       sections: z
         .array(z.object({ section_id: z.number().int().positive() }).strict())
         .min(1, "Select at least one section before submitting."),
+      // The irregular student's "yes, I am sure" for a load over the unit maximum.
+      units_confirmed: z.boolean().optional(),
     })
     .strict(),
   z

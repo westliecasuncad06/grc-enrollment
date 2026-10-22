@@ -33,6 +33,11 @@ export interface PortalModule {
   label: string
   description: string
   icon: LucideIcon
+  /**
+   * The module this one lives inside. A nested module has no sidebar entry or overview card of its own: its page
+   * is reached from the parent's page (and by link), and the parent shows as the current page there.
+   */
+  nestedUnder?: string
 }
 
 export interface RolePortalDefinition {
@@ -46,8 +51,11 @@ function portalModule(
   label: string,
   description: string,
   icon: LucideIcon,
+  nestedUnder?: string,
 ): PortalModule {
-  return { id, label, description, icon }
+  return nestedUnder === undefined
+    ? { id, label, description, icon }
+    : { id, label, description, icon, nestedUnder }
 }
 
 export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
@@ -164,6 +172,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Irregular Advising",
         "Check irregular student subject schedules, review student curriculum prospectus, and approve enrollments.",
         FileCheck2,
+        "program-chair-enrollment",
       ),
       portalModule(
         "enrollment-dashboard",
@@ -212,6 +221,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Credit Mappings",
         "Review students' credit requests, map each previous subject to their curriculum, and endorse it to the Registrar.",
         Network,
+        "program-chair-enrollment",
       ),
       portalModule(
         "faculty-invitations",

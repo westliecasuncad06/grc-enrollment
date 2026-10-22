@@ -111,7 +111,9 @@ export async function listEnrollments(
   const parsed = parse(enrollmentFiltersSchema, filters, "enrollment filter")
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(parsed)) {
-    if (value !== undefined) query.set(key, String(value))
+    // The API's boolean rule takes 1 or 0, not "true" or "false".
+    if (typeof value === "boolean") query.set(key, value ? "1" : "0")
+    else if (value !== undefined) query.set(key, String(value))
   }
   return parse(
     paginatedEnrollmentsSchema,

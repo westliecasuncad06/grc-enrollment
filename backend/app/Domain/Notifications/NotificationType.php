@@ -26,6 +26,9 @@ enum NotificationType: string
     case TransfereeCreditRequested = 'transferee_credit_requested';
     case TransfereeCreditEndorsed = 'transferee_credit_endorsed';
     case TransfereeCreditReturned = 'transferee_credit_returned';
+    /** A Transferee or Returnee has no subject to credit (to the Program Chair), and the Chair's confirmation (to the student). */
+    case TransfereeNoCreditDeclared = 'transferee_no_credit_declared';
+    case TransfereeNoCreditConfirmed = 'transferee_no_credit_confirmed';
     /** A transferee's credit mapping has nothing left open, so they now hold a queue number (ADR 0043, amended). */
     case TransfereeQueueNumberIssued = 'transferee_queue_number_issued';
     case ScheduleSubmittedForDean = 'schedule_submitted_for_dean';

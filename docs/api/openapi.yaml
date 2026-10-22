@@ -3709,6 +3709,16 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - name: exceeds_unit_maximum
+          in: query
+          required: false
+          description: >
+            `1` keeps only the enrollments whose load is over the unit maximum they
+            were measured against (an irregular student may submit one after
+            confirming; the Program Chair then corrects it). `0` or absent leaves
+            the list unfiltered.
+          schema:
+            type: boolean
         - name: per_page
           in: query
           required: false
@@ -4548,6 +4558,207 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/no-credit-declaration:
+    get:
+      operationId: getNoCreditDeclaration
+      summary: The signed-in student's own "no subject to credit"
+      description: >
+        Student only. `data` is null when the student has made none.
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: "The student's declaration, or `data: null`."
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyNoCreditDeclarationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postNoCreditDeclaration
+      summary: Tell the Program Chair there is no subject to credit
+      description: >
+        Student only; the student is always the caller. Only a Transferee or a
+        Returnee has a credit mapping to finish, and a student who already has
+        subjects in their credit list (saved or sent) must submit those instead
+        (422). The Program Chairs of the student's college get one notice
+        (`transferee_no_credit_declared`) and the student stays held back from
+        enrolling until a Chair confirms it. Idempotent: a repeat returns the same
+        declaration (200) and notifies nobody again; the first is 201. Saving a
+        credit afterwards replaces a declaration that was not confirmed yet.
+        Audited (`no_credit_declaration.declared`).
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The declaration the student already had.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoCreditDeclarationResponse"
+        "201":
+          description: The declaration was made.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoCreditDeclarationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            The student is not a Transferee or a Returnee, already has subjects in
+            their credit list, or has no student record.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/no-credit-declarations:
+    get:
+      operationId: getNoCreditDeclarations
+      summary: The "no subject to credit" declarations waiting for the Program Chair
+      description: >
+        Program Chair only, scoped to the Chair's own college (every college for a
+        Chair with none assigned). Unconfirmed declarations only, oldest first.
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The waiting declarations.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoCreditDeclarationCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/no-credit-declarations/{noCreditDeclaration}/confirm:
+    post:
+      operationId: postNoCreditDeclarationConfirm
+      summary: Confirm that a student has no subject to credit
+      description: >
+        Program Chair of the student's college only. The student's credit mapping is
+        then complete with no credit rows, so they may enroll; the Registrar Head
+        has nothing to approve. A transferee, who pays first, is given their queue
+        number in the same transaction. The student is notified
+        (`transferee_no_credit_confirmed`). Idempotent: a declaration that is already
+        confirmed is returned unchanged, so a double tap confirms, audits and
+        notifies once. Audited (`no_credit_declaration.confirmed`).
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: noCreditDeclaration
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: The confirmed declaration.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoCreditDeclarationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No declaration exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/program-chair/review-counts:
+    get:
+      operationId: getProgramChairReviewCounts
+      summary: What is waiting for the Program Chair
+      description: >
+        Program Chair only. Counts for the numbers on the Enrollment page's tabs,
+        scoped to the Chair's own college: the irregular enrollments waiting for the
+        Chair (`pending_program_head_approval`), and the students whose credit
+        mapping (pending credits, or a "no subject to credit") is still with the
+        Chair.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The counts.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramChairReviewCountsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
   /api/v1/transferee-credits/{transfereeCredit}:
@@ -8617,6 +8828,8 @@ components:
             - transferee_credit_requested
             - transferee_credit_endorsed
             - transferee_credit_returned
+            - transferee_no_credit_declared
+            - transferee_no_credit_confirmed
             - schedule_submitted_for_dean
             - schedule_dean_approved
             - schedule_executive_approved
@@ -9398,6 +9611,8 @@ components:
         - status_label
         - total_units
         - requires_overload_approval
+        - unit_maximum
+        - exceeds_unit_maximum
         - submitted_at
         - program_head_decided_at
         - registrar_decided_at
@@ -9464,9 +9679,21 @@ components:
           description: >
             FR-ENR-004. True when the submission exceeded
             config('enrollment.max_regular_units') but stayed within
-            config('enrollment.overload_max_units'). registrar_approve is
-            rejected on a flagged enrollment unless the request also sends
-            overload_acknowledged: true.
+            config('enrollment.overload_max_units'), or (for an irregular
+            student who confirmed they are sure) went over the unit maximum.
+            registrar_approve is rejected on a flagged enrollment unless the
+            request also sends overload_acknowledged: true.
+        unit_maximum:
+          type: [number, 'null']
+          description: >
+            The unit maximum that applied to the student when they submitted (their
+            curriculum's, or the configured one); null when none applied.
+        exceeds_unit_maximum:
+          type: boolean
+          description: >
+            True when `total_units` is over `unit_maximum`. An irregular student may
+            submit such a load after confirming (`units_confirmed`); it goes to the
+            Program Chair, who sets the right units and schedule.
         submitted_at:
           type: ["string", "null"]
           format: date-time
@@ -9715,6 +9942,14 @@ components:
             properties:
               section_id:
                 type: integer
+        units_confirmed:
+          type: boolean
+          description: >
+            An irregular student's "yes, I am sure" for a load over the unit maximum.
+            Without it such a submission is refused with a `units_confirmed`
+            validation error naming the units and the maximum; with it the enrollment
+            is created and goes to the Program Chair, flagged. A Regular student's
+            load can never pass the maximum, with or without it.
     UpdateEnrollmentRequest:
       type: object
       additionalProperties: false
@@ -12109,6 +12344,91 @@ components:
           type: string
         academic_standing_label:
           type: string
+    NoCreditDeclarationResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - student_id
+        - student_number
+        - student_name
+        - status
+        - declared_at
+        - confirmed_at
+      properties:
+        type:
+          type: string
+          const: no_credit_declaration
+        id:
+          type: integer
+        student_id:
+          type: integer
+        student_number:
+          type: string
+        student_name:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed]
+          description: "`pending` while it waits for the Program Chair; `confirmed` once the Chair has reviewed it."
+        declared_at:
+          type: string
+          format: date-time
+        confirmed_at:
+          type: [string, 'null']
+          format: date-time
+    NoCreditDeclarationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/NoCreditDeclarationResource"
+    MyNoCreditDeclarationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          oneOf:
+            - $ref: "#/components/schemas/NoCreditDeclarationResource"
+            - type: 'null'
+    NoCreditDeclarationCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/NoCreditDeclarationResource"
+    ProgramChairReviewCountsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - type
+            - irregular_advising
+            - credit_mappings
+          properties:
+            type:
+              type: string
+              const: program_chair_review_counts
+            irregular_advising:
+              type: integer
+              minimum: 0
+            credit_mappings:
+              type: integer
+              minimum: 0
     StoreStudentProfileRequest:
       type: object
       additionalProperties: false

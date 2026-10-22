@@ -7,7 +7,7 @@ export const programChairChapter: GuideChapter = {
     "Plan the term's sections, approve irregular enrollments and map credits",
   intro: [
     "The Program Head turns the college's curriculum into a schedule that the Dean and the Executive Director can approve, assigns professors and rooms, advises irregular students, and maps the credits of students who come from another school.",
-    "Your menu has eleven pages. They are grouped below in the order you meet them during a term.",
+    "Your menu has nine pages. They are grouped below in the order you meet them during a term. Irregular Advising and Credit Mappings are tabs on the **Enrollment** page, not menu pages of their own: a red number above a tab says how many students are waiting for you there, and the same total shows beside **Enrollment** in the menu.",
   ],
   sections: [
     {
@@ -110,7 +110,12 @@ export const programChairChapter: GuideChapter = {
           kind: "steps",
           items: [
             {
-              text: "Open **Irregular Advising**. **Pending Review** lists what needs you.",
+              text: "Open **Enrollment**, then the **Irregular Advising** tab. **Pending Review** lists what needs you.",
+            },
+            {
+              text: "A red **Over the unit maximum** badge marks a student who chose more units than the maximum. Select the **Over the unit maximum** button above the list to see only those.",
+              detail:
+                "An irregular student may submit more than the maximum after confirming that they are sure. It is not refused: you see it here, set the right units and schedule, and the student accepts your changes.",
             },
             {
               text: "Select **Check Schedule** to see the student's chosen subjects, units and any timetable conflict.",
@@ -413,7 +418,7 @@ export const programChairChapter: GuideChapter = {
           kind: "steps",
           items: [
             {
-              text: "Open **Credit Mappings**. **Students waiting for review** lists the students of your college.",
+              text: "Open **Enrollment**, then the **Credit Mappings** tab. **Students waiting for review** lists the students of your college.",
             },
             { text: "Select **Review** for a student." },
             {
@@ -432,6 +437,17 @@ export const programChairChapter: GuideChapter = {
           kind: "note",
           tone: "tip",
           text: "**Confirm all suggested** confirms every suggested match in one step. It stays off when the system has no suggestion for the student's subjects.",
+        },
+        {
+          kind: "paragraph",
+          text: "A Transferee or Returnee who has nothing to credit does not send a list. They select **I have no subject to credit**, and the student appears under **No subject to credit** on the same tab.",
+        },
+        {
+          kind: "bullets",
+          items: [
+            "Select **Confirm** beside the student. They can then go on to enroll; the Registrar Head has nothing to approve, because no credit was claimed.",
+            "A student stays held back from enrolling until you confirm it. A Transferee is also given their queue number when you confirm.",
+          ],
         },
         {
           kind: "figure",

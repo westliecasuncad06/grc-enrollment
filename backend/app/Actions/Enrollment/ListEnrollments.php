@@ -24,6 +24,7 @@ final readonly class ListEnrollments
         $status = isset($filters['status']) ? (string) $filters['status'] : null;
         $academicTermId = isset($filters['academic_term_id']) ? (int) $filters['academic_term_id'] : null;
         $search = isset($filters['search']) ? trim((string) $filters['search']) : null;
+        $overMaximumOnly = isset($filters['exceeds_unit_maximum']) && filter_var($filters['exceeds_unit_maximum'], FILTER_VALIDATE_BOOLEAN);
         $page = isset($filters['page']) ? (int) $filters['page'] : 1;
         $perPage = isset($filters['per_page']) ? (int) $filters['per_page'] : 20;
 
@@ -32,6 +33,7 @@ final readonly class ListEnrollments
             ->with(['student.user', 'academicTerm.enrollmentWindows', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items', 'revisions'])
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->when($academicTermId !== null, fn ($query) => $query->where('academic_term_id', $academicTermId))
+            ->when($overMaximumOnly, fn ($query) => $query->whereNotNull('unit_maximum')->whereColumn('total_units', '>', 'unit_maximum'))
             ->when($search !== null && $search !== '', function ($query) use ($search) {
                 $query->where(function ($sub) use ($search) {
                     if (is_numeric($search)) {

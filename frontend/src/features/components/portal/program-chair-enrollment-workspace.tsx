@@ -13,6 +13,7 @@ import { motion } from "motion/react"
 import Link from "next/link"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { ProgramChairEnrollmentTabs } from "@/features/components/portal/program-chair-enrollment-tabs"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { CurriculumPill } from "@/features/components/portal/curriculum-pill"
 import { DemandForecastDialog } from "@/features/components/portal/demand-forecast-dialog"
@@ -1031,6 +1032,7 @@ export function ProgramChairEnrollmentWorkspace({
         title="Enrollment"
         description="Program Head enrollment opens after the Registrar creates the next school year and semester."
       >
+        <ProgramChairEnrollmentTabs current="enrollment" />
         <Alert>
           <AlertDescription>
             Waiting for Registrar for the school year and semester.
@@ -1374,6 +1376,7 @@ export function ProgramChairEnrollmentWorkspace({
       description={workspaceDescription}
       lastUpdated={sectionsQuery.dataUpdatedAt}
     >
+      <ProgramChairEnrollmentTabs current="enrollment" />
       {(error || termsQuery.isError || curriculaQuery.isError) && (
         <Alert variant="destructive">
           <AlertDescription>

@@ -226,6 +226,11 @@ final class AuditAction
 
     public const TRANSFEREE_CREDIT_DELETED = 'transferee_credit.deleted';
 
+    /** A Transferee or Returnee said they have no subject to credit; the Program Chair reviews it. */
+    public const NO_CREDIT_DECLARED = 'no_credit_declaration.declared';
+
+    public const NO_CREDIT_CONFIRMED = 'no_credit_declaration.confirmed';
+
     public const TOR_DOCUMENT_UPLOADED = 'tor_document.uploaded';
 
     public const TOR_DOCUMENT_DELETED = 'tor_document.deleted';
@@ -445,6 +450,8 @@ final class AuditAction
             self::TRANSFEREE_CREDIT_SUBMITTED,
             self::TRANSFEREE_CREDIT_RETURNED,
             self::TRANSFEREE_CREDIT_DELETED,
+            self::NO_CREDIT_DECLARED,
+            self::NO_CREDIT_CONFIRMED,
             self::TOR_DOCUMENT_UPLOADED,
             self::TOR_DOCUMENT_DELETED,
             self::ACADEMIC_TERM_CREATED,

@@ -1,4 +1,4 @@
-import { act, screen, within } from "@testing-library/react"
+import { act, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -723,7 +723,9 @@ describe("EnrollmentWorkspace", () => {
       expect(
         await screen.findByText("Credit Mapping Required Before Enrollment"),
       ).toBeInTheDocument()
-      expect(screen.getByText(/Upload your Transcript of Records/)).toBeInTheDocument()
+      expect(
+        screen.getByText(/Upload your Transcript of Records/),
+      ).toBeInTheDocument()
       // Both kinds of student can request credit mapping and upload their TOR.
       expect(
         screen.getByRole("button", { name: /Request Credit Mapping/ }),
@@ -744,64 +746,61 @@ describe("EnrollmentWorkspace", () => {
       name: "shows the link to the Prospectus and grades to a returnee without an enrollment deadline",
       deadline: null,
     },
-  ])(
-    "$name",
-    async ({ deadline }) => {
-      fetchMock.mockImplementation((input, init) => {
-        const target = url(input)
-        if (target.endsWith("/student-profile"))
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                data: {
-                  ...ownProfile(30),
-                  student_type: "returnee",
-                  student_type_label: "Returnee",
-                  enrollment_deadline_at: deadline,
+  ])("$name", async ({ deadline }) => {
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.endsWith("/student-profile"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...ownProfile(30),
+                student_type: "returnee",
+                student_type_label: "Returnee",
+                enrollment_deadline_at: deadline,
+              },
+            }),
+          ),
+        )
+      if (target.includes("/eligible-subjects"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  ...eligibleSubject,
+                  is_eligible: false,
+                  reasons: [
+                    {
+                      code: "credit_mapping_pending",
+                      message: "Credit mapping is not complete yet.",
+                    },
+                  ],
                 },
-              }),
-            ),
-          )
-        if (target.includes("/eligible-subjects"))
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                data: [
-                  {
-                    ...eligibleSubject,
-                    is_eligible: false,
-                    reasons: [
-                      {
-                        code: "credit_mapping_pending",
-                        message: "Credit mapping is not complete yet.",
-                      },
-                    ],
-                  },
-                ],
-              }),
-            ),
-          )
-        return mockRoutes()(input, init)
-      })
-      renderWithSession(<EnrollmentWorkspace />, {
-        session: {
-          userId: "1",
-          displayName: "Student",
-          role: "student",
-          signedInAt: "2026-07-30T00:00:00Z",
-        },
-      })
+              ],
+            }),
+          ),
+        )
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
 
-      await screen.findByText("Credit Mapping Required Before Enrollment")
-      // Grades holds the Prospectus with the credited grades, and a restricted student can open it (ADR 0050).
-      expect(
-        screen.getByRole("link", { name: "View Grades and Prospectus" }),
-      ).toHaveAttribute("href", "/portal/grades")
-      expect(
-        screen.queryByRole("link", { name: "View Academic Records" }),
-      ).not.toBeInTheDocument()
-    },
-  )
+    await screen.findByText("Credit Mapping Required Before Enrollment")
+    // Grades holds the Prospectus with the credited grades, and a restricted student can open it (ADR 0050).
+    expect(
+      screen.getByRole("link", { name: "View Grades and Prospectus" }),
+    ).toHaveAttribute("href", "/portal/grades")
+    expect(
+      screen.queryByRole("link", { name: "View Academic Records" }),
+    ).not.toBeInTheDocument()
+  })
 
   it("keeps the selected section after navigating away and back", async () => {
     const user = userEvent.setup()
@@ -1541,9 +1540,7 @@ describe("EnrollmentWorkspace", () => {
         target.includes("/academic-terms") &&
         target.includes("enrollment-windows")
       )
-        return Promise.resolve(
-          new Response(JSON.stringify(scheduleFor(open))),
-        )
+        return Promise.resolve(new Response(JSON.stringify(scheduleFor(open))))
       if (target.includes("/academic-terms"))
         return Promise.resolve(new Response(JSON.stringify(terms)))
       if (target.includes("/eligible-subjects"))
@@ -1632,13 +1629,15 @@ describe("EnrollmentWorkspace", () => {
     expect(
       within(selectedSection).getByRole("table", { name: "IT201 schedule" }),
     ).toBeInTheDocument()
-    expect(within(selectedSection).getAllByText("Section ID")).not.toHaveLength(0)
-    expect(within(selectedSection).getAllByText("Data Structures")).not.toHaveLength(0)
+    expect(within(selectedSection).getAllByText("Section ID")).not.toHaveLength(
+      0,
+    )
+    expect(
+      within(selectedSection).getAllByText("Data Structures"),
+    ).not.toHaveLength(0)
     expect(within(selectedSection).getAllByText("LAB-1")).not.toHaveLength(0)
 
-    expect(
-      screen.getByRole("dialog"),
-    ).toBeInTheDocument()
+    expect(screen.getByRole("dialog")).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Change section" }),
     ).toBeInTheDocument()
@@ -1655,9 +1654,7 @@ describe("EnrollmentWorkspace", () => {
       academic_term_id: 2,
       block_code: "IT201",
     })
-    expect(
-      await screen.findByText(/Enrollment submitted/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/Enrollment submitted/)).toBeInTheDocument()
   })
 
   it("offers only the first section with seats, opens it when chosen, and goes back to that one section when changed", async () => {
@@ -1921,7 +1918,18 @@ describe("EnrollmentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("disables submit button and shows exceeded badge when units exceed 30", async () => {
+  /** The JSON the student's submission posted to /enrollments, or null while nothing was posted. */
+  const submittedBody = (): Record<string, unknown> | null => {
+    const call = fetchMock.mock.calls.find(
+      ([request, init]) =>
+        url(request).includes("/enrollments") && init?.method === "POST",
+    )
+    return call
+      ? (JSON.parse(call[1]?.body as string) as Record<string, unknown>)
+      : null
+  }
+
+  it("warns, but still lets an irregular student submit, when units exceed the maximum", async () => {
     const user = userEvent.setup()
     const heavySubject = {
       ...eligibleSubject,
@@ -1946,12 +1954,53 @@ describe("EnrollmentWorkspace", () => {
 
     await selectOption(user, "CS101 section", /Section A/)
 
+    // Over the maximum is a warning, not a block: Submit stays usable.
+    expect(screen.getByText("Over the 30.0 unit maximum")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+
+    // The student is asked whether they are sure, with the numbers, before it is sent.
+    const dialog = await screen.findByRole("alertdialog")
     expect(
-      screen.getByText("Exceeds 30.0 unit maximum"),
+      within(dialog).getByText("Are you sure about these units?"),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Submit enrollment" }),
-    ).toBeDisabled()
+      within(dialog).getByText(
+        /31 units, which is 1\.0 over the 30\.0 unit maximum/,
+      ),
+    ).toBeInTheDocument()
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Yes, I am sure — submit" }),
+    )
+
+    await waitFor(() => expect(submittedBody()).not.toBeNull())
+    expect(submittedBody()).toMatchObject({ units_confirmed: true })
+  })
+
+  it("does not ask 'are you sure' or send a confirmation when the load is within the maximum", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => mockRoutes()(input, init))
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+    const dialog = await screen.findByRole("alertdialog")
+    expect(
+      within(dialog).queryByText("Are you sure about these units?"),
+    ).not.toBeInTheDocument()
+    await user.click(
+      within(dialog).getByRole("button", { name: "Confirm submission" }),
+    )
+
+    await waitFor(() => expect(submittedBody()).not.toBeNull())
+    expect(submittedBody()).not.toHaveProperty("units_confirmed")
   })
 
   it("refreshes the available-seats count without a page reload", async () => {
@@ -2014,7 +2063,9 @@ describe("EnrollmentWorkspace", () => {
                 code: "VALIDATION_FAILED",
                 message: "Validation failed.",
                 errors: {
-                  academic_term_id: ["Enrollment for 2025-2026 · 2nd has closed."],
+                  academic_term_id: [
+                    "Enrollment for 2025-2026 · 2nd has closed.",
+                  ],
                 },
                 request_id: "req-closed",
               },
@@ -2041,7 +2092,9 @@ describe("EnrollmentWorkspace", () => {
     // stays open, and Confirm is usable again.
     const dialog = await screen.findByRole("alertdialog")
     expect(
-      await within(dialog).findByText("Enrollment for 2025-2026 · 2nd has closed."),
+      await within(dialog).findByText(
+        "Enrollment for 2025-2026 · 2nd has closed.",
+      ),
     ).toBeInTheDocument()
     expect(
       within(dialog).getByRole("button", { name: "Confirm submission" }),
@@ -2071,7 +2124,9 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    const section = await screen.findByRole("article", { name: "IT201 section" })
+    const section = await screen.findByRole("article", {
+      name: "IT201 section",
+    })
     expect(within(section).getByText("7 of 40 seats left")).toBeInTheDocument()
 
     // Another student takes seats; the block list is polled every 3s, so the
@@ -2081,8 +2136,12 @@ describe("EnrollmentWorkspace", () => {
       await vi.advanceTimersByTimeAsync(3_000)
     })
 
-    const refreshed = await screen.findByRole("article", { name: "IT201 section" })
-    expect(within(refreshed).getByText("3 of 40 seats left")).toBeInTheDocument()
+    const refreshed = await screen.findByRole("article", {
+      name: "IT201 section",
+    })
+    expect(
+      within(refreshed).getByText("3 of 40 seats left"),
+    ).toBeInTheDocument()
     expect(screen.queryByText("7 of 40 seats left")).not.toBeInTheDocument()
   })
 
@@ -2177,7 +2236,8 @@ describe("EnrollmentWorkspace", () => {
           ),
         )
       }
-      if (url(input).includes("/enrollments") && init?.method === "POST") posted = true
+      if (url(input).includes("/enrollments") && init?.method === "POST")
+        posted = true
       return mockRegularRoutes()(input, init)
     })
     renderWithSession(<EnrollmentWorkspace />, {
@@ -2189,10 +2249,18 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    const section = await screen.findByRole("article", { name: "IT201 section" })
-    await user.click(within(section).getByRole("button", { name: "Choose IT201" }))
-    await user.click(await screen.findByRole("button", { name: "Submit enrollment" }))
-    await user.click(await screen.findByRole("button", { name: "Confirm submission" }))
+    const section = await screen.findByRole("article", {
+      name: "IT201 section",
+    })
+    await user.click(
+      within(section).getByRole("button", { name: "Choose IT201" }),
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "Submit enrollment" }),
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "Confirm submission" }),
+    )
 
     const dialog = await screen.findByRole("alertdialog")
     expect(
@@ -2249,17 +2317,27 @@ describe("EnrollmentWorkspace", () => {
       const user = userEvent.setup()
       renderFreshman("awaiting_section", "regular", true)
 
-      const section = await screen.findByRole("article", { name: "IT201 section" })
-      await user.click(within(section).getByRole("button", { name: "Choose IT201" }))
-      await user.click(await screen.findByRole("button", { name: "Submit enrollment" }))
-      await user.click(await screen.findByRole("button", { name: "Confirm submission" }))
+      const section = await screen.findByRole("article", {
+        name: "IT201 section",
+      })
+      await user.click(
+        within(section).getByRole("button", { name: "Choose IT201" }),
+      )
+      await user.click(
+        await screen.findByRole("button", { name: "Submit enrollment" }),
+      )
+      await user.click(
+        await screen.findByRole("button", { name: "Confirm submission" }),
+      )
 
       expect(
         await screen.findByText(
           /your payment is already on file, so once it is approved you are enrolled/i,
         ),
       ).toBeInTheDocument()
-      expect(screen.queryByText(/claim your queuing ticket/i)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/claim your queuing ticket/i),
+      ).not.toBeInTheDocument()
     })
 
     it("an irregular freshman is told to choose subjects, not that every section is full", async () => {
@@ -2271,7 +2349,9 @@ describe("EnrollmentWorkspace", () => {
       expect(
         screen.queryByText("Payment received — waiting for a section"),
       ).not.toBeInTheDocument()
-      expect(screen.queryByText(/every section for your year level/i)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/every section for your year level/i),
+      ).not.toBeInTheDocument()
       expect(screen.getByText(/you do not pay again/i)).toBeInTheDocument()
     })
 
@@ -2292,10 +2372,15 @@ describe("EnrollmentWorkspace", () => {
     fetchMock.mockImplementation((input, init) => {
       const target = url(input)
       if (target.endsWith("/student-profile"))
-        return Promise.resolve(new Response(JSON.stringify({ data: ownProfile(41.5) })))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: ownProfile(41.5) })),
+        )
       if (target.includes("/eligible-subjects"))
-        return Promise.resolve(new Response(JSON.stringify({ data: [heavySubject] })))
-      if (target.includes("/enrollments") && init?.method === "POST") posted = true
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [heavySubject] })),
+        )
+      if (target.includes("/enrollments") && init?.method === "POST")
+        posted = true
       return mockRoutes()(input, init)
     })
     renderWithSession(<EnrollmentWorkspace />, {
@@ -2433,7 +2518,9 @@ describe("EnrollmentWorkspace", () => {
       ).toBeInTheDocument()
       expect(screen.getAllByText("Q007").length).toBeGreaterThan(0)
       expect(
-        screen.getByText(/choose your subjects below, then take this number to the Cashier/i),
+        screen.getByText(
+          /choose your subjects below, then take this number to the Cashier/i,
+        ),
       ).toBeInTheDocument()
     })
 
@@ -2448,7 +2535,9 @@ describe("EnrollmentWorkspace", () => {
       ).toBeInTheDocument()
       expect(screen.getByText(/you do not pay again/i)).toBeInTheDocument()
       // Paid already: no stepper step asks them to pay at the Cashier again.
-      expect(screen.queryByText("Payment at the Cashier")).not.toBeInTheDocument()
+      expect(
+        screen.queryByText("Payment at the Cashier"),
+      ).not.toBeInTheDocument()
     })
 
     it("sees no queue number card before the Cashier has given them one", async () => {
@@ -2465,7 +2554,9 @@ describe("EnrollmentWorkspace", () => {
     it("shows payment at the Cashier as the step they are on while their subjects wait at the hold", async () => {
       renderTransferee({
         enrollments: [holdEnrollment],
-        queue: { data: { ...queueNumber.data, stage: "awaiting_first_payment" } },
+        queue: {
+          data: { ...queueNumber.data, stage: "awaiting_first_payment" },
+        },
       })
 
       const label = await screen.findByText("Payment at the Cashier")
@@ -2486,17 +2577,27 @@ describe("EnrollmentWorkspace", () => {
       const user = userEvent.setup()
       renderTransferee()
 
-      const section = await screen.findByRole("article", { name: "IT201 section" })
-      await user.click(within(section).getByRole("button", { name: "Choose IT201" }))
-      await user.click(await screen.findByRole("button", { name: "Submit enrollment" }))
-      await user.click(await screen.findByRole("button", { name: "Confirm submission" }))
+      const section = await screen.findByRole("article", {
+        name: "IT201 section",
+      })
+      await user.click(
+        within(section).getByRole("button", { name: "Choose IT201" }),
+      )
+      await user.click(
+        await screen.findByRole("button", { name: "Submit enrollment" }),
+      )
+      await user.click(
+        await screen.findByRole("button", { name: "Confirm submission" }),
+      )
 
       expect(
         await screen.findByText(
           /take your queue number to the school Cashier and make your first payment/i,
         ),
       ).toBeInTheDocument()
-      expect(screen.queryByText(/claim your queuing ticket/i)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/claim your queuing ticket/i),
+      ).not.toBeInTheDocument()
     })
   })
 })

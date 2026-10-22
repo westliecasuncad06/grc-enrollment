@@ -62,10 +62,14 @@ export function GrcConnectPage() {
   }
 
   const definition = rolePortalDefinitions[session.role]
-  const availableModules = definition.modules.filter((module) =>
+  // A nested module (the Program Head's Irregular Advising and Credit Mappings) is reached from its parent's page.
+  const topLevelModules = definition.modules.filter(
+    (module) => module.nestedUnder === undefined,
+  )
+  const availableModules = topLevelModules.filter((module) =>
     isConnectedModuleId(module.id),
   )
-  const plannedModules = definition.modules.filter(
+  const plannedModules = topLevelModules.filter(
     (module) => !isConnectedModuleId(module.id),
   )
   const primaryModule = availableModules[0]

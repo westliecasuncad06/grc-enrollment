@@ -14,6 +14,7 @@ import {
   TorUploadsCard,
   type TorStudent,
 } from "@/features/components/portal/tor-documents-panel"
+import { ProgramChairEnrollmentTabs } from "@/features/components/portal/program-chair-enrollment-tabs"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
@@ -30,12 +31,17 @@ import { Input } from "@/features/components/ui/input"
 import { useAcademicRecordStudentSearchQuery } from "@/features/hooks/use-academic-record"
 import { useDebouncedValue } from "@/features/hooks/use-debounced-value"
 import {
+  useConfirmNoCreditDeclarationMutation,
+  useNoCreditDeclarationsQuery,
+} from "@/features/hooks/use-no-credit-declaration"
+import {
   useAllTransfereeCreditsQuery,
   useCreateTransfereeCreditMutation,
   useTransfereeCreditsQuery,
 } from "@/features/hooks/use-transferee-credits"
 import { groupCreditsByStudent } from "@/features/lib/credit-mapping"
 import type { AcademicRecordStudentLookup } from "@/features/schemas/academic-record-schema"
+import type { NoCreditDeclaration } from "@/features/schemas/no-credit-declaration-schema"
 import type { TransfereeCredit } from "@/features/schemas/transferee-credit-schema"
 import { isApiClientError } from "@/features/services/api-client"
 
@@ -90,6 +96,27 @@ export function ProgramChairCreditMappingsWorkspace() {
     { enabled: authorized },
   )
   const waitingStudents = groupCreditsByStudent(pendingQuery.data ?? [])
+  // Students who told the Chair they have nothing to credit: confirming it lets them enroll.
+  const noCreditQuery = useNoCreditDeclarationsQuery({ enabled: authorized })
+  const confirmNoCreditMutation = useConfirmNoCreditDeclarationMutation()
+  const [noCreditError, setNoCreditError] = useState("")
+
+  const confirmNoCredit = async (declaration: NoCreditDeclaration) => {
+    setNoCreditError("")
+    setSentNote("")
+    try {
+      await confirmNoCreditMutation.mutateAsync(declaration.id)
+      setSentNote(
+        `Confirmed that ${declaration.student_name || declaration.student_number} has no subject to credit. They can go on to enroll.`,
+      )
+    } catch (err) {
+      setNoCreditError(
+        err instanceof Error
+          ? err.message
+          : "This could not be confirmed. Please try again.",
+      )
+    }
+  }
 
   return (
     <WorkspacePage
@@ -101,6 +128,7 @@ export function ProgramChairCreditMappingsWorkspace() {
         endorsedQuery.dataUpdatedAt,
       )}
     >
+      <ProgramChairEnrollmentTabs current="credit-mappings" />
       {sentNote && (
         <Alert>
           <AlertDescription>{sentNote}</AlertDescription>
@@ -160,6 +188,72 @@ export function ProgramChairCreditMappingsWorkspace() {
                         }}
                       >
                         Review
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+            )}
+          </AsyncBoundary>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle level={2}>No subject to credit</CardTitle>
+          <CardDescription>
+            Transferees and Returnees who told you they have nothing to credit.
+            Confirm it and they can go on to enroll; the Registrar Head has
+            nothing to approve.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {noCreditError && (
+            <Alert variant="destructive">
+              <AlertDescription>{noCreditError}</AlertDescription>
+            </Alert>
+          )}
+          <AsyncBoundary
+            query={noCreditQuery}
+            isEmpty={(rows) => rows.length === 0}
+            emptyMessage="No student is waiting for you to confirm that they have nothing to credit."
+            loadingLabel="Loading students with no subject to credit…"
+          >
+            {(declarations) => (
+              <DataTable
+                caption="Students with no subject to credit"
+                rowKey={(declaration) => declaration.id}
+                rows={declarations}
+                columns={[
+                  {
+                    key: "student",
+                    header: "Student",
+                    render: (declaration) =>
+                      declaration.student_name
+                        ? `${declaration.student_name} (${declaration.student_number})`
+                        : declaration.student_number,
+                  },
+                  {
+                    key: "sent",
+                    header: "Sent",
+                    render: (declaration) =>
+                      new Date(declaration.declared_at).toLocaleDateString(
+                        "en-PH",
+                        { dateStyle: "medium" },
+                      ),
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    render: (declaration) => (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={confirmNoCreditMutation.isPending}
+                        aria-label={`Confirm that ${declaration.student_name || declaration.student_number} has no subject to credit`}
+                        onClick={() => void confirmNoCredit(declaration)}
+                      >
+                        Confirm
                       </Button>
                     ),
                   },

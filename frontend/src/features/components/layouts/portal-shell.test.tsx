@@ -54,8 +54,11 @@ describe("PortalShell", () => {
 
   it.each(userRoles)("shows only live role navigation for %s", (role) => {
     const definition = rolePortalDefinitions[role]
-    const liveModules = definition.modules.filter((module) =>
-      isConnectedModuleId(module.id),
+    // A nested module (the Program Head's Irregular Advising and Credit Mappings) has no sidebar entry: its
+    // page is reached from its parent's page.
+    const liveModules = definition.modules.filter(
+      (module) =>
+        isConnectedModuleId(module.id) && module.nestedUnder === undefined,
     )
     renderShell(role)
 
@@ -78,7 +81,7 @@ describe("PortalShell", () => {
         name: module.label,
       })
 
-      if (isConnectedModuleId(module.id)) {
+      if (isConnectedModuleId(module.id) && module.nestedUnder === undefined) {
         expect(link).toHaveAttribute("href", `/portal/${module.id}`)
       } else {
         expect(link).not.toBeInTheDocument()
@@ -410,7 +413,7 @@ describe("PortalShell", () => {
     }
   })
 
-  it("lists Irregular Advising and the Enrollment Dashboard right after Enrollment for a Program Chair", () => {
+  it("keeps Irregular Advising and Credit Mappings out of the Program Chair's sidebar, inside Enrollment", () => {
     renderShell("program_chair", {
       session: { ...sessionFor("program_chair"), college: "ccs" },
     })
@@ -422,13 +425,54 @@ describe("PortalShell", () => {
       .getAllByRole("link")
       .map((link) => link.textContent?.trim())
 
-    expect(names.slice(0, 5)).toEqual([
+    expect(names.slice(0, 4)).toEqual([
       "GRC Connect",
       "Enrollment",
-      "Irregular Advising",
       "Enrollment Dashboard",
       "Enrollment Analytics",
     ])
+    expect(names).not.toContain("Irregular Advising")
+    expect(names).not.toContain("Credit Mappings")
+  })
+
+  it("shows the Program Chair how many are waiting on the Enrollment entry", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url
+      if (url.includes("/api/v1/program-chair/review-counts")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "program_chair_review_counts",
+                irregular_advising: 2,
+                credit_mappings: 3,
+              },
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderShell("program_chair", {
+      session: { ...sessionFor("program_chair"), college: "ccs" },
+    })
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Role portal navigation",
+    })
+    const enrollment = await within(navigation).findByRole("link", {
+      name: /^Enrollment5 waiting for your review$/,
+    })
+    expect(enrollment).toHaveAttribute(
+      "href",
+      "/portal/program-chair-enrollment",
+    )
   })
 
   describe("foldable sidebar", () => {
