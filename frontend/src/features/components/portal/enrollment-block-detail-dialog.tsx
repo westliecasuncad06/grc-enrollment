@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/features/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/features/components/ui/toggle-group"
+import { formatClockTime, formatTimeRange } from "@/features/lib/format-time"
 import { formatYearLevel } from "@/features/lib/format-year-level"
 import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
@@ -162,7 +163,16 @@ export function EnrollmentBlockDetailDialog({
                       header: "Day · Time",
                       render: (subject) =>
                         subject.schedule_days
-                          ? `${subject.schedule_days} ${subject.starts_at_time ?? ""}–${subject.ends_at_time ?? ""}`
+                          ? `${subject.schedule_days} ${
+                              subject.starts_at_time && subject.ends_at_time
+                                ? formatTimeRange(
+                                    subject.starts_at_time,
+                                    subject.ends_at_time,
+                                  )
+                                : subject.starts_at_time
+                                  ? formatClockTime(subject.starts_at_time)
+                                  : ""
+                            }`.trim()
                           : "Not yet scheduled",
                     },
                     {

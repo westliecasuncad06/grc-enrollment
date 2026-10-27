@@ -561,9 +561,13 @@ export function EnrollmentWorkspace() {
     "calendar" | "table"
   >("table")
 
-  const activeEnrollmentCalendarItems: SectionScheduleItem[] = useMemo(() => {
+  const activeEnrollmentSubjects = useMemo(() => {
     if (!activeEnrollment) return []
-    return activeEnrollment.subjects.map((subj) => ({
+    return (activeEnrollment.subjects ?? []).filter((s) => s.status !== "dropped")
+  }, [activeEnrollment])
+
+  const activeEnrollmentCalendarItems: SectionScheduleItem[] = useMemo(() => {
+    return activeEnrollmentSubjects.map((subj) => ({
       id: subj.section_id,
       subject_code: subj.subject_code,
       subject_title: subj.subject_title,
@@ -576,11 +580,10 @@ export function EnrollmentWorkspace() {
       ends_at_time: subj.ends_at_time ?? null,
       modality: subj.modality ?? null,
     }))
-  }, [activeEnrollment])
+  }, [activeEnrollmentSubjects])
 
   const sortedActiveEnrollmentSubjects = useMemo(() => {
-    if (!activeEnrollment) return []
-    const sorted = [...activeEnrollment.subjects].sort((a, b) =>
+    const sorted = [...activeEnrollmentSubjects].sort((a, b) =>
       compareBySchedule(
         {
           schedule_days: a.schedule_days ?? null,
@@ -595,7 +598,7 @@ export function EnrollmentWorkspace() {
       ),
     )
     return groupPairedSubjects(sorted)
-  }, [activeEnrollment])
+  }, [activeEnrollmentSubjects])
 
   // Plain derived values — the React Compiler memoizes them. Manual
   // `useMemo`s here passed `selectedEntries` items into helpers the compiler
@@ -1334,8 +1337,10 @@ export function EnrollmentWorkspace() {
         />
       )}
 
-      {activeEnrollment && activeEnrollment.subjects.length > 0 && (
-        <Card role="region" aria-label="Enrolled class schedule">
+      {activeEnrollment &&
+        activeEnrollmentSubjects.length > 0 &&
+        activeEnrollment.status !== "pending_student_review" && (
+          <Card role="region" aria-label="Enrolled class schedule">
           <Accordion
             type="single"
             collapsible

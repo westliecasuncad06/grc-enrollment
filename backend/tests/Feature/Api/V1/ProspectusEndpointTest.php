@@ -374,4 +374,37 @@ final class ProspectusEndpointTest extends TestCase
         self::assertCount(1, $unplaced);
         self::assertSame('TRANSFER101', $unplaced[0]['code']);
     }
+
+    public function test_fixed_semester_placement_retains_curriculum_slot_regardless_of_attempt_term_semester(): void
+    {
+        $term1st = $this->makeTerm(); // semester: 1st
+        $curriculum = $this->makeCurriculum();
+        $sub1 = $this->makeSubject('CS101');
+        $sub2 = $this->makeSubject('CS102');
+        $this->placeSubject($curriculum, $sub1, 1, '1st');
+        $this->placeSubject($curriculum, $sub2, 1, '2nd');
+
+        $student = $this->makeStudent($curriculum);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.fixed@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+
+        // Student took CS102 (a 2nd sem subject) during a 1st sem term
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $sub2->id, 'academic_term_id' => $term1st->id,
+            'mark' => '2.00', 'status' => GradeStatus::Locked, 'encoded_by' => $professor->id,
+        ]);
+
+        $token = $this->tokenFor($student->user);
+        $response = $this->withToken($token)->getJson('/api/v1/prospectus');
+
+        $response->assertOk();
+        $semesters = $response->json('data.semesters');
+        self::assertCount(2, $semesters);
+        self::assertSame(1, $semesters[0]['year_level']);
+        self::assertSame('1st', $semesters[0]['semester']);
+        self::assertSame(['CS101'], array_column($semesters[0]['entries'], 'code'));
+
+        self::assertSame(1, $semesters[1]['year_level']);
+        self::assertSame('2nd', $semesters[1]['semester']);
+        self::assertSame(['CS102'], array_column($semesters[1]['entries'], 'code'));
+    }
 }

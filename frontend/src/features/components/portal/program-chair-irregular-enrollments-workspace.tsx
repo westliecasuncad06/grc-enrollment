@@ -245,20 +245,29 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
     {
       key: "units",
       header: "Units",
-      render: (enrollment) => (
-        <div className="flex items-center gap-2">
-          <span>{enrollment.total_units} units</span>
-          {enrollment.exceeds_unit_maximum ? (
-            <Badge variant="destructive">
-              Over the {enrollment.unit_maximum} unit maximum
-            </Badge>
-          ) : (
-            enrollment.requires_overload_approval && (
-              <Badge variant="warning">Overload</Badge>
-            )
-          )}
-        </div>
-      ),
+      render: (enrollment) => {
+        const regularMax = enrollment.regular_unit_maximum ?? 24
+        const overloadMax = enrollment.unit_maximum
+        return (
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{enrollment.total_units} units</span>
+              {enrollment.exceeds_unit_maximum ? (
+                <Badge variant="destructive">
+                  Over the {enrollment.unit_maximum} unit maximum
+                </Badge>
+              ) : (
+                enrollment.requires_overload_approval && (
+                  <Badge variant="warning">Overload</Badge>
+                )
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              Allowed: {regularMax} regular{overloadMax ? ` · max ${overloadMax}` : ""}
+            </span>
+          </div>
+        )
+      },
     },
     {
       key: "actions",
@@ -597,9 +606,12 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
                 <AlertDescription>
                   <p>
                     This enrollment totals{" "}
-                    {pendingDecision.enrollment.total_units} units, which
-                    exceeds the regular load. Approving it requires explicit
-                    overload acknowledgement.
+                    <strong>{pendingDecision.enrollment.total_units} units</strong>, which
+                    exceeds the regular load of{" "}
+                    <strong>{pendingDecision.enrollment.regular_unit_maximum ?? 24} units</strong>
+                    {pendingDecision.enrollment.unit_maximum
+                      ? ` (maximum allowed: ${pendingDecision.enrollment.unit_maximum} units)`
+                      : ""}. Approving it requires explicit overload acknowledgement.
                   </p>
                   <label className="mt-2 flex items-center gap-2 text-sm font-normal">
                     <input

@@ -392,7 +392,7 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         self::assertTrue($verdict->isRegular());
     }
 
-    public function test_a_standard_subject_already_passed_early_does_not_make_student_irregular(): void
+    public function test_a_standard_subject_already_passed_early_makes_student_irregular(): void
     {
         $priorTerm = $this->makeTerm('1st');
         $term = $this->makeTerm('2nd');
@@ -407,7 +407,8 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
 
         self::assertNotNull($verdict);
-        self::assertTrue($verdict->isRegular());
+        self::assertFalse($verdict->isRegular());
+        self::assertSame('needs_removing_completed', $verdict->reasons[0]['code']);
     }
 
     public function test_a_dual_semester_standard_subject_already_passed_does_not_affect_standing(): void

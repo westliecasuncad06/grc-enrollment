@@ -28,6 +28,7 @@ import {
   useFacultyAvailabilitiesQuery,
   useFacultySubjectPreferencesQuery,
 } from "@/features/hooks/use-faculty-input"
+import { formatTimeRange } from "@/features/lib/format-time"
 import {
   useAcademicTermsQuery,
   useSectionsQuery,
@@ -270,7 +271,7 @@ export function FacultyAssignmentWorkspace() {
                       ? availability
                           .map(
                             (item) =>
-                              `${weekday[item.day_of_week]} ${item.starts_at_time.slice(0, 5)}–${item.ends_at_time.slice(0, 5)}`,
+                              `${weekday[item.day_of_week]} ${formatTimeRange(item.starts_at_time, item.ends_at_time)}`,
                           )
                           .join(", ")
                       : "No availability declared for this term."}

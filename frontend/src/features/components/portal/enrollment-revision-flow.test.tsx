@@ -106,9 +106,80 @@ describe("EnrollmentRevisionReviewCard (the student's answer)", () => {
     const card = screen.getByRole("region", { name: "Review your Program Chair's changes" })
     expect(within(card).getByText(/CS101 clashes with your other class/)).toBeInTheDocument()
     expect(within(card).getByText("Added")).toBeInTheDocument()
-    expect(within(card).getByText(/Data Structures/)).toBeInTheDocument()
+    expect(within(card).getAllByText(/Data Structures/).length).toBeGreaterThan(0)
     expect(within(card).getByText("Removed")).toBeInTheDocument()
     expect(within(card).getByText(/Programming 1/)).toBeInTheDocument()
+  })
+
+  it("renders the revised schedule in table view and allows switching to calendar timetable view", async () => {
+    const user = userEvent.setup()
+    renderWithSession(<EnrollmentRevisionReviewCard enrollment={enrollment()} />, { session: studentSession })
+
+    const card = screen.getByRole("region", { name: "Review your Program Chair's changes" })
+    expect(within(card).getByText("Your revised schedule")).toBeInTheDocument()
+    expect(within(card).getByText("1 subjects · 3 units total")).toBeInTheDocument()
+
+    // Table view defaults
+    expect(within(card).getByRole("table", { name: "Revised enrollment schedule" })).toBeInTheDocument()
+    expect(within(card).getAllByText("8:00 AM–9:30 AM").length).toBeGreaterThan(0)
+    expect(within(card).getAllByText("R1").length).toBeGreaterThan(0)
+
+    // Switch to calendar timetable view
+    await user.click(within(card).getByRole("radio", { name: "Calendar timetable" }))
+    expect(within(card).getAllByText("CS102").length).toBeGreaterThan(0)
+
+    // Switch back to table view
+    await user.click(within(card).getByRole("radio", { name: "Table view" }))
+    expect(within(card).getByRole("table", { name: "Revised enrollment schedule" })).toBeInTheDocument()
+  })
+
+  it("does not render dropped subjects in revised schedule table or count", () => {
+    const enrollmentWithDropped = enrollment({
+      subjects: [
+        {
+          section_id: 6,
+          section_code: "B",
+          subject_id: 2,
+          subject_code: "CS102",
+          paired_subject_id: null,
+          subject_title: "Data Structures",
+          units: 3,
+          schedule_days: "TTh",
+          starts_at_time: "08:00:00",
+          ends_at_time: "09:30:00",
+          room: "R1",
+          modality: "f2f",
+          professor_name: null,
+          status: "selected",
+          status_label: "Selected",
+        },
+        {
+          section_id: 5,
+          section_code: "A",
+          subject_id: 1,
+          subject_code: "CS101",
+          paired_subject_id: null,
+          subject_title: "Programming 1",
+          units: 3,
+          schedule_days: "MW",
+          starts_at_time: "08:00:00",
+          ends_at_time: "09:30:00",
+          room: "R2",
+          modality: "f2f",
+          professor_name: null,
+          status: "dropped",
+          status_label: "Dropped",
+        },
+      ],
+    })
+
+    renderWithSession(<EnrollmentRevisionReviewCard enrollment={enrollmentWithDropped} />, { session: studentSession })
+
+    const card = screen.getByRole("region", { name: "Review your Program Chair's changes" })
+    expect(within(card).getByText("1 subjects · 3 units total")).toBeInTheDocument()
+    const table = within(card).getByRole("table", { name: "Revised enrollment schedule" })
+    expect(within(table).getAllByText("CS102").length).toBeGreaterThan(0)
+    expect(within(table).queryByText("CS101")).not.toBeInTheDocument()
   })
 
   it("is not shown unless the Program Chair is waiting for the student", () => {

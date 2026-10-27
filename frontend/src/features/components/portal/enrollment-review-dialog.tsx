@@ -45,6 +45,7 @@ import {
   useSubjectsQuery,
 } from "@/features/hooks/use-reference-data"
 import { formatYearLevelOrdinal } from "@/features/lib/curriculum-ordinal"
+import { formatClockTime, formatTimeRange } from "@/features/lib/format-time"
 import { findConflictingIds } from "@/features/lib/room-calendar"
 import { isApiClientError } from "@/features/services/api-client"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
@@ -61,13 +62,13 @@ interface EnrollmentReviewRow {
   room: string | null
 }
 
-function formatTimeRange(
+function displayTimeRange(
   startsAt: string | null,
   endsAt: string | null,
 ): string {
   if (!startsAt || !endsAt) return "Not assigned"
 
-  return `${startsAt.slice(0, 5)}–${endsAt.slice(0, 5)}`
+  return formatTimeRange(startsAt, endsAt)
 }
 
 function scheduleColumns(options?: {
@@ -99,7 +100,7 @@ function scheduleColumns(options?: {
     {
       key: "time",
       header: "Time",
-      render: (row) => formatTimeRange(row.starts_at_time, row.ends_at_time),
+      render: (row) => displayTimeRange(row.starts_at_time, row.ends_at_time),
     },
     {
       key: "room",
@@ -159,7 +160,10 @@ export function EnrollmentReviewDialog({
   const isLoading = sectionsQuery.isPending || subjectsQuery.isPending
 
   const originalSectionIds = useMemo(
-    () => (enrollment?.subjects ?? []).map((s) => s.section_id),
+    () =>
+      (enrollment?.subjects ?? [])
+        .filter((s) => s.status !== "dropped")
+        .map((s) => s.section_id),
     [enrollment],
   )
   // Adjusted during render (not an effect) when a different enrollment opens
@@ -203,10 +207,10 @@ export function EnrollmentReviewDialog({
         subject_title: subject?.title ?? original?.subject_title ?? "—",
         section_code: section?.section_code ?? original?.section_code ?? null,
         units: subject?.units ?? original?.units ?? null,
-        schedule_days: section?.schedule_days ?? null,
-        starts_at_time: section?.starts_at_time ?? null,
-        ends_at_time: section?.ends_at_time ?? null,
-        room: section?.room ?? null,
+        schedule_days: section?.schedule_days ?? original?.schedule_days ?? null,
+        starts_at_time: section?.starts_at_time ?? original?.starts_at_time ?? null,
+        ends_at_time: section?.ends_at_time ?? original?.ends_at_time ?? null,
+        room: section?.room ?? original?.room ?? null,
       }
     })
   }, [enrollment, sectionsQuery.data, subjectsQuery.data, currentSectionIds])
@@ -222,9 +226,11 @@ export function EnrollmentReviewDialog({
       .map((s) => {
         const subject = subjects.find((subj) => subj.id === s.subject_id)
         const schedule =
-          s.schedule_days && s.starts_at_time
-            ? ` · ${s.schedule_days} ${s.starts_at_time.slice(0, 5)}`
-            : ""
+          s.schedule_days && s.starts_at_time && s.ends_at_time
+            ? ` · ${s.schedule_days} ${formatTimeRange(s.starts_at_time, s.ends_at_time)}`
+            : s.schedule_days && s.starts_at_time
+              ? ` · ${s.schedule_days} ${formatClockTime(s.starts_at_time)}`
+              : ""
 
         return {
           value: String(s.id),
@@ -298,6 +304,14 @@ export function EnrollmentReviewDialog({
 
   const [view, setView] = useState<"table" | "calendar">("table")
   const totalUnits = rows.reduce((sum, row) => sum + (row.units ?? 0), 0)
+  const regularMax = enrollment?.regular_unit_maximum ?? 24
+  const overloadMax = enrollment?.unit_maximum ?? null
+  const isOverload =
+    totalUnits > regularMax ||
+    Boolean(enrollment?.requires_overload_approval) ||
+    overloadRequired
+  const isBeyondHardCap = overloadMax !== null && totalUnits > overloadMax
+  const diffUnits = Math.round((totalUnits - regularMax) * 10) / 10
 
   const calendarItems: SectionScheduleItem[] = useMemo(() => {
     return rows.map((row) => ({
@@ -387,27 +401,34 @@ export function EnrollmentReviewDialog({
                 <span className="text-xs text-muted-foreground">units</span>
               </div>
               <span className="text-xs text-muted-foreground">
-                Assessed for this term
+                Allowed load: <strong className="font-semibold text-foreground">{regularMax} units regular</strong>
+                {overloadMax ? ` (max ${overloadMax})` : ""}
               </span>
             </div>
 
             <div className="grid gap-1 rounded-lg border bg-muted/20 p-3 text-sm">
               <span className="text-xs text-muted-foreground">Unit Overload Status</span>
               <div className="flex items-center gap-1.5 mt-0.5">
-                {enrollment?.requires_overload_approval ? (
+                {isBeyondHardCap ? (
                   <Badge variant="destructive" className="font-semibold text-xs">
-                    Overload Approved
+                    Exceeds Limit ({totalUnits} / {overloadMax})
+                  </Badge>
+                ) : isOverload ? (
+                  <Badge variant="destructive" className="font-semibold text-xs">
+                    Overload ({diffUnits > 0 ? `+${diffUnits} units` : "Requires Sign-off"})
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="text-xs font-medium">
-                    Within Regular Load
+                  <Badge variant="secondary" className="border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 font-semibold text-xs">
+                    Within Regular Load ({totalUnits} / {regularMax})
                   </Badge>
                 )}
               </div>
               <span className="text-[11px] text-muted-foreground">
-                {enrollment?.requires_overload_approval
-                  ? "Requires Program Head sign-off"
-                  : "Standard prescribed ceiling"}
+                {isBeyondHardCap
+                  ? `Exceeds the ${overloadMax} unit maximum cap for this program`
+                  : isOverload
+                    ? `Exceeds regular load of ${regularMax} units (max ${overloadMax ?? regularMax})`
+                    : `Allowed up to ${regularMax} regular units without overload`}
               </span>
             </div>
 

@@ -32,6 +32,7 @@ import {
 } from "@/features/components/ui/select"
 import { useClassRosterQuery } from "@/features/hooks/use-class-roster"
 import { useSectionsQuery } from "@/features/hooks/use-reference-data"
+import { formatClockTime, formatTimeRange } from "@/features/lib/format-time"
 import type { ClassRosterEntry } from "@/features/schemas/class-roster-schema"
 
 function rosterBadgeVariant(
@@ -142,7 +143,13 @@ export function ClassRostersWorkspace() {
                   {selectedSection.schedule_days && selectedSection.starts_at_time && (
                     <span className="inline-flex items-center gap-1">
                       <Clock className="size-3.5" aria-hidden="true" />
-                      {selectedSection.schedule_days} · {selectedSection.starts_at_time.slice(0, 5)}–{selectedSection.ends_at_time?.slice(0, 5)}
+                      {selectedSection.schedule_days} ·{" "}
+                      {selectedSection.ends_at_time
+                        ? formatTimeRange(
+                            selectedSection.starts_at_time,
+                            selectedSection.ends_at_time,
+                          )
+                        : formatClockTime(selectedSection.starts_at_time)}
                     </span>
                   )}
                   <span className="inline-flex items-center gap-1">

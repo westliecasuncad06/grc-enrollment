@@ -1,8 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { CalendarDays, ListIcon } from "lucide-react"
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/features/components/portal/data-table"
 import { EnrollmentRevisionHistory } from "@/features/components/portal/enrollment-revision-history"
+import {
+  SectionScheduleCalendar,
+  type SectionScheduleItem,
+} from "@/features/components/portal/section-schedule-calendar"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -13,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/features/components/ui/alert-dialog"
+import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
   Card,
@@ -23,16 +33,23 @@ import {
 } from "@/features/components/ui/card"
 import { Field, FieldError, FieldLabel } from "@/features/components/ui/field"
 import { Textarea } from "@/features/components/ui/textarea"
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/features/components/ui/toggle-group"
 import { useUpdateEnrollmentMutation } from "@/features/hooks/use-enrollment"
+import { formatTimeRange } from "@/features/lib/format-time"
+import { compareBySchedule } from "@/features/lib/schedule-order"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
 import { isApiClientError } from "@/features/services/api-client"
 
 /**
  * The student's answer to the Program Chair's changes to their subjects
  * (ADR 0040). Shown while the enrollment is `pending_student_review`: the
- * Chair's reason and what changed, then two choices. Accepting sends the
- * enrollment straight to the Registrar. Not accepting needs a reason and sends
- * it back to the Program Chair, who sees that reason.
+ * Chair's reason and what changed, the resulting revised schedule in table or
+ * calendar view, then two choices. Accepting sends the enrollment straight to
+ * the Registrar. Not accepting needs a reason and sends it back to the Program
+ * Chair, who sees that reason.
  */
 export function EnrollmentRevisionReviewCard({
   enrollment,
@@ -42,7 +59,91 @@ export function EnrollmentRevisionReviewCard({
   const [declining, setDeclining] = useState(false)
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
+  const [scheduleView, setScheduleView] = useState<"table" | "calendar">("table")
   const mutation = useUpdateEnrollmentMutation()
+
+  const activeSubjects = useMemo(() => {
+    return (enrollment.subjects ?? []).filter((s) => s.status !== "dropped")
+  }, [enrollment.subjects])
+
+  const sortedSubjects = useMemo(() => {
+    return [...activeSubjects].sort((a, b) =>
+      compareBySchedule(
+        {
+          schedule_days: a.schedule_days ?? null,
+          starts_at_time: a.starts_at_time ?? null,
+          ends_at_time: a.ends_at_time ?? null,
+        },
+        {
+          schedule_days: b.schedule_days ?? null,
+          starts_at_time: b.starts_at_time ?? null,
+          ends_at_time: b.ends_at_time ?? null,
+        },
+      ),
+    )
+  }, [activeSubjects])
+
+  const calendarItems: SectionScheduleItem[] = useMemo(() => {
+    return activeSubjects.map((subj) => ({
+      id: subj.section_id,
+      subject_code: subj.subject_code,
+      subject_title: subj.subject_title,
+      units: subj.units ?? null,
+      section_code: subj.section_code ?? null,
+      room: subj.room ?? null,
+      professor_name: subj.professor_name ?? null,
+      schedule_days: subj.schedule_days ?? null,
+      starts_at_time: subj.starts_at_time ?? null,
+      ends_at_time: subj.ends_at_time ?? null,
+      modality: subj.modality ?? null,
+    }))
+  }, [activeSubjects])
+
+  const scheduleColumns: DataTableColumn<Enrollment["subjects"][number]>[] = [
+    {
+      key: "subject-code",
+      header: "Subject code",
+      render: (row) => row.subject_code,
+    },
+    {
+      key: "description",
+      header: "Description",
+      render: (row) => row.subject_title,
+    },
+    {
+      key: "units",
+      header: "Units",
+      render: (row) => row.units ?? "—",
+    },
+    {
+      key: "section",
+      header: "Section",
+      render: (row) => row.section_code ?? `Section #${row.section_id}`,
+    },
+    {
+      key: "day",
+      header: "Day",
+      render: (row) => row.schedule_days ?? "Not assigned",
+    },
+    {
+      key: "time",
+      header: "Time",
+      render: (row) =>
+        row.starts_at_time && row.ends_at_time
+          ? formatTimeRange(row.starts_at_time, row.ends_at_time)
+          : "Not assigned",
+    },
+    {
+      key: "room",
+      header: "Room",
+      render: (row) => row.room ?? "Not assigned",
+    },
+    {
+      key: "professor",
+      header: "Professor",
+      render: (row) => row.professor_name ?? "To be announced",
+    },
+  ]
 
   if (enrollment.status !== "pending_student_review") return null
 
@@ -77,25 +178,99 @@ export function EnrollmentRevisionReviewCard({
         className="border-amber-500/50"
       >
         <CardHeader>
-          <CardTitle level={2}>Your Program Chair changed your subjects</CardTitle>
-          <CardDescription>
-            Read why, then accept the changes or tell your Program Chair why you
-            cannot. If you accept, your enrollment goes straight to the
-            Registrar for approval. Your schedule below already shows the
-            changed subjects.
-          </CardDescription>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle level={2}>
+                Your Program Chair changed your subjects
+              </CardTitle>
+              <CardDescription>
+                Read why, review your revised schedule below, then accept the
+                changes or tell your Program Chair why you cannot. If you
+                accept, your enrollment goes straight to the Registrar for
+                approval.
+              </CardDescription>
+            </div>
+            <Badge
+              variant="outline"
+              className="border-amber-500/60 text-amber-700 dark:text-amber-400 shrink-0 w-fit"
+            >
+              Waiting for your answer
+            </Badge>
+          </div>
         </CardHeader>
-        <CardContent className="grid gap-4">
+        <CardContent className="grid gap-6">
+          {/* Changes history breakdown */}
           <EnrollmentRevisionHistory
             revisions={enrollment.revisions}
             audience="student"
           />
+
+          {/* Revised schedule: table or calendar view */}
+          {activeSubjects.length > 0 && (
+            <section
+              aria-label="Revised subject schedule"
+              className="grid gap-3 pt-3 border-t"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Your revised schedule
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {activeSubjects.length} subjects · {enrollment.total_units} units total
+                  </p>
+                </div>
+                <ToggleGroup
+                  type="single"
+                  value={scheduleView}
+                  onValueChange={(val) => {
+                    if (val === "table" || val === "calendar")
+                      setScheduleView(val)
+                  }}
+                  variant="outline"
+                  size="sm"
+                  aria-label="Revised schedule view"
+                >
+                  <ToggleGroupItem value="table" aria-label="Table view">
+                    <ListIcon data-icon="inline-start" aria-hidden="true" />
+                    Table view
+                  </ToggleGroupItem>
+                  <ToggleGroupItem
+                    value="calendar"
+                    aria-label="Calendar timetable"
+                  >
+                    <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                    Calendar timetable
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+
+              {scheduleView === "table" ? (
+                <DataTable
+                  caption="Revised enrollment schedule"
+                  columns={scheduleColumns}
+                  rowKey={(row) => row.section_id}
+                  rows={sortedSubjects}
+                />
+              ) : (
+                <div className="rounded-lg border bg-card p-2">
+                  <SectionScheduleCalendar
+                    items={calendarItems}
+                    disabled={true}
+                    emptyMessage="No timetable slots found for revised subjects."
+                  />
+                </div>
+              )}
+            </section>
+          )}
+
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <div className="flex flex-wrap gap-2">
+
+          <div className="flex flex-wrap gap-2 pt-2 border-t">
             <Button
               type="button"
               disabled={mutation.isPending}

@@ -150,6 +150,8 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('data.status', 'pending_student_review')
+            ->assertJsonCount(1, 'data.subjects')
+            ->assertJsonPath('data.subjects.0.subject_code', 'CS102')
             ->assertJsonCount(1, 'data.revisions')
             ->assertJsonPath('data.revisions.0.note', 'The original section clashes with your other classes.')
             ->assertJsonPath('data.revisions.0.status', 'pending')
@@ -161,6 +163,12 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
         self::assertSame([$sectionB->id], $enrollment->enrollmentSubjects()->where('status', EnrollmentSubjectStatus::Selected)->pluck('section_id')->all());
         self::assertSame(0, $sectionA->refresh()->enrolled_count);
         self::assertSame(1, $sectionB->refresh()->enrolled_count);
+
+        $listResponse = $this->withToken($token)->getJson('/api/v1/enrollments');
+        $listResponse->assertOk()
+            ->assertJsonPath('data.0.id', $enrollment->id)
+            ->assertJsonCount(1, 'data.0.subjects')
+            ->assertJsonPath('data.0.subjects.0.subject_code', 'CS102');
         self::assertSame(
             1,
             AuditLog::query()->where('action', AuditAction::ENROLLMENT_PROGRAM_HEAD_SUBJECTS_REVISED)->count(),

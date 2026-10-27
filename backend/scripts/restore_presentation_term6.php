@@ -60,7 +60,7 @@ if ($runDirectly) {
 /** @return array<string, string|bool> */
 function pr_opts(array $argv): array
 {
-    $out = ['apply' => false, 'notifications' => false, 'year' => '2025-2026', 'sem' => '2nd', 'accounts-since' => '2026-09-25', 'max-accounts' => '5', 'max-category-reverts' => '5'];
+    $out = ['apply' => false, 'notifications' => false, 'year' => '2025-2026', 'sem' => '2nd', 'accounts-since' => '2026-09-25', 'max-accounts' => '10', 'max-category-reverts' => '5'];
     foreach (array_slice($argv, 1) as $arg) {
         if ($arg === '--apply') {
             $out['apply'] = true;
@@ -185,8 +185,8 @@ function pr_protectedCounts(int $targetId, array $keepTermIds): array
 function pr_putBackCategories(string $since, int $max, array &$flipAuditIds): array
 {
     $flips = DB::select(
-        "SELECT a.id, a.auditable_id, a.before_values
-           FROM audit_logs a JOIN student_profiles sp ON sp.id = a.auditable_id
+        "SELECT a.id, a.auditable_id, a.before_values, sp.id AS exists_in_sp
+           FROM audit_logs a LEFT JOIN student_profiles sp ON sp.id = a.auditable_id
           WHERE a.action = 'student_profile.enrollment_category_reclassified' AND a.auditable_type = 'student_profile' AND a.created_at >= ?
           ORDER BY a.id",
         [$since],
@@ -195,7 +195,7 @@ function pr_putBackCategories(string $since, int $max, array &$flipAuditIds): ar
     foreach ($flips as $flip) {
         $flipAuditIds[] = (int) $flip->id;
         $studentId = (int) $flip->auditable_id;
-        if (! isset($reverts[$studentId])) {
+        if ($flip->exists_in_sp !== null && ! isset($reverts[$studentId])) {
             $before = json_decode((string) $flip->before_values, true);
             $reverts[$studentId] = ['category' => is_array($before) ? ($before['enrollment_category'] ?? null) : null, 'derived_at' => null];
         }
@@ -240,7 +240,7 @@ function pr_giveBackStudentNumbers(array $accounts): array
     foreach (DB::select('SELECT `year`, `last_value` FROM student_number_sequences ORDER BY `year`') as $sequence) {
         $value = (int) $sequence->last_value;
         $from = $value;
-        while ($value > 0 && isset($held[(int) $sequence->year][$value])) {
+        while ($value > 0 && (isset($held[(int) $sequence->year][$value]) || ! DB::selectOne('SELECT 1 FROM student_profiles WHERE student_number LIKE ? LIMIT 1', [sprintf('%04d-%%-%05d', $sequence->year, $value)]))) {
             $value--;
         }
         if ($value !== $from) {

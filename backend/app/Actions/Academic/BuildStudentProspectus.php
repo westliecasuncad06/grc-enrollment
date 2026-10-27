@@ -134,23 +134,27 @@ final readonly class BuildStudentProspectus
     }
 
     /**
-     * The semester bucket a placement's row is rendered under: the actual
-     * term of its most recent grade attempt, when one exists, overrides the
-     * curriculum's own planned slot — real history beats the plan, matching
-     * `SemesterCoverage`'s stated rule for `'1st|2nd'` placements.
+     * The semester bucket a placement's row is rendered under: for flexible
+     * placements that cover both semesters ('1st|2nd'), the actual term of
+     * the student's most recent grade attempt, when one exists, overrides the
+     * curriculum's default primary slot — real history beats the plan.
+     * Fixed-semester placements ('1st' or '2nd') always remain anchored to
+     * their curriculum slot so the official curriculum structure is preserved.
      *
      * @param  list<AcademicGrade>  $attempts  Newest-first.
      */
     private function resolveSlot(CurriculumSubject $placement, array $attempts): SemesterSlot
     {
-        $latest = $attempts[0] ?? null;
-        $term = $latest?->academicTerm;
+        if (SemesterCoverage::coversBoth($placement->semester)) {
+            $latest = $attempts[0] ?? null;
+            $term = $latest?->academicTerm;
 
-        if ($term !== null) {
-            $slot = SemesterSlot::tryFrom($term->semester);
+            if ($term !== null) {
+                $slot = SemesterSlot::tryFrom($term->semester);
 
-            if ($slot !== null) {
-                return $slot;
+                if ($slot !== null) {
+                    return $slot;
+                }
             }
         }
 

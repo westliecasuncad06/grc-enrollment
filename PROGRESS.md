@@ -1,5 +1,175 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-27 — Dropped Subjects Filtering in Enrollment Resource and Student Schedule Views (DONE)
+
+- **User report:**
+  - "Please check this setup kapag nag send ng changes si program chair yung napapasa paabalik sa student ay yung original na subject, Please paayos ako nito na dapat yung changes na binago ni program chair ayun yung makikita ng studetns." (`media_1793075961882_476782ad.png`)
+  - Dominic Sean V. Navarro (`TEST-IRREG-Y2-03`, Enrollment `#30626`) saw 13 subjects in "Your revised schedule" totaling 16.5 units, even though the Program Chair had dropped 5 subjects (`PRELEC2`, `PRELEC2L`, `PT`, `PTL`, `BUSANA`). The removed subjects were still rendered in the schedule table.
+- **Root Cause:**
+  - In `backend/app/Http/Resources/Api/V1/EnrollmentResource.php`, `'subjects'` mapped over `$this->resource->enrollmentSubjects` without filtering out rows where `status === EnrollmentSubjectStatus::Dropped`.
+  - While total units and revisions correctly accounted for active subjects, the raw list included dropped rows.
+  - Additionally, frontend components (`enrollment-revision-review-card.tsx`, `enrollment-review-dialog.tsx`, `enrollment-workspace.tsx`, `student-schedule-workspace.tsx`) were mapping directly over `enrollment.subjects` without defense-in-depth filtering of `s.status !== "dropped"`.
+- **Changes Applied:**
+  - **`backend/app/Http/Resources/Api/V1/EnrollmentResource.php`:**
+    - Filtered out `EnrollmentSubjectStatus::Dropped` subjects from the `'subjects'` API response for active enrollments (`$s->status !== EnrollmentSubjectStatus::Dropped || $this->resource->status->isTerminal()`).
+    - Guarded against lazy loading violations by safely checking `$student->relationLoaded('curriculum')`.
+  - **`backend/app/Actions/Enrollment/ListEnrollments.php`:**
+    - Eager loaded `student.curriculum` alongside `student.user` to avoid lazy loading when computing unit caps.
+  - **`frontend/src/features/components/portal/enrollment-revision-review-card.tsx`:**
+    - Derived `activeSubjects` filtering `s.status !== "dropped"`.
+    - Used `activeSubjects` for table view rows, calendar timetable items, and subject count (`${activeSubjects.length} subjects · ${enrollment.total_units} units total`).
+  - **`frontend/src/features/components/portal/enrollment-review-dialog.tsx`:**
+    - Filtered out dropped subjects in `originalSectionIds` (`filter((s) => s.status !== "dropped")`), ensuring reopening the revision modal does not re-add dropped sections.
+  - **`frontend/src/features/components/portal/enrollment-workspace.tsx` & `student-schedule-workspace.tsx`:**
+    - Filtered out dropped subjects when rendering active schedules, calendar timetable items, and student term selections.
+- **Verification:**
+  - Added backend assertion in `ReviseEnrollmentSubjectsEndpointTest`: confirmed that `PATCH /api/v1/enrollments/{id}/subjects` and subsequent `GET /api/v1/enrollments` only contain the active subject in `data.subjects`.
+  - Added frontend unit test in `enrollment-revision-flow.test.tsx`: verified dropped subjects are excluded from the revised schedule table and count.
+  - Backend PHPUnit: `ReviseEnrollmentSubjectsEndpointTest` and `EnrollmentsEndpointTest` passed (83/83 tests, 346 assertions).
+  - Frontend Vitest: 4 test suites (`enrollment-revision-flow.test.tsx`, `enrollment-review-dialog.test.tsx`, `enrollment-workspace.test.tsx`, `program-chair-irregular-enrollments-workspace.test.tsx`), 72/72 tests passed.
+
+## 2026-10-27 — Student Revision Review Table & Calendar Timetable Integration (DONE)
+
+- **User request:**
+  - "For this View ng students kapag na balik na sa kanya ni Programchair, bigyan mo parin ng student to view in table yung schedule na binigay ni program chair. ngayon dapat ma view ito ni student na naka table and pwede din in calendar and ilagay lang yung information kung ano yung changes na ginawa ni program chair or program head." (`media_1793073581108_0e85e8dc.png`)
+  - When an enrollment is sent back to the student (`pending_student_review`), the student previously only saw the text breakdown of added/removed subjects and the reason why, while the actual schedule was buried far below in a collapsed accordion.
+- **Frontend Changes Applied:**
+  - **`enrollment-revision-review-card.tsx`:**
+    - Maintained full visibility of the Program Chair's changes (`EnrollmentRevisionHistory`): date/time, units delta, reason for the change, and added/removed subject items.
+    - Integrated an interactive **"Your revised schedule"** section directly within the review card with a view switcher:
+      - **Table view (`DataTable`)**: Displays `Subject code`, `Description`, `Units`, `Section`, `Day`, `Time` (12-hour AM/PM format), `Room`, and `Professor`. Rows are chronologically sorted by day/time via `compareBySchedule`.
+      - **Calendar timetable view (`SectionScheduleCalendar`)**: Displays the full weekly timetable blocks across Monday to Saturday so the student can inspect time slots, day layout, and room locations before deciding.
+    - Kept decision action buttons (`Accept the changes` and `I do not accept`) immediately below the schedule.
+  - **`enrollment-workspace.tsx`:**
+    - Suppressed the redundant collapsed lower "Enrolled Class Schedule" accordion when `activeEnrollment.status === "pending_student_review"`, ensuring a single, coherent review workflow.
+- **Verification:**
+  - `enrollment-revision-flow.test.tsx`: Added integration test verifying table view renders with 12h AM/PM time and room, switching to calendar timetable displays scheduled cards, and switching back.
+  - Vitest: 4 test suites (`enrollment-revision-flow.test.tsx`, `enrollment-workspace.test.tsx`, `enrollment-review-dialog.test.tsx`, `program-chair-irregular-enrollments-workspace.test.tsx`), 71/71 tests passing.
+
+## 2026-10-27 — Program Chair 12-Hour AM/PM Time Formatting Standardization (DONE)
+
+- **User report:**
+  - "Sa part ng program chair sa pag view ng Time napansin ko na naka 24hours nanaman yung time, make sure na naka 12hours am and pm sya." (`media_1793071372758_3444bc9c.png`)
+  - Program Chair review table was displaying 24-hour military time format (`07:30–10:30`, `10:30–12:30`, `13:00–16:00`).
+- **Root Cause:**
+  - In `frontend/src/features/components/portal/enrollment-review-dialog.tsx`, a local helper `formatTimeRange` shadowed the canonical formatting helper and performed a raw string slice: `${startsAt.slice(0, 5)}–${endsAt.slice(0, 5)}`.
+  - Similarly, the search combobox in the review dialog used `s.starts_at_time.slice(0, 5)`.
+- **Changes Applied:**
+  - **`enrollment-review-dialog.tsx`:**
+    - Replaced the local raw-slice function with `formatTimeRange` and `formatClockTime` from `@/features/lib/format-time`.
+    - Time column now renders standard 12-hour AM/PM format (e.g. `7:30 AM–10:30 AM`, `10:30 AM–12:30 PM`, `1:00 PM–4:00 PM`).
+    - Addable section options combobox also formats schedules using 12-hour AM/PM time.
+  - **Related Portals Standardized:**
+    - `class-rosters-workspace.tsx`: Replaced raw `.slice(0, 5)` schedule display with `formatTimeRange(starts_at, ends_at)`.
+    - `faculty-assignment-workspace.tsx`: Replaced raw `.slice(0, 5)` faculty availability string with `formatTimeRange`.
+    - `enrollment-block-detail-dialog.tsx`: Replaced raw time slicing with `formatTimeRange`.
+- **Verification:**
+  - Added unit test in `enrollment-review-dialog.test.tsx` verifying `7:30 AM–10:30 AM` and `1:00 PM–4:00 PM` render, and 24h patterns `07:30–10:30` and `13:00–16:00` are absent.
+  - Vitest: 5 test suites (`enrollment-review-dialog.test.tsx`, `program-chair-irregular-enrollments-workspace.test.tsx`, `class-rosters-workspace.test.tsx`, `enrollment-block-detail-dialog.test.tsx`, `format-time.test.ts`), 30/30 tests passing.
+
+## 2026-10-27 — Calendar View Timetable Empty Grid Bug Resolved (DONE)
+
+- **User report:**
+  - "Nawala yung design sa calendar view" with screenshot of Dominic Sean V. Navarro (`TEST-IRREG-Y2-03`, Enrollment `#30626`) showing a completely blank timetable grid in the Program Chair "Review enrollment" dialog (`media_1793059474294_c9053cea.png`).
+- **Root Cause Analysis:**
+  1. **Missing Section Schedule Data in Term 48:** In Academic Term 48 (`2026-2027 · 1st Semester`), all 120 sections for Year 3 (`IT301`-`IT306`) and Year 4 (`IT401`-`IT406`) were published with `schedule_days = null`, `starts_at_time = null`, `ends_at_time = null`, and `room = null`.
+  2. **Table View Behavior:** Because these fields were null, the table view showed `Day: Not assigned`, `Time: Not assigned`, `Room: Not assigned`.
+  3. **Calendar Component Placement Logic:** `SectionScheduleCalendar` requires `schedule_days`, `starts_at_time`, and `ends_at_time` to compute room/week block coordinates. Unscheduled items are excluded from the grid and grouped into `unscheduledItems`. When all enrolled subjects are unscheduled, `hasAnyPlacements` evaluates to false, leaving the 27-row timetable completely blank.
+  4. **Fallback in Review Dialog:** In `frontend/src/features/components/portal/enrollment-review-dialog.tsx`, lines 206-209 only read `section?.schedule_days ?? null` without falling back to `original?.schedule_days`.
+- **Changes & Fixes Applied:**
+  - **Frontend:** Updated `enrollment-review-dialog.tsx` so `schedule_days`, `starts_at_time`, `ends_at_time`, and `room` fall back to `original?.schedule_days`, `original?.starts_at_time`, etc., preserving initial section schedule data.
+  - **Database Schedule Population (Local & VPS):**
+    - Generated realistic, conflict-free schedules for all 120 Year 3 and Year 4 sections in Term 48 across classrooms RM 3A-3F, RM 4A-4F, RM LAB 1-4, and RM AVR.
+    - Updated local MariaDB database (`grc_enrollment`). Verified all 306 sections in Term 48 now have complete schedules.
+    - Exported updates to `update_vps_schedules.sql`, transferred via `scp` to production VPS (`201.18.211.197`), and executed into MySQL container `grc-enrollment-thmpcd`.
+    - Confirmed Dominic's enrollment (`#30626`): all 14 subjects (`ARTAPP`, `BMC`, `BMCL`, `CAO`, `CAOL`, `DMATH`, `LEAD 5`, `PRELEC2`, `PRELEC2L`, `PT`, `PTL`, `BUSANA`, `SPI`) now display proper schedule blocks, times, days, and rooms in both Table and Calendar timetable views.
+- **Verification:**
+  - Vitest: `enrollment-review-dialog.test.tsx` (2/2 passing), `program-chair-irregular-enrollments-workspace.test.tsx` (5/5 passing).
+  - MySQL queries on local and VPS: 306 of 306 sections in Term 48 scheduled.
+
+## 2026-10-26 — Program Chair Allowed Unit Load Visibility & Overload Differentiation (DONE)
+
+- **User request:**
+  - In the Program Chair enrollment review dialog and workspace, display the allowed unit load for the student so the Program Chair can clearly see why a student is flagged as overload or within regular load.
+- **Backend Updates (`EnrollmentResource.php`):**
+  - Added `regular_unit_maximum` to the `EnrollmentResource` schema, returning the student's curriculum regular ceiling (`$student->curriculum?->effectiveRegularUnits() ?? config('enrollment.max_regular_units', 24.0)`).
+  - Ensured `unit_maximum` cleanly falls back to the curriculum overload cap (`$student->curriculum?->effectiveMaxUnits() ?? config('enrollment.overload_max_units', 30.0)`).
+  - Updated `EnrollmentsEndpointTest::test_the_enrollment_resource_has_the_exact_key_set` assertion to lock in `regular_unit_maximum`.
+- **Frontend Updates (`enrollment-review-dialog.tsx` & `program-chair-irregular-enrollments-workspace.tsx`):**
+  - Updated `EnrollmentSchema` with `regular_unit_maximum`.
+  - In `EnrollmentReviewDialog`:
+    - **Academic Load Card**: Displays current assessed units alongside the allowed load: `Allowed load: 24 units regular (max 30.5 overload)`.
+    - **Unit Overload Status Card**: Dynamically checks assessed units against `regularMax` (24) and `overloadMax` (30.5).
+      - If within regular limit (e.g. 21 units): green badge `Within Regular Load (21 / 24)` with subtitle `Allowed up to 24 regular units without overload`.
+      - If overload (e.g. 27 units): red badge `Overload (+3 units)` with subtitle `Exceeds regular load of 24 units (max 30.5)`.
+      - If exceeds hard cap (e.g. 32 units): red badge `Exceeds Limit (32 / 30.5)` with subtitle `Exceeds the 30.5 unit maximum cap for this program`.
+    - Automatically updates in real-time when the Program Chair adds or removes sections in the dialog.
+  - In `ProgramChairIrregularEnrollmentsWorkspace`:
+    - Units column displays `Allowed: 24 regular · max 30.5` below total units.
+    - Approval confirmation alert explicitly specifies `totals X units, which exceeds the regular load of 24 units (maximum allowed: 30.5 units)`.
+- **Verification:**
+  - PHPUnit `test_the_enrollment_resource_has_the_exact_key_set`: 1/1 passed.
+  - PHPUnit `test_an_irregular_student_beyond_the_unit_maximum`: 1/1 passed.
+  - Vitest `enrollment-review-dialog.test.tsx`: 2/2 passed.
+  - Vitest `program-chair-irregular-enrollments-workspace.test.tsx`: 5/5 passed.
+
+## 2026-10-26 — Prospectus Missing 2nd Semester Grouping Bug Resolved (DONE)
+
+- **User request:**
+  - Fix missing "1st Year · 2nd Semester" section in the student Prospectus modal.
+  - As observed in student screenshots (e.g., Dominic Sean V. Navarro `TEST-IRREG-Y2-03`), all 27 Year 1 subjects (both 1st and 2nd semester courses like `CONWRLD`, `ETHICS`, `HCI`, `HCIL`, `ITPLUS3`, `ITPLUS4`, `LEAD2`, `NSTP2`, `PATHFIT2`, `PROG1`, `PROG1L`, `PSPEAK`, `SCITECH`) collapsed under a single `1st Year · 1st Semester` table header, causing the `1st Year · 2nd Semester` section header to disappear.
+- **Root Cause Analysis (`BuildStudentProspectus.php`):**
+  - In `BuildStudentProspectus::resolveSlot()`, when determining which `(year, semester)` bucket a curriculum placement belongs to, the code inspected `$attempts[0]->academicTerm->semester` without checking if the placement was dual-semester (`coversBoth`).
+  - Because test students had historical grades recorded under Term 5 (`2025-2026 · 1st Semester`), any Year 1 2nd-semester subject with a Term 5 grade had its slot overridden to `SemesterSlot::First`.
+  - As a result, all 2nd-semester subjects were inserted into `$entriesBySlot[1]['1st']`, leaving `$entriesBySlot[1]['2nd']` completely empty. When rendering the prospectus, empty semester buckets are skipped, removing the `1st Year · 2nd Semester` section entirely and bunching all 27 subjects under `1st Year · 1st Semester`.
+- **Code Fix:**
+  - Updated `BuildStudentProspectus::resolveSlot()`:
+    - Only flexible placements where `SemesterCoverage::coversBoth($placement->semester)` (e.g. `'1st|2nd'`) allow the attempt's term semester to determine the slot.
+    - Fixed-semester placements (`'1st'` or `'2nd'`) remain strictly anchored to their curriculum placement slot via `SemesterCoverage::primary($placement->semester)`, preserving the curriculum's canonical semester structure on the checklist.
+- **Database Safety & Environment Hardening:**
+  - Updated `backend/phpunit.xml` with explicit test DB credentials (`grc_enrollment_test`, `grc_test`, `force="true"`) so PHPUnit test executions never run against or wipe `grc_enrollment`.
+- **Verification & Tests:**
+  - `ProspectusEndpointTest`: added `test_fixed_semester_placement_retains_curriculum_slot_regardless_of_attempt_term_semester`. 13/13 PHPUnit tests passing.
+  - Vitest suite `prospectus-document.test.tsx`: 21/21 passing.
+  - Verified `TEST-IRREG-Y2-03` prospectus payload: 8 full semesters cleanly separated:
+    - `Year 1 · 1st Semester`: 14 subjects (`ITC`, `ITCL`, `ITP1`, `ITP1L`, `ITP2`, `ITP2L`, `KOMFIL`, `LEAD 1`, `MATHWRLD`, `NSTP 1`, `PATHFIT1`, `PHILHIST`, `PURPCOMM`, `UNDSELF`)
+    - `Year 1 · 2nd Semester`: 13 subjects (`CONWRLD`, `ETHICS`, `HCI`, `HCIL`, `ITPLUS3`, `ITPLUS4`, `LEAD2`, `NSTP2`, `PATHFIT2`, `PROG1`, `PROG1L`, `PSPEAK`, `SCITECH`)
+    - `Year 2 · 1st Semester`: 15 subjects
+    - `Year 2 · 2nd Semester`: 15 subjects
+    - `Year 3 · 1st Semester`: 13 subjects
+    - `Year 3 · 2nd Semester`: 13 subjects
+    - `Year 4 · 1st Semester`: 7 subjects
+    - `Year 4 · 2nd Semester`: 4 subjects
+
+## 2026-10-26 — Irregular Student Block Enrollment Deadlock Resolved & Deployed DB Synced Locally (DONE)
+
+- **User request:**
+  1. Fix enrollment deadlock where irregular students who already passed block subjects (e.g. Dominic Sean V. Navarro `TEST-IRREG-Y2-03`) were misclassified as `Regular` by `ClassifyEnrollmentStanding`, trapping them with a disabled block section button and no access to per-subject enrollment.
+  2. Sync the current deployed database from Hostinger VPS (`grc-enrollment.tech`, Term 48 `2026-2027 · 1st Semester`) to the local MySQL instance (`localhost:3306`) so that testing accurately reflects production state.
+  3. Update student accounts so that completed Year 2 students are promoted to Year 3 and able to select available 3rd year subjects as `Irregular` students.
+- **Root Cause Analysis & Code Fix (`ClassifyEnrollmentStanding.php`):**
+  - In commit `a177740`, `isCompletedEarly()` had replaced the `needs_removing_completed` reason with an unconditional `continue;`.
+  - When a student had already completed non-dual-semester subjects in their year level's block (e.g. `AVEL`, `AVE`, `CPROG2` in `IT201`), the classifier skipped them, saw no unmet prerequisites or back subjects, and returned `ClassificationVerdict::regular()`.
+  - `BuildEnrollmentBlockPool` rejected block `IT201` with `partially_completed` ("AVEL has already been completed with a passing grade. See the Registrar about enrolling as an irregular student."), disabling `Choose IT201`.
+  - Deadlock: The student was directed to enroll as an irregular student, but the classifier dynamically insisted they were Regular, withholding the per-subject schedule picker (`EligibleSubjectTable`).
+  - **Fix:** In `ClassifyEnrollmentStanding.php`, non-dual-semester subjects already completed with a passing grade prior to this term flag `needs_removing_completed`, properly returning `ClassificationVerdict::irregular()` while preserving dual-semester flexibility (`SemesterCoverage::coversBoth()`).
+- **Database Synchronization:**
+  - Dumped production database from VPS `grc-enrollment-thmpcd` container via `mysqldump --no-tablespaces --single-transaction --quick`.
+  - Restored cleanly into local MariaDB `grc_enrollment`. Local DB now mirrors production with Term 48 (`2026-2027 · 1st`) active and open.
+- **Student Progression & Verification:**
+  - Updated Year 2 subjects to completed status for Year 2 test cohort, advancing them to Year 3 with `Irregular` standing.
+  - Verified for Dominic Sean V. Navarro (`TEST-IRREG-Y2-03`):
+    - `ClassifyEnrollmentStanding`: `IRREGULAR` (reason: `needs_removing_prerequisite` for `SIA2`, `SIA2L`).
+    - `BuildEnrollmentScheduleSummary`: `viewer.audience = 'irregular'`, enrollment window open.
+    - `BuildEnrollmentBlockPool`: returns `[]` (0 blocks shown, no disabled blocks).
+    - `BuildEligibleSubjectPool`: 14 selectable 3rd-year subjects available (`ARTAPP`, `BMC`, `BMCL`, `CAO`, `CAOL`, `DMATH`, `LEAD 5`, `PRELEC2`, `PRELEC2L`, `PT`, `PTL`, etc.).
+- **Automated Tests:**
+  - `ClassifyEnrollmentStandingTest`: 31/31 passing (`test_a_standard_subject_already_passed_early_makes_student_irregular` updated).
+  - `BuildEnrollmentAccessContextTest`: 6/6 passing.
+  - `EnrollmentBlocksEndpointTest`: 18/18 passing.
+  - `BlockSectionAccessPolicyTest`: 8/8 passing.
+
+
 ## 2026-10-23 — "No subject to credit", irregular load over the maximum, Program Head Enrollment tabs (BUILT; deploy recorded below once done)
 
 - **Owner requests:** (1) a Transferee/Returnee with nothing to credit submits "no subject to credit", the Program Chair reviews it and the student can then enroll; (2) an irregular student may pass the unit maximum (even by 9+ units) after a "are you sure" prompt, the Program Chair sees over-loaded students and sets the right units and schedule; (3) Irregular Advising and Credit Mappings move into the Program Head's Enrollment page as tabs, each with a number for what is waiting. The owner clarified "notification" = the number above each tab (not a bell notification), and approved my guesses (chair alone unlocks enrollment, no ceiling above the maximum).

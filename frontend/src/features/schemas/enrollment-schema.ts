@@ -182,6 +182,8 @@ export const enrollmentSchema = z
     status_label: z.string().min(1),
     total_units: z.number().nonnegative(),
     requires_overload_approval: z.boolean(),
+    // The regular unit maximum (before load is considered overload), and the overload maximum.
+    regular_unit_maximum: z.number().nonnegative().nullable().optional(),
     // The unit maximum the student was measured against, and whether the load is over it (an irregular
     // student may submit one after confirming; the Program Chair then corrects it). Optional so a response
     // from a server that predates them still parses.

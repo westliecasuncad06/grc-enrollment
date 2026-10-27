@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Models\AssessmentItem;
 use App\Models\Enrollment;
@@ -51,6 +52,7 @@ final class EnrollmentResource extends JsonResource
      *     status_label: string,
      *     total_units: float,
      *     requires_overload_approval: bool,
+     *     regular_unit_maximum: ?float,
      *     unit_maximum: ?float,
      *     exceeds_unit_maximum: bool,
      *     program_head_comment: ?string,
@@ -99,6 +101,7 @@ final class EnrollmentResource extends JsonResource
             UserRole::ProgramChair,
         ], true);
         $student = $this->resource->student;
+        $curriculum = $student->relationLoaded('curriculum') ? $student->curriculum : null;
         // A Student does not see the professor until the enrollment and add/drop
         // windows are over (ProfessorVisibility).
         $hideProfessor = ProfessorDisclosure::hiddenFrom($request, $this->resource->academic_term_id);
@@ -120,9 +123,12 @@ final class EnrollmentResource extends JsonResource
             'status_label' => $this->resource->status->label(),
             'total_units' => $this->resource->total_units,
             'requires_overload_approval' => $this->resource->requires_overload_approval,
+            'regular_unit_maximum' => $curriculum?->effectiveRegularUnits()
+                ?? (config('enrollment.max_regular_units') !== null ? (float) config('enrollment.max_regular_units') : null),
             // The maximum the student was measured against, and whether the load is over it (an irregular student may
             // submit one after confirming; the Program Chair then corrects it).
-            'unit_maximum' => $this->resource->unit_maximum,
+            'unit_maximum' => $this->resource->unit_maximum
+                ?? ($curriculum?->effectiveMaxUnits() ?? (config('enrollment.overload_max_units') !== null ? (float) config('enrollment.overload_max_units') : null)),
             'exceeds_unit_maximum' => $this->resource->unit_maximum !== null && $this->resource->total_units > $this->resource->unit_maximum,
             'program_head_comment' => $this->resource->program_head_comment,
             'submitted_at' => $this->resource->submitted_at?->utc()->format('Y-m-d\TH:i:s\Z'),
@@ -132,6 +138,7 @@ final class EnrollmentResource extends JsonResource
             'enrolled_at' => $this->resource->enrolled_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'subjects' => array_values(
                 $this->resource->enrollmentSubjects
+                    ->filter(fn (EnrollmentSubject $enrollmentSubject): bool => $enrollmentSubject->status !== EnrollmentSubjectStatus::Dropped || $this->resource->status->isTerminal())
                     ->map(fn (EnrollmentSubject $enrollmentSubject): array => [
                         'section_id' => $enrollmentSubject->section_id,
                         'section_code' => $enrollmentSubject->section->section_code,

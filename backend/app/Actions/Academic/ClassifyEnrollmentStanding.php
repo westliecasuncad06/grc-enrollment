@@ -149,9 +149,18 @@ final readonly class ClassifyEnrollmentStanding
                 }
 
                 if ($this->isCompletedEarly($subjectId, $marks, $credited, $term->id)) {
-                    // Having already passed a subject with a grade is a normal academic achievement and
-                    // must never make a student irregular. Only unmet prerequisites, credited subjects or
-                    // backlogs from prior failures trigger irregular standing.
+                    // A subject already completed with a passing grade cannot be enrolled again in
+                    // a block section (BuildEnrollmentBlockPool blocks it with 'partially_completed').
+                    // It must be removed from the block load, making the student Irregular so they
+                    // can select their remaining subjects individually. Subjects offered in either
+                    // semester (coversBoth) remain flexible and exempt.
+                    if (! SemesterCoverage::coversBoth($placement->semester)) {
+                        $reasons[] = [
+                            'code' => 'needs_removing_completed',
+                            'message' => "{$placement->subject->code} has already been completed with a passing grade.",
+                        ];
+                    }
+
                     continue;
                 }
 

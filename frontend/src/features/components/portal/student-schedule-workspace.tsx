@@ -70,7 +70,9 @@ export function StudentScheduleWorkspace() {
   const studentTerms = useMemo(() => {
     const termIdsWithSchedule = new Set(
       (enrollmentsQuery.data ?? [])
-        .filter((enrollment) => enrollment.subjects.length > 0)
+        .filter((enrollment) =>
+          (enrollment.subjects ?? []).some((s) => s.status !== "dropped"),
+        )
         .map((enrollment) => enrollment.academic_term_id),
     )
 
@@ -104,7 +106,8 @@ export function StudentScheduleWorkspace() {
   }, [enrollmentsQuery.data, selectedTermId])
 
   const subjects = useMemo(
-    () => activeEnrollment?.subjects ?? [],
+    () =>
+      (activeEnrollment?.subjects ?? []).filter((s) => s.status !== "dropped"),
     [activeEnrollment],
   )
 
