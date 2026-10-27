@@ -182,6 +182,19 @@ describe("EnrollmentRevisionReviewCard (the student's answer)", () => {
     expect(within(table).queryByText("CS101")).not.toBeInTheDocument()
   })
 
+  it("renders propose different subjects button for irregular student and opens dialog", async () => {
+    const user = userEvent.setup()
+    renderWithSession(<EnrollmentRevisionReviewCard enrollment={enrollment({ is_irregular: true })} />, { session: studentSession })
+
+    const card = screen.getByRole("region", { name: "Review your Program Chair's changes" })
+    const proposeBtn = within(card).getByRole("button", { name: "Propose different subjects" })
+    expect(proposeBtn).toBeInTheDocument()
+
+    await user.click(proposeBtn)
+    expect(screen.getByRole("dialog", { name: "Propose different subjects" })).toBeInTheDocument()
+    expect(screen.getByText(/Customize the subjects and sections you want to take/)).toBeInTheDocument()
+  })
+
   it("is not shown unless the Program Chair is waiting for the student", () => {
     renderWithSession(
       <EnrollmentRevisionReviewCard enrollment={enrollment({ status: "pending_registrar_approval", status_label: "Pending Registrar Approval" })} />,

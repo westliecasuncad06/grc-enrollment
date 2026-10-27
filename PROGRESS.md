@@ -1,5 +1,33 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-27 — Irregular Student Counter-Proposal Workflow & Presentation Database Restoration (DONE)
+
+- **User requests:**
+  1. "para naman sa irregular mag lagay ka ng option para ma edit ng students ulit yung na offer sa kanyang subect para ma lagay nya ulit yung gusto nyang subject para makapag propose ulit sya ng subject." (`media_1793085004087_38a52a99.png`)
+  2. "Once done. Please ganto gawin natin sa database: Gawin mong current yung 2025-2026 · 2nd, And dapat CSS, COE, COA, CBAE ARE PUBLSIHED And the enrollment is already closed since all the students or most of the students was already enrolled on their section and specific subject. make sure na yung mga student sa 2025-2026 · 2nd na meron ng mga grades and locked na yung mga grades nila and make sure na dapat lahat ng data ay real at hindi lang nilagay. Dapat yung term wide enrollment sa current na ito ay nasa around MAY or JUNE para sure na close na yung enrollment talaga matagal na dahil nag run na yung enrollment na ito at mag oopen na tayo ng next enrollment. Bali ang gagawin mo ngayon if may mga data na na produce a head 2025 - 2026 ay need mo syang ma delete, ito man ay account na na generate, subject na ne-generate rooms etc. Para maging malinis yung database at ready for presentation ng sytem to show the flow ng system natin. then deploy mo na yung system ulit"
+
+- **Part 1 — Irregular Student Subject Proposal Flow:**
+  - **Backend Implementation:**
+    - `backend/app/Policies/EnrollmentPolicy.php`: Authorized irregular students to call `reviseSubjects` when `status === EnrollmentStatus::PendingStudentReview` and `$enrollment->student->user_id === $user->id`.
+    - `backend/app/Http/Requests/Api/V1/Enrollment/ReviseEnrollmentSubjectsRequest.php`: Validated student proposal note with customized validation message.
+    - `backend/app/Actions/Enrollment/ReviseEnrollmentSubjects.php`: Supported student counter-proposals (`$actor->role === UserRole::Student`), creating an `EnrollmentRevision` recording student's proposed additions/removals, transitioning the enrollment back to `PendingProgramHeadApproval`, marking previous review revision declined with student's note, and notifying the Program Chair (`ProgramChairRecipients::forStudent($student)`).
+  - **Frontend Implementation:**
+    - `frontend/src/features/components/portal/student-propose-subjects-dialog.tsx`: Created counter-proposal dialog for irregular students with real-time academic load tracking, allowed load badges, timetable conflict checker (`findConflictingIds`), section search combobox, table view with remove actions, weekly timetable calendar view (`SectionScheduleCalendar`), note textarea, and mutation call.
+    - `frontend/src/features/components/portal/enrollment-revision-review-card.tsx`: Added "Propose different subjects" button for irregular students in review state and within the decline dialog.
+  - **Verification:**
+    - `ReviseEnrollmentSubjectsEndpointTest`: Added test verifying irregular student proposing revised subjects transitions to `pending_program_head_approval` with revision record (9/9 tests passed, 45 assertions).
+    - `enrollment-revision-flow.test.tsx`: Added integration test for student counter-proposal dialog and actions (14/14 tests passed).
+
+- **Part 2 — Presentation Database Restoration (Local & VPS):**
+  - Ran `backend/scripts/restore_presentation_term6.php --apply --notifications` on both local database and Hostinger VPS Docker container (`grc-backend-womfnq` / `grc-enrollment-thmpcd`):
+    - Target term `2025-2026 · 2nd` (term 6) restored to `semester_ongoing`.
+    - Current-term slot updated to term 6.
+    - Verified all 26,023+ grades are locked, sections published (757 sections), college workflows published (CCS, COE, COA, CBAE), and enrollment windows closed (May 31, 2026).
+    - Student #6265 category restored to `irregular`.
+    - Ahead terms (e.g. rehearsal term 48) and all associated sections, plans, proposals, prediction runs, and rehearsal notifications purged cleanly with all invariants preserved.
+  - TypeScript build: `next build` compiled cleanly with 0 errors across all routes.
+
+
 ## 2026-10-27 — Dropped Subjects Filtering in Enrollment Resource and Student Schedule Views (DONE)
 
 - **User report:**

@@ -9,6 +9,7 @@ use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Enrollment\OverloadEvaluator;
 use App\Domain\Enrollment\OverloadVerdict;
+use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Models\Enrollment;
 use App\Models\EnrollmentRevision;
@@ -17,6 +18,8 @@ use App\Models\Notification;
 use App\Models\Section;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Notifications\NotificationRecorder;
+use App\Support\Notifications\ProgramChairRecipients;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -56,6 +59,7 @@ final readonly class ReviseEnrollmentSubjects
 {
     public function __construct(
         private AuditRecorder $auditRecorder,
+        private NotificationRecorder $notificationRecorder,
     ) {}
 
     /**
@@ -73,7 +77,9 @@ final readonly class ReviseEnrollmentSubjects
 
         if ($note === '') {
             throw ValidationException::withMessages([
-                'note' => 'Tell the student why you are changing their subjects.',
+                'note' => $actor->role === UserRole::Student
+                    ? 'Explain why you are proposing these subjects.'
+                    : 'Tell the student why you are changing their subjects.',
             ]);
         }
 
@@ -81,13 +87,23 @@ final readonly class ReviseEnrollmentSubjects
             $lockedEnrollment = Enrollment::query()
                 ->whereKey($enrollment->id)
                 ->lockForUpdate()
-                ->with('student.curriculum')
+                ->with(['student.curriculum', 'student.user'])
                 ->firstOrFail();
 
-            if ($lockedEnrollment->status !== EnrollmentStatus::PendingProgramHeadApproval) {
-                throw ValidationException::withMessages([
-                    'section_ids' => "This enrollment must be 'pending_program_head_approval' to revise its subjects; it is currently '{$lockedEnrollment->status->value}'.",
-                ]);
+            $isStudentProposal = $actor->role === UserRole::Student;
+
+            if ($isStudentProposal) {
+                if ($lockedEnrollment->status !== EnrollmentStatus::PendingStudentReview) {
+                    throw ValidationException::withMessages([
+                        'section_ids' => "You can only propose subjects while your enrollment is 'pending_student_review'; it is currently '{$lockedEnrollment->status->value}'.",
+                    ]);
+                }
+            } else {
+                if ($lockedEnrollment->status !== EnrollmentStatus::PendingProgramHeadApproval) {
+                    throw ValidationException::withMessages([
+                        'section_ids' => "This enrollment must be 'pending_program_head_approval' to revise its subjects; it is currently '{$lockedEnrollment->status->value}'.",
+                    ]);
+                }
             }
 
             $beforeTotalUnits = (float) $lockedEnrollment->total_units;
@@ -212,18 +228,33 @@ final readonly class ReviseEnrollmentSubjects
 
             // The Chair does not press Approve on this path, so the overload
             // acknowledgement Approve would ask for is asked for here.
-            if ($verdict === OverloadVerdict::RequiresApproval && ! $overloadAcknowledged) {
+            if (! $isStudentProposal && $verdict === OverloadVerdict::RequiresApproval && ! $overloadAcknowledged) {
                 throw ValidationException::withMessages([
                     'overload_acknowledged' => 'This schedule exceeds the regular unit load and requires explicit overload acknowledgement before it is sent to the student.',
                 ]);
             }
 
+            $targetStatus = $isStudentProposal
+                ? EnrollmentStatus::PendingProgramHeadApproval
+                : EnrollmentStatus::PendingStudentReview;
+
             $lockedEnrollment->update([
                 'total_units' => $totalUnits,
                 'requires_overload_approval' => $verdict === OverloadVerdict::RequiresApproval,
-                'status' => EnrollmentStatus::PendingStudentReview,
+                'status' => $targetStatus,
             ]);
             $lockedEnrollment->refresh();
+
+            if ($isStudentProposal) {
+                EnrollmentRevision::query()
+                    ->where('enrollment_id', $lockedEnrollment->id)
+                    ->where('status', EnrollmentRevision::STATUS_PENDING)
+                    ->update([
+                        'status' => EnrollmentRevision::STATUS_DECLINED,
+                        'student_reason' => $note,
+                        'responded_at' => now(),
+                    ]);
+            }
 
             EnrollmentRevision::create([
                 'enrollment_id' => $lockedEnrollment->id,
@@ -239,22 +270,34 @@ final readonly class ReviseEnrollmentSubjects
             $afterSubjectCodes = Section::query()->whereIn('id', [...$keptIds, ...$addedIds])->with('subject')->get()
                 ->map(fn (Section $s): string => $s->subject->code ?? (string) $s->id)->all();
 
+            $auditAction = $isStudentProposal
+                ? AuditAction::ENROLLMENT_STUDENT_DECLINED_REVISION
+                : AuditAction::ENROLLMENT_PROGRAM_HEAD_SUBJECTS_REVISED;
+
             $this->auditRecorder->record(
                 $actor,
-                AuditAction::ENROLLMENT_PROGRAM_HEAD_SUBJECTS_REVISED,
+                $auditAction,
                 AuditableType::ENROLLMENT,
                 $lockedEnrollment->id,
                 ['subjects' => $beforeSubjectCodes, 'total_units' => $beforeTotalUnits],
-                ['subjects' => $afterSubjectCodes, 'total_units' => $totalUnits, 'status' => EnrollmentStatus::PendingStudentReview->value],
+                ['subjects' => $afterSubjectCodes, 'total_units' => $totalUnits, 'status' => $targetStatus->value],
                 $note,
                 $context,
             );
 
-            Notification::create([
-                'user_id' => $student->user_id,
-                'type' => NotificationType::EnrollmentProgramHeadSubjectsRevised,
-                'message' => "Your Program Chair changed the subjects in your enrollment. Reason: {$note} Open your Enrollment page to accept the changes or tell your Program Chair why you cannot.",
-            ]);
+            if ($isStudentProposal) {
+                $this->notificationRecorder->recordMany(
+                    ProgramChairRecipients::forStudent($student),
+                    NotificationType::EnrollmentRevisionDeclined,
+                    sprintf('Student %s proposed a revised subject schedule for their enrollment. Note: %s', $student->student_number, $note),
+                );
+            } else {
+                Notification::create([
+                    'user_id' => $student->user_id,
+                    'type' => NotificationType::EnrollmentProgramHeadSubjectsRevised,
+                    'message' => "Your Program Chair changed the subjects in your enrollment. Reason: {$note} Open your Enrollment page to accept the changes or tell your Program Chair why you cannot.",
+                ]);
+            }
 
             return $lockedEnrollment->refresh()->load([
                 'student', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items', 'revisions',

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Enrollment;
 
+use App\Domain\Identity\UserRole;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -41,7 +42,9 @@ final class ReviseEnrollmentSubjectsRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'note.required' => 'Tell the student why you are changing their subjects.',
+            'note.required' => $this->user()?->role === UserRole::Student
+                ? 'Explain why you are proposing these subjects.'
+                : 'Tell the student why you are changing their subjects.',
         ];
     }
 

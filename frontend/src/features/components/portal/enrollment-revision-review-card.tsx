@@ -8,6 +8,7 @@ import {
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
 import { EnrollmentRevisionHistory } from "@/features/components/portal/enrollment-revision-history"
+import { StudentProposeSubjectsDialog } from "@/features/components/portal/student-propose-subjects-dialog"
 import {
   SectionScheduleCalendar,
   type SectionScheduleItem,
@@ -57,6 +58,7 @@ export function EnrollmentRevisionReviewCard({
   enrollment: Enrollment
 }) {
   const [declining, setDeclining] = useState(false)
+  const [proposing, setProposing] = useState(false)
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
   const [scheduleView, setScheduleView] = useState<"table" | "calendar">("table")
@@ -280,6 +282,16 @@ export function EnrollmentRevisionReviewCard({
                 ? "Accepting…"
                 : "Accept the changes"}
             </Button>
+            {enrollment.is_irregular && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={mutation.isPending}
+                onClick={() => setProposing(true)}
+              >
+                Propose different subjects
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -295,6 +307,12 @@ export function EnrollmentRevisionReviewCard({
         </CardContent>
       </Card>
 
+      <StudentProposeSubjectsDialog
+        enrollment={enrollment}
+        open={proposing}
+        onOpenChange={setProposing}
+      />
+
       <AlertDialog
         open={declining}
         onOpenChange={(next) => {
@@ -309,6 +327,23 @@ export function EnrollmentRevisionReviewCard({
               reason, so they can change it again or talk to you.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {enrollment.is_irregular && (
+            <div className="rounded-md border bg-muted/40 p-2.5 text-xs text-muted-foreground flex items-center justify-between gap-2">
+              <span>Want to choose your own subjects instead of declining with a note?</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs font-medium shrink-0"
+                onClick={() => {
+                  setDeclining(false)
+                  setProposing(true)
+                }}
+              >
+                Propose subjects
+              </Button>
+            </div>
+          )}
           <Field data-invalid={reasonMissing && reason !== ""}>
             <FieldLabel htmlFor="student-decline-reason">Your reason</FieldLabel>
             <Textarea

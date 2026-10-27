@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Identity\UserRole;
 use App\Models\Enrollment;
 use App\Models\User;
@@ -72,13 +73,22 @@ final class EnrollmentPolicy
     /**
      * Covers `PATCH .../subjects`: the Program Head adding or removing whole
      * subjects from a student's proposed schedule while it sits at their own
-     * review stage. Exactly the same record-level scope as
-     * `decideProgramHeadApproval` — own college only — the status window
-     * itself is enforced by `ReviseEnrollmentSubjects` under a lock.
+     * review stage, OR an irregular student proposing a counter-schedule
+     * while their enrollment is in `pending_student_review`.
      */
     public function reviseSubjects(User $user, Enrollment $enrollment): bool
     {
-        return $this->decideProgramHeadApproval($user, $enrollment);
+        if ($user->role === UserRole::ProgramChair) {
+            return $this->decideProgramHeadApproval($user, $enrollment);
+        }
+
+        if ($user->role === UserRole::Student) {
+            return $enrollment->student->user_id === $user->id
+                && $enrollment->student->enrollment_category === 'irregular'
+                && $enrollment->status === EnrollmentStatus::PendingStudentReview;
+        }
+
+        return false;
     }
 
     /**

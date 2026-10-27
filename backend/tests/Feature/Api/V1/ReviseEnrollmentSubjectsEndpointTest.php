@@ -307,4 +307,52 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
             'action' => 'program_head_approve',
         ])->assertOk()->assertJsonPath('data.program_head_comment', null);
     }
+
+    public function test_an_irregular_student_in_pending_student_review_can_propose_revised_subjects(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $cs101 = $this->makeSubject('CS101');
+        $cs102 = $this->makeSubject('CS102');
+        $cs103 = $this->makeSubject('CS103');
+        $sectionA = $this->makeSection($term, $cs101);
+        $sectionB = $this->makeSection($term, $cs102);
+        $sectionC = $this->makeSection($term, $cs103);
+        $student = $this->makeStudent($curriculum);
+        $student->update(['enrollment_category' => 'irregular']);
+        $enrollment = $this->makeEnrollment($student, $term, [$sectionA]);
+        $chairToken = $this->tokenForProgramHead('head.propose@grc.test');
+
+        // Chair revises: CS101 -> CS102 (status becomes pending_student_review)
+        $this->withToken($chairToken)->patchJson("/api/v1/enrollments/{$enrollment->id}/subjects", [
+            'section_ids' => [$sectionB->id],
+            'note' => 'CS101 full, take CS102.',
+        ])->assertOk()->assertJsonPath('data.status', 'pending_student_review');
+
+        // Clear guard cache before logging in as student
+        $this->app->make('auth')->forgetGuards();
+
+        // Student logs in
+        $studentToken = (string) $this->postJson('/api/v1/auth/login', [
+            'email' => $student->user->email, 'password' => self::PASSWORD,
+        ])->json('data.token');
+        $this->app->make('auth')->forgetGuards();
+
+        // Student counter-proposes: take CS103 instead
+        $response = $this->withToken($studentToken)->patchJson("/api/v1/enrollments/{$enrollment->id}/subjects", [
+            'section_ids' => [$sectionC->id],
+            'note' => 'I would prefer CS103 because of schedule.',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.status', 'pending_program_head_approval')
+            ->assertJsonCount(1, 'data.subjects')
+            ->assertJsonPath('data.subjects.0.subject_code', 'CS103');
+
+        $enrollment->refresh();
+        self::assertSame(EnrollmentStatus::PendingProgramHeadApproval, $enrollment->status);
+        self::assertSame(3.0, $enrollment->total_units);
+        self::assertSame(0, $sectionB->refresh()->enrolled_count);
+        self::assertSame(1, $sectionC->refresh()->enrolled_count);
+    }
 }
