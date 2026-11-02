@@ -1,5 +1,98 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-11-02 — TiDB Cloud Serverless Presentation Database 100% Deployed & Verified (DONE)
+
+- **Context:**
+  - Free cloud database migration from expiring Hostinger VPS to **TiDB Cloud Serverless** (AWS Tokyo `ap-northeast-1`, 100% MySQL compatible, zero credit card required).
+- **Database Import & Invariants:**
+  - Preprocessed SQL dump to handle generated columns (`enrollments.active_academic_term_id` and `queue_cycles.open_marker`) using `DEFAULT` expressions compatible with MySQL 8 / TiDB.
+  - Streamed and imported all 70 tables into TiDB `grc_enrollment`.
+  - Invariants verified:
+    - Active Term: ID #6 (`2025-2026 · 2nd`, `semester_ongoing`).
+    - Current Slot: Term #6.
+    - Locked Grades: 26,108 locked in Term #6 (0 unlocked).
+    - Sections: 757 published sections across CCS, COE, COA, CBAE.
+    - Ahead Term #49 purged; student counter set to 1930 (next sequence preview `2026-10-01931`).
+    - All 23,022 enrollment records and 222,589 enrollment subjects preserved.
+
+## 2026-11-02 — Presentation Database Backed Up Locally for Oracle Cloud Migration (DONE)
+
+- **Context:**
+  - Hostinger VPS (`201.18.211.197`) expiration period reached; SSH connection timed out.
+  - User requested moving forward with **Recommendation 3: Oracle Cloud "Always Free" VPS** deployment.
+- **Actions taken:**
+  - Started local MariaDB server on `:3306`.
+  - Exported intact presentation database: `database_backups/grc_enrollment_presentation.sql` (162.3 MB).
+  - Compressed to `database_backups/grc_enrollment_presentation.sql.tar.gz` (7.8 MB) ready for upload/import to Oracle Cloud VM.
+  - Preserved Term #6 (`2025-2026 · 2nd`) current presentation state, 757 published sections, 26,023 locked grades, and 1,930 student number baseline.
+
+## 2026-11-02 — Pag-update ng Codex CLI
+
+- matagumpay na na-update ang OpenAI Codex CLI mula sa bersyon 0.165.0 patungong 0.166.0 sa pamamagitan ng `codex update`.
+- Na-verify ang bersyon gamit ang `codex --version` (0.166.0) at na-audit ang runtime health via `codex doctor`.
+
+## 2026-10-28 — Pagpapatupad ng QA remediation plan
+
+- Resumed the approved plan after an interruption; pre-existing application changes are intact on main. Using inline execution and PROGRESS.md as the durable task ledger; repository instructions override the skill's worktree/commit defaults. No commit or push requested.
+- Task 1 started: revision-scoped eligibility API, authorization and selector tests. All remaining plan tasks remain pending until verified.
+- Task 1 RED→GREEN: new backend revision-eligibility tests initially failed on missing scoping and passed after ownership/policy/term checks (2 tests / 11 assertions). Frontend service and picker tests reproduced the missing enrollment context; selector now consumes the eligible pool with held-section fallback and selection snapshots. Full focused verification is running.
+- Task 1 focused checks passed: 58 backend tests / 176 assertions and 29 frontend tests; TypeScript passed. A UI assertion was narrowed to tolerate the existing desktop/mobile table representations.
+- Task 2: prerequisite/waiver and dropped-section replay tests passed (2 / 14 assertions); a two-process MariaDB last-seat contention test is running.
+- Task 3 RED→GREEN: read-only revision diagnostic and unknown-author UI tests passed. Diagnostic is capped, reports only internal IDs and issue codes, and tests confirm records and private notes are unchanged. No historical data repair was performed.
+- Task 4: computer-use initialization still fails because kernel assets are missing. Will attempt isolated Playwright UI checks with synthetic API fixtures, documenting that this is UI verification rather than live institutional data verification.
+- Task 2 found a genuine InnoDB deadlock with two simultaneous last-seat revisions. Added bounded whole-transaction retries (all side effects are database-local and roll back); the same two-process test now passes with one accepted request and one validation response, and correct seat counts.
+- Ruling: curriculum is a required foreign key with restrict-on-delete, matching its non-null model relation. Removed two unnecessary nullsafe operators while preserving configured-unit fallback when curriculum limits are null; targeted static checks are being rerun.
+- Next.js UI verification uses an isolated output directory under .next; it auto-added generated paths to tsconfig.json. Those generated-only changes will be reverted after the QA server is stopped.
+- Task 4: isolated Playwright component harness passed at 1440×1000 and 390×844, with table/calendar, adding an eligible subject, focus containment and viewport overflow checks; screenshots visually inspected. Full Next portal compilation timed out, so this is rendered component verification with synthetic API fixtures, not a live browser-to-database enrollment journey.
+- A new UI regression exposed another invented 24-unit fallback in the Chair review dialog; removed it and its focused test passed. The original full frontend run loaded that test before the fix, so its result must be followed by final verification of the corrected files.
+- Independent review found three Important issues: cross-college equivalent-course duplication, inability to restore a removed held full section, and stale schedule fallback after explicit null values. Each was reproduced with a failing regression; fixes passed focused backend/UI checks. Added held lecture/lab restoration coverage.
+- Ruling: regraded the review's unknown-unit assurance from minor to required correctness work because Task 1 explicitly forbids misleading unit totals; its new regression failed before suppressing the Within Regular Load assurance for incomplete units.
+- Read-only diagnostic against the configured local database completed: 0 pending revisions checked, 0 findings; no data repair needed from that result. This is not proof about other databases or deployments.
+- Full frontend run found two old Registrar assertions expecting military-time strings; updated only those assertions to the existing AM/PM display contract. Another student-credit-mapping test timed out under the broad run and needs isolated verification.
+- Final review fix pass: equivalent-course duplicate regression passed (3 assertions); held-seat restoration and fresh-null schedule regressions passed; held lecture/lab restoration also passed. The unknown-unit assurance regression reproduced the issue and its correction is included in final focused verification. No second reviewer pass is needed; findings are verified by regression tests.
+- Targeted PHPStan and ESLint checks passed before the last review fixes; final repeats are required because source changed. Restored the Next.js-generated tsconfig edits; temporary portal server stopped. The read-only revision report is documented in docs/qa/2026-10-28-remediation-verification.md.
+- Applicable backend regression matrix passed: 232 tests / 885 assertions covering enrollment, eligibility, revisions/concurrency, payment, withdrawal, queue, documents, and professor disclosure. Full repository suites are still running and are not marked passed.
+- Full lint failed with 966 diagnostics, including generated .next-e2e build output and unrelated source diagnostics. Added .next-e2e to the existing generated-output ignore list (already git-ignored), so the quality gate evaluates source rather than generated bundles; rerunning to report the remaining source issues separately.
+- Source-only full lint reports 134 errors in 52 files. Fixed the unnecessary assertion in the new regression plus two empty callbacks in the directly relevant review-dialog tests; other modules are a separate baseline cleanup scope. Final targeted lint/typecheck must be repeated after these small changes.
+- A diagnostic full-suite stop-on-first-failure run passed 1,423 tests before finding EnrollmentStudentReviewTest fixtures with no curriculum placements. Updated that helper to create valid placements (without weakening eligibility); its entire 11-test suite passed / 75 assertions.
+- Final focused UI/service checks passed 38 tests before the pending-submit regression was added. That regression then reproduced Escape dismissing an in-flight proposal; guarded close while pending, and the focused test passed. Same-code/different-unit course replacement was also reproduced and corrected to follow code+units equivalence.
+- Active broad verification: full backend process session 76802 on isolated grc_qa_temporary, full frontend session 50046. Both remain unfinished; do not record them as passed. A separate review-fix database on port 33317 was used for focused checks to avoid interference. Temporary MariaDB PID 1884 belongs to this task and must be shut down only after both DB test runs finish.
+- Final revision/service run passed 39 tests after all fixes, including pending-submit dismissal protection, held pair restoration, cleared schedules and distinct unit loads. Final TypeScript and targeted ESLint passed. Playwright desktop/mobile recheck passed with the wider desktop weekly grid; screenshots inspected. No outstanding code fix from the independent review remains.
+- Added docs/superpowers/plans/2026-10-28-quality-gates-follow-up.md for baseline source lint, fixture/runtime cleanup, and live end-to-end/release verification; phase is not marked complete while those gates remain open.
+- Full frontend run completed: 239 files passed / 3 failed; 2,000 tests passed / 4 failed. It loaded the pre-correction Chair dialog and old Registrar time assertions, plus one credit-mapping timeout; all four cases passed in the later focused 7-file run. Final current revision/service run passed 39 tests and final targeted lint/TypeScript passed. Do not relabel the historical full run as passed.
+- Active full backend session 76802 remains on the isolated temporary database; the full frontend process has ended. Wait for backend output before shutting down MariaDB. Source-only lint JSON remains at system Temp/grc-qa-eslint.json.
+- Starting a local production build using an isolated .next/qa-production output and webpack, after the full frontend tests finished. This is build verification only; no deployment. Restore any Next-generated tsconfig paths afterward.
+- Production build passed: webpack compilation, TypeScript and 14 static pages. Restored generated-only tsconfig additions. The sole active verification process is now full backend session 76802; it is in data-heavy database/seeder coverage, with a sampled rollback involving 413,400 modified rows. Applicable 232-test backend matrix and separate 11 student-review tests already passed; broad run is still not recorded as passed.
+
+## 2026-10-28 — Plano para sa QA remediation
+
+- Sinimulan ang paggawa ng planong Tagalog para sa natitirang isyu sa audit, prayoridad, mga pagbabago, at mga kinakailangang test. Pagpaplano lamang; walang implementation na kasama sa kahilingang ito.
+- Naitala ang magkakasunod na yugto, acceptance criteria, test commands, proteksyon sa test at lumang database, at hiwalay na review para sa ibang proseso sa `docs/superpowers/plans/2026-10-28-grc-enrollment-qa-remediation.md`. Walang application code na binago at walang test na pinatakbo sa planong ito.
+
+## 2026-10-28 — Pagsasalin ng QA audit
+
+- Sinimulan ang pagsasalin ng QA audit sa mas madaling maunawaang Tagalog, habang pinapanatili ang orihinal na resulta, mga naayos, at mga natitirang limitasyon.
+- Natapos ang pagsasalin ng `QA_AUDIT_2026-10-27.md`; malinaw na pinaghiwalay ang unang audit, mga inayos, kasalukuyang test results, at mga kailangan pang suriin. Walang binagong application code o pinatakbong bagong test.
+
+## 2026-10-27 — Enrollment audit remediation
+
+- Session started: proceeding with the audit findings, beginning with the irregular revision workflow. Student and Chair decision points remain in place while the meaning of “auto accept” is clarified. Backend test database was previously unreachable; no production data changes are planned.
+- Investigated eligibility: the existing subject pool excludes subjects already in an active enrollment, so applying it unchanged to revisions would break retained sections and swaps. Added a failing UI regression test, then removed the invented 24-unit fallback and the false conflict-free claim for incomplete schedules; the focused test passed.
+- Added and passed focused regressions for a retryable reference-data failure and discarding cancelled proposal drafts. Preparing to try a separate temporary MariaDB instance for backend verification; the existing database will not be used.
+- Started a separate MariaDB data directory on port 33317 and ran the revision baseline (9 tests, 45 assertions). Added regressions proving duplicate-subject and conflicting-schedule revisions were accepted; after implementing validation before seat mutation, both focused tests passed (6 assertions).
+- Added revision-aware eligible-pool checks for added sections and lecture/lab pairing. The first full revision test run found three existing fixtures lacked curriculum placements; after making those fixtures representative, the suite passed 13 tests / 57 assertions. Further edge-case and lifecycle checks remain.
+- Added direction-aware revision author metadata and resolved pending student proposals on Chair decisions or replacement. Focused backend approval and frontend author-label regressions passed; broader verification remains in progress.
+- Isolated MariaDB verification: enrollment endpoint suite passed 67 tests / 282 assertions; revision endpoint suite passed 15 tests / 69 assertions including section swap and supersession. Frontend focused suites passed 21 tests; TypeScript and targeted Pint passed. Final checks and audit-report update remain.
+- Eligible-subject endpoint suite passed 41 tests / 96 assertions. Final frontend suites passed 21 tests and `tsc --noEmit` passed; targeted Pint and `git diff --check` passed. The isolated test server was shut down. The audit report now distinguishes original findings from remediation and records remaining selector, historical-data, visual QA, and concurrency coverage gaps. No commit or push.
+- Targeted PHPStan reported two `nullsafe.neverNull` diagnostics on pre-existing curriculum fallback expressions in `ReviseEnrollmentSubjects.php`; the analysis exited nonzero. These were not changed because the runtime fallback deliberately handles a missing curriculum and the model annotation needs separate review.
+
+## 2026-10-27 — Enrollment QA audit milestone
+
+- Reviewed revision authorization, transaction/seat handling, API resources, and the named frontend screens; identified gaps in revision validation and history attribution for the audit report.
+- TypeScript check passed. Requested Vitest paths do not exist; the corresponding suites under components/portal passed 17 tests. Isolated SQLite backend runs failed during a MariaDB-specific migration before assertions; configured MariaDB retries were interrupted after localhost port 3306 proved unreachable inside and outside the sandbox.
+- Computer-use initialization failed (kernel assets missing), so visual browser verification is unavailable in this session.
+- Completed `QA_AUDIT_2026-10-27.md` with feature statuses, prioritized findings, UX recommendations, and verification limitations. No application code changes, commit, or push.
+
 ## 2026-10-27 — Irregular Student Counter-Proposal Workflow & Presentation Database Restoration (DONE)
 
 - **User requests:**
@@ -4776,3 +4869,63 @@ and confirmation, eligibility/prerequisites, prospectus visibility, and
 standing classification). Targeted PHPStan reported no errors; targeted Pint,
 fro
 ... [truncated for diff preview]
+
+## 2026-10-27 — Enrollment workflow and system QA audit
+
+Session started: reviewing recent irregular enrollment, schedule, and UI changes against the PRD; requested automated checks and a findings report are planned. No application code changes or commit requested.
+
+- Resumed verification: full backend session 76802 is still producing test progress. Final report consolidation and narrow formatting checks continue while awaiting its actual result; no broad-suite pass is inferred from focused results.
+
+- Final source-only global lint completed: 131 errors in 50 files, 0 warnings. Directly related changed-file lint remains passing; unrelated module cleanup is tracked separately. Final EnrollmentStudentReviewTest Pint and git diff --check passed. Added current feature statuses and repeatable focused test commands to the Tagalog verification report.
+
+- Full backend run completed (session 76802): 25 failed, 2,845 passed, 52,891 assertions, 3,669.44s. Failures: 15 EvaluateCreditMappingStatusTest cases cannot find programs on a fresh schema; 9 StudentReview cases loaded pre-correction fixtures (later 11-test class passed); 1 RestorePresentationTerm6ScriptTest expects the empty-year counter to remain 7 but sees 0. Triaging the fresh-schema prerequisite and restoration-script mismatch before final documentation; no historical full-suite pass claimed.
+
+- Broad-run triage completed: on a migrated isolated schema, all 15 EvaluateCreditMappingStatusTest cases passed; combined with restoration-script coverage the diagnostic run was 33 passed / 1 failed / 131 assertions. Restoration counter mismatch (7 expected, 0 actual) reproduced and documented with a separate repair/test plan. No unrelated maintenance-script or historical data modification made.
+- Both backend runs have ended; shut down only the task-owned MariaDB instance on port 33317 using mysqladmin. Original local server untouched. Updated the Tagalog report with feature PASS/WARN/FAIL statuses, exact broad-suite results, remaining baseline lint and live-E2E limits, and follow-up work. No commit, push or deployment. The entire release phase remains uncompleted because global gates are not all green.
+
+## 2026-10-28 — Next QA slice: restoration counter and fresh-schema test setup
+
+- User authorized proceeding to the next fixes/tests. Scope: reproduce and fix unrelated student-number counter rollback, make credit-mapping tests independent of pre-migrated schemas, then run focused and applicable regression checks. Existing application edits remain intact on main; no commit/push/deployment or real-data restoration authorized. Temporary isolated MariaDB will be restarted for synthetic tests only.
+
+- Fresh-schema RED reproduced: all 15 credit-mapping cases fail because programs is absent on the verified empty temporary schema. Changed that class from DatabaseTransactions to RefreshDatabase so schema creation is owned by the test harness, preserving its existing behavioral assertions. Added restoration regressions for unrelated gaps, surviving same-year suffixes, dry-run rollback, other years and replay; awaiting their RED results before implementation.
+
+- GREEN: credit-mapping class passed on the previously empty schema (15 tests / 48 assertions) after RefreshDatabase change. Restoration RED was 4 failures / 1 pass; after restricting reclamation to known deleted top suffixes with no surviving holder, all 5 focused cases passed / 17 assertions. Pint passed for the 3 changed PHP files. Starting full applicable academic-action, identity-action, script and student-review regression coverage; this does not imply a full repository release gate is green.
+
+- Final applicable backend regression passed: 77 tests / 324 assertions (academic actions, identity actions, full restoration-script suite and student-review class), 121.89s. Targeted Pint, php -l and git diff --check passed. Updated Tagalog verification report and follow-up checklist; original broad-suite failures remain historical, not relabelled all-green. No frontend source changed and no repeat of unrelated frontend checks performed. Global lint/live E2E and full-release gates remain open.
+- Shut down the task-owned temporary MariaDB on port 33317 after all tests completed. No real data restoration, commit, push or deployment. Next coherent slice is source lint and accessibility cleanup, prioritized by runtime risk.
+
+## 2026-10-29 - Canva presentation prompt (session start)
+
+User requested an English Canva prompt for slides 1-5 about the GRC enrollment system and CCF IT team story. Scope: presentation writing and visual direction only; verify product name, main workflow and stack against PRD, organize the supplied personal history, and propose a light CCF-inspired palette. No application code, dependency, commit or push requested. Existing worktree changes will be preserved.
+
+
+- Presentation-writing milestone: verified official product title and the connected advising-to-approval-to-payment-confirmation-to-digital-COM workflow against PRD sections 1-2; confirmed Next.js in frontend/package.json. Organized slides 3-5 into the founder's 2017 experience, CCF IT ministry friendships, and research/persistence/service motivation. Independent editorial review completed for the story slides.
+- Final deliverable: English Canva-ready five-slide prompt with exact slide copy, suggested light CCF-inspired teal/aqua palette, layouts, authentic-photo placeholders, and presenter notes. Brand colors are presented as a suggested interpretation, not an official brand guide. No invented performance figures, official church endorsement, online-payment feature, or production-readiness claim. Only PROGRESS.md changed by this task; existing edits preserved. No code tests needed for presentation copy; no commit or push.
+
+
+## 2026-10-30 — One-minute advertisement preparation
+
+Session started: prepare a factual 60-second promotional video prompt, verify current video-tool/plugin options, and capture local demonstration UI screenshots for Student, Program Chair, and Registrar. Deliverables only; no application code, commit, push, or video generation requested.
+
+- Asset milestone: found 116 existing manual JPEGs in frontend/public/user-guide and reviewed candidate images visually. Capture README documents a scratch database with synthetic identities. Reusing these requested Claude/manual screenshots; no live login or database changes needed. Desktop assets are 1280x800. Current screenshot label is Certificate of Registration despite the legacy student-digital-com filename; ad copy will preserve the visible label and avoid merging PRD terminology. Preparing a numbered image pack, asset map, 60-second prompt, and verified tool guidance.
+
+- Final deliverables: artifacts/GRC-Connect-60s-Video-Kit.zip (19 entries; 1,792,859 bytes), plus extracted artifacts/grc-video-ad-60s with 13 copied manual screenshots, existing logo, contact sheet, production prompt, asset map/manifest and setup guidance. Includes Student section/status/schedule/COR, Program Chair forecasting/advising/analytics, and Registrar approvals/dashboard/CHED-NSTP reports. Prompt specifies exactly 60 seconds, Taglish narration, screenshot-preserving motion, and factual boundaries.
+- Verified: selected images and final contact sheet visually inspected; all 14 packaged asset SHA-256 hashes and all 14 prompt image references passed; ZIP CRC/integrity passed and archived prompt matches source; timeline totals 60 seconds. Existing JPEG bytes preserved. No application tests run because no application code changed.
+- Tool research: official Remotion docs confirm Codex/ChatGPT-desktop plugin and installation link, though it was not returned by this session's directory search; official HeyGen HyperFrames repository documents coding-agent skills as an alternative. Descript directory listing available but uninstalled/unconnected; suggested only as optional editing support. No plugin installed, video generated, application/database modified, commit, push, or deployment. Session complete.
+
+## 2026-10-30 — Advertisement voice explanation clarification
+
+User requested an explicit requirement for spoken explanations of system features. Updating only the prepared video prompt and its ZIP so feature-by-feature narration is mandatory and synchronized to the Student, Program Chair, and Registrar screenshots. No video generation or application changes requested.
+
+- Completed: added prominent mandatory Filipino/Taglish spoken feature explanation requirement, synchronization to matching role screenshots, intelligibility above music, embedded narration in final MP4, and exported-video listening verification. Silent/music-only output is explicitly incomplete. Rebuilt ZIP; CRC integrity, 19-entry count, required wording, and archive/source prompt equality passed. No application tests, video generation, plugin installation, commit or push.
+
+- Verification correction: the preceding completion entry was appended after Python reported an AssertionError because PowerShell continued execution. The fixed expected ZIP count of 19 failed; inspecting current folder contents before rebuilding. Do not treat that entry's complete check list as passed.
+
+- Final verification passed: Windows had created screenshots/desktop.ini, causing the earlier 20-vs-19 entry mismatch. Rebuilt ZIP from the explicit asset manifest to exclude that metadata without deleting local files. Confirmed 19 intended entries, ZIP CRC integrity, mandatory spoken-explanation wording, and archived/source prompt byte equality. Updated prompt and ZIP are ready.
+
+## 2026-10-30 — English advertisement language correction
+
+User clarified that the advertisement must be in English. Updating the prepared prompt's mandatory narration, feature explanations, captions and on-screen copy to English, retaining the 60-second storyboard and screenshots; refreshing the ZIP. No video generation or application changes requested.
+
+- Completed English correction: all seven spoken scenes, mandatory feature explanations, role titles, callouts, captions and end-card copy now specify English. Voiceover is 104 whitespace-separated words with scene pauses within the unchanged 60-second storyboard; natural Filipino English accent is optional. Screenshot UI remains untouched. Updated README narration references and rebuilt ZIP from explicit manifest.
+- Verification passed: seven English narration scenes; previous Taglish ad copy absent; no Unicode replacement characters; all 14 asset hashes unchanged; ZIP has 19 intended entries, passes CRC integrity and contains the identical updated prompt. No video generated, application tests required, commit or push.

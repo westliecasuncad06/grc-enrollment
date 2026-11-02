@@ -65,6 +65,7 @@ desktop.ini
 *.sql.gz
 !DATABASE/grc_enrollment.sql.gz
 /backend/database/backups/
+/database_backups/
 /frontend/scripts/*.json
 CLAUDE_PROMPT.md
 CLAUDE_HANDOFF.md
