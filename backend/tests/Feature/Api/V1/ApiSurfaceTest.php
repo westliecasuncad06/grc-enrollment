@@ -216,6 +216,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/faculty-specializations',
             'POST api/v1/faculty-subject-preferences',
             'POST api/v1/it-control/accounts/{user}/archive',
+            'POST api/v1/it-control/accounts/{user}/password',
             'POST api/v1/it-control/accounts/{user}/restore',
             'POST api/v1/no-credit-declaration',
             'POST api/v1/no-credit-declarations/{noCreditDeclaration}/confirm',
@@ -339,6 +340,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.reports.honors',
             'api.v1.it-control.accounts.archive',
             'api.v1.it-control.accounts.destroy',
+            'api.v1.it-control.accounts.password',
             'api.v1.it-control.accounts.restore',
             'api.v1.it-control.accounts.update',
             'api.v1.it-control.faculty.index',
@@ -643,6 +645,7 @@ final class ApiSurfaceTest extends TestCase
         foreach ([
             'api.v1.it-control.accounts.archive',
             'api.v1.it-control.accounts.destroy',
+            'api.v1.it-control.accounts.password',
             'api.v1.it-control.accounts.restore',
             'api.v1.it-control.accounts.update',
             'api.v1.it-control.students.index',

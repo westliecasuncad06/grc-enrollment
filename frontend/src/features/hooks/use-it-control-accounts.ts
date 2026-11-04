@@ -5,11 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/features/auth/use-auth"
 import {
   type FacultyAccountFilters,
+  type ChangeItControlPasswordInput,
   type StudentAccountFilters,
   type UpdateItControlAccountInput,
 } from "@/features/schemas/it-control-schema"
 import {
   archiveItControlAccount,
+  changeItControlPassword,
   deleteItControlAccount,
   getItControlFacultyAccounts,
   getItControlStudentAccounts,
@@ -78,6 +80,20 @@ export function useUpdateItControlAccountMutation() {
       input: UpdateItControlAccountInput
     }) => updateItControlAccount(id, input),
     onSuccess: invalidate,
+  })
+}
+
+export function useChangeItControlPasswordMutation() {
+  return useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: number
+      input: ChangeItControlPasswordInput
+    }) => changeItControlPassword(id, input),
+    // Password-bearing mutation variables must not linger after the dialog unmounts.
+    gcTime: 0,
   })
 }
 

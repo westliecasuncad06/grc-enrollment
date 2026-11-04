@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api\V1\ItControl;
 
 use App\Actions\ItControl\ArchiveManagedAccount;
+use App\Actions\ItControl\ChangeManagedAccountPassword;
 use App\Actions\ItControl\DeleteUnusedManagedAccount;
 use App\Actions\ItControl\RestoreManagedAccount;
 use App\Actions\ItControl\UpdateManagedAccount;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\ItControl\ChangeAccountPasswordRequest;
 use App\Http\Requests\Api\V1\ItControl\UpdateAccountRequest;
 use App\Http\Resources\Api\V1\ItControl\AccountResource;
 use App\Models\User;
@@ -20,6 +22,17 @@ use Illuminate\Http\Request;
  */
 final class AccountController extends Controller
 {
+    public function changePassword(
+        ChangeAccountPasswordRequest $request,
+        User $user,
+        ChangeManagedAccountPassword $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $updated = $action->execute($user, (string) $request->validated('password'), $this->actor($request), $contextFactory->fromRequest($request));
+
+        return $this->respond($request, $updated);
+    }
+
     public function update(
         UpdateAccountRequest $request,
         User $user,

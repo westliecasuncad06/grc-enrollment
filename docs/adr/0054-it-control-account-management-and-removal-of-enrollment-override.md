@@ -20,6 +20,24 @@ The owner asked for two things in IT Control: the ability to **edit**, **delete*
 
 ## Consequences
 
+### Amendment — 2026-11-05
+
+The owner requested **Change password** in the Student/Faculty account actions.
+IT Control can submit `POST /api/v1/it-control/accounts/{user}/password` with
+`password` and `password_confirmation`. The existing management gate is checked
+again under the user row lock. Only active, unarchived accounts with completed
+setup are eligible; this does not activate an account or replace the pay-first
+freshman setup flow. The shared strength policy applies, with a 72-byte UTF-8
+limit to prevent bcrypt truncation. Password fields are masked in the dialog.
+
+The transaction changes the hash, revokes the target's sessions and unused setup,
+reset and login-OTP codes, clears OTP grace, and records
+`user_account.password_changed` with session-revocation counts only. No password,
+hash or contact data enters the audit payload or API response. Existing sign-in
+OTP policy still applies. Password mutation variables are removed from the client
+mutation cache after completion/unmount. No schema migration or email delivery is
+required. The route surface test pins the new endpoint and IT-only middleware.
+
 - One migration (`2026_10_16_000002`, adds `users.archived_at`), reversible; run it on every environment before the new screens work.
 - Only the account is archived. A student with an enrollment who is archived still appears in rosters, reports and the Registrar's lists, because those read the student's record, not the login. If the owner wants archived students hidden elsewhere, that is a separate decision.
 - The audit trail gains `user_account.updated`, `user_account.archived` and `user_account.restored`; `user_account.deleted` is reused.

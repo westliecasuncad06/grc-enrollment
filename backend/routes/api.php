@@ -695,6 +695,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/faculty', FacultyAccountController::class)->name('faculty.index');
             // ADR 0054: edit, archive, restore and delete a Student or Faculty account (the gate refuses any other role's).
             Route::patch('/accounts/{user}', [ItControlAccountController::class, 'update'])->whereNumber('user')->name('accounts.update');
+            Route::post('/accounts/{user}/password', [ItControlAccountController::class, 'changePassword'])->whereNumber('user')->middleware('throttle:10,1')->name('accounts.password');
             Route::post('/accounts/{user}/archive', [ItControlAccountController::class, 'archive'])->whereNumber('user')->name('accounts.archive');
             Route::post('/accounts/{user}/restore', [ItControlAccountController::class, 'restore'])->whereNumber('user')->name('accounts.restore');
             Route::delete('/accounts/{user}', [ItControlAccountController::class, 'destroy'])->whereNumber('user')->name('accounts.destroy');

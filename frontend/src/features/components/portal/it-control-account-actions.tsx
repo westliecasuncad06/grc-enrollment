@@ -5,6 +5,8 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 
+import { ItControlPasswordDialog } from "@/features/components/portal/it-control-password-dialog"
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,7 +59,7 @@ export interface ManagedAccount {
   isArchived: boolean
 }
 
-type Dialog = "edit" | "archive" | "restore" | "delete"
+type Dialog = "edit" | "archive" | "restore" | "delete" | "password"
 
 function EditAccountDialog({
   account,
@@ -309,6 +311,17 @@ export function ItControlAccountActions({
           Archive
         </Button>
       )}
+      {!account.isArchived && (
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          aria-label={`Change password for ${account.name}`}
+          onClick={() => setDialog("password")}
+        >
+          Change password
+        </Button>
+      )}
       <Button
         type="button"
         size="xs"
@@ -321,6 +334,9 @@ export function ItControlAccountActions({
 
       {dialog === "edit" && (
         <EditAccountDialog account={account} onClose={close} />
+      )}
+      {dialog === "password" && (
+        <ItControlPasswordDialog account={account} onClose={close} />
       )}
       {dialog === "archive" && (
         <ConfirmDialog

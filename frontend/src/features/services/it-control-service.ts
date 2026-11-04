@@ -1,5 +1,6 @@
 import {
   facultyAccountFiltersSchema,
+  changeItControlPasswordSchema,
   itControlAccountDeletedResponseSchema,
   itControlAccountResponseSchema,
   paginatedItControlFacultyAccountsSchema,
@@ -7,6 +8,7 @@ import {
   studentAccountFiltersSchema,
   updateItControlAccountSchema,
   type FacultyAccountFilters,
+  type ChangeItControlPasswordInput,
   type ItControlAccount,
   type PaginatedItControlFacultyAccounts,
   type PaginatedItControlStudentAccounts,
@@ -107,6 +109,26 @@ export async function archiveItControlAccount(
     itControlAccountResponseSchema,
     await postAuthenticatedJson(`${IT_CONTROL_ACCOUNTS_PATH}/${id}/archive`),
     "archived account",
+  ).data
+}
+
+export async function changeItControlPassword(
+  id: number,
+  input: ChangeItControlPasswordInput,
+): Promise<ItControlAccount> {
+  const request = parse(
+    changeItControlPasswordSchema,
+    input,
+    "password change request",
+  )
+
+  return parse(
+    itControlAccountResponseSchema,
+    await postAuthenticatedJson(
+      `${IT_CONTROL_ACCOUNTS_PATH}/${id}/password`,
+      request,
+    ),
+    "account",
   ).data
 }
 

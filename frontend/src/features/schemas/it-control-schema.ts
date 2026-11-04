@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { strongPasswordSchema } from "@/features/schemas/password-schema"
+
 const collegeSchema = z.enum(["ccs", "coe", "coa", "cbae"])
 const accountStatusSchema = z.enum(["active", "disabled"])
 // `archived` is not a status an account has: an archived account is disabled and hidden from the other views.
@@ -155,6 +157,24 @@ export const accountEditFormSchema = z
     email: z.string().trim().max(255).pipe(z.email("Enter a valid email.")),
   })
   .strict()
+
+export const changeItControlPasswordSchema = z
+  .object({
+    password: strongPasswordSchema.refine(
+      (value) => new TextEncoder().encode(value).length <= 72,
+      "The password is too long. Use a shorter password.",
+    ),
+    password_confirmation: z.string(),
+  })
+  .strict()
+  .refine((value) => value.password === value.password_confirmation, {
+    path: ["password_confirmation"],
+    message: "Passwords do not match.",
+  })
+
+export type ChangeItControlPasswordInput = z.infer<
+  typeof changeItControlPasswordSchema
+>
 
 export const studentAccountFiltersSchema = z
   .object({

@@ -4994,3 +4994,42 @@ User clarified that the advertisement must be in English. Updating the prepared 
 
 
 - Exact deployment artifact passed production webpack build (14 routes/pages including TypeScript) and both focused suites (58 tests). Existing non-failing jsdom canvas notice remains. Saved documented Super Admin credentials reached an OTP challenge on the live API; no bearer session was issued and no student/enrollment data was read or changed. User confirmed the target is the corrected email and is connecting Render. Preparing a scoped five-file saving-point commit (four UI/test files plus only November 5 progress append); pre-existing private progress hunk and unrelated changes excluded.
+
+## 2026-11-05 — IT Control managed-account password change (session start)
+
+- User requested a Change password option for IT Control. Re-read PRD and full progress log; applying Laravel Boost and repository frontend-design skills. Default scope is Student/Faculty row actions in IT Control, with optional clarification pending for own-account scope. Existing management gate limits target roles; password changes will use shared strength validation, revoke target sessions and outstanding auth codes, avoid logging password/hash, and preserve setup/payment/status gates. No production password or account change is requested or performed by feature implementation. Prior live account deletion remains blocked on authentication.
+
+
+- Scope confirmed by user: Student/Faculty account actions. Implemented IT-only password endpoint and masked confirmation dialog using shared password rules and existing account resource; technical UTF-8 byte cap prevents bcrypt truncation. Action re-checks role under lock, refuses archived/disabled/pending-setup targets, clears prior OTP grace, revokes target sessions and unused auth codes, and records only nonsecret audit metadata in the same transaction. Added focused role/validation/state/revocation tests and UI request/error/reset coverage. Preparing isolated MariaDB and frontend checks; no production account credentials changed.
+
+
+- Verification setup: initial private MariaDB startup failed before any test ran because Start-Process split the spaced config path. Retrying with an explicitly quoted --defaults-file argument. Frontend tests running after formatting only the six touched UI/service/schema files; unrelated dirty code not formatted.
+
+
+- Frontend verification passed: 23 tests across account actions and both account-browser workspaces; TypeScript and targeted ESLint passed. Backend first matrix: 100 passed, 2 fixture failures (microsecond timestamp compared with seconds-only DB column; unsupported-role loop hit the 10/min caller throttle). Corrected fixtures without changing application safeguards and added real-Super-Admin acting-context audit attribution coverage. Private DB startup diagnosis corrected: first server was slow to become ready, not a split config path; verified live task instance is bound to 127.0.0.1:33317 with Temp datadir. No tests touched local :3306 or deployed data.
+
+
+- Backend rerun reached 102 passes with one permission-matrix fixture failure: Laravel's test auth guard retained the first caller across bearer-token changes, so the same caller still hit the rate limit. Explicit guard reset added between caller switches. Added transaction rollback coverage for an audit-write failure; password/hash/session/code updates must all roll back together. Preparing the production frontend build on the previously verified clean-HEAD artifact plus only the current six frontend files.
+
+
+- Backend matrix passed 103 tests / 891 assertions after correcting only test guard/precision fixtures. Targeted PHPStan on three application files passed; frontend 23 tests, TypeScript and scoped ESLint passed. Final matrix rerun now includes the newly added audit-failure rollback test; production frontend build running on clean deploy artifact plus six scoped frontend files. PRD and ADR 0054 amended for the requested managed-account capability. No migration, dependency, live password change, account deletion or deploy performed.
+
+
+- Completed local IT Control password-change slice. Final isolated backend matrix passed 104 tests / 897 assertions (IT Control account browsers/management/password endpoint, API route surface, existing self-service reset); includes transactional rollback and real Super Admin acting-context audit checks. Frontend 3 suites / 23 tests, TypeScript, six-file ESLint/Prettier, seven-file Pint, three-application-file PHPStan, diff checks, and production webpack build with 14 pages passed. Non-failing jsdom canvas notice remains. Verified all six frontend source hashes match the built clean-HEAD artifact. Task MariaDB on 127.0.0.1:33317 shut down after testing; local 3306 and production untouched. PRD/ADR amended, no schema migration/dependency change. No commit, push, deploy or actual account/password operation performed; unrelated local edits preserved.
+
+
+## 2026-11-05 — Publish and deploy IT Control password change (session start)
+
+- User explicitly requested pushing and deploying the completed password-change slice. Re-read PRD and full progress log; git fetch passed and main/origin/main both 3e7f82e, index empty. Preparing only the 16 feature/docs/progress files while preserving unrelated work and private existing progress hunk. Render integration still reports uninstalled/unconnected; frontend deployment can be monitored via GitHub/Vercel. Backend rollout must be verified separately before claiming the new endpoint is live.
+
+
+- Exact exported-source backend run completed its 897 assertions with exit 0 but reported 104 warnings, so it is not recorded as warning-free/pass-equivalent yet. Running one representative test with warning detail to identify artifact-environment noise before publication. Earlier workspace matrix remained 104 passed / 897 assertions. Live new-route baseline is HTTP 404 as expected before deployment.
+
+
+- Export warning diagnosis: PHPUnit reports phpdotenv's suppressed file_get_contents for the deliberately absent artifact .env once per test. Created an empty ignored .env only in the disposable artifact and supplied a synthetic process-only APP_KEY plus explicit private-test DB variables; rerunning the exact 104-test matrix. No application source or real environment credentials copied/changed.
+
+
+- Clean warning-free export rerun was interrupted after the private server stopped listening (no application source change). Verified/stopped only task mysqld processes referencing the Temp grc-qa-mariadb configuration, restarted the isolated instance and kept its lifecycle in the same test command with shutdown in finally. All database commands remain pinned to 127.0.0.1:33317 and the private export schema. Fifteen scoped feature/docs files are staged and normalized blob hashes match verified source; no commit/push yet.
+
+
+- Final exact deployment-source matrix passed cleanly: 104 tests / 897 assertions on PHP 8.3.36, with no dotenv warnings after test fixture correction. Same-command private DB lifecycle completed and shutdown ran. All 13 application/test hashes match the verified artifact; frontend's 23 tests, TypeScript, scoped lint/format, PHPStan/Pint and 14-page webpack build remain valid for unchanged source. Publishing the reviewed 16-file feature saving point now; no live account/password changes or migrations.

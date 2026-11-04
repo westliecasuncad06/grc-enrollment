@@ -259,6 +259,19 @@ Key boundaries:
 See ADR 0038 for the full decision record and `docs/runbooks/super-admin.md` for
 provisioning and incident-response procedures.
 
+### IT Control managed-account password changes
+
+IT Control may set a new password for an active Student or Faculty account that
+has completed account setup (owner request, 2026-11-05; ADR 0054 amendment).
+`POST /api/v1/it-control/accounts/{user}/password` requires a confirmed password
+under the shared strength policy. It cannot manage staff/admin roles, activate
+an account, or bypass freshman payment and setup requirements. The transaction
+hashes the new password, revokes the target's sessions and unused authentication
+codes, clears its prior OTP verification grace, and audits the actor and target
+without recording passwords or hashes. Subsequent sign-in follows the existing
+OTP policy. The Student and Faculty row actions provide a masked Change password
+dialog; account setup, status, enrollment, grades and payment records are retained.
+
 ---
 
 ## 4. Core User Journeys and State Machines

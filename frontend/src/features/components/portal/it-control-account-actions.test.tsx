@@ -101,6 +101,113 @@ describe("ItControlAccountActions", () => {
     return fetchMock.mock.calls.filter(([, init]) => init?.method === method)
   }
 
+  it("changes the managed account password with confirmation and clears the form on close", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(accountResponse())))
+    const user = userEvent.setup()
+    renderActions()
+    await user.click(
+      screen.getByRole("button", { name: "Change password for Avery Student" }),
+    )
+    const dialog = await screen.findByRole("dialog", {
+      name: "Change password",
+    })
+    const password = within(dialog).getByLabelText("New password")
+    expect(password).toHaveAttribute("type", "password")
+    await user.type(password, "A-strong-password-2026!")
+    await user.type(
+      within(dialog).getByLabelText("Confirm new password"),
+      "A-strong-password-2026!",
+    )
+    await user.click(
+      within(dialog).getByRole("button", { name: "Change password" }),
+    )
+    await waitFor(() => expect(requests("POST")).toHaveLength(1))
+    expect(urlOf(requests("POST")[0][0])).toContain(
+      "/api/v1/it-control/accounts/32/password",
+    )
+    expect(bodyOf(requests("POST")[0][1])).toEqual({
+      password: "A-strong-password-2026!",
+      password_confirmation: "A-strong-password-2026!",
+    })
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    )
+    expect(toast.success).toHaveBeenCalledWith(
+      expect.stringContaining("All existing sessions were signed out"),
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Change password for Avery Student" }),
+    )
+    expect(
+      within(await screen.findByRole("dialog")).getByLabelText("New password"),
+    ).toHaveValue("")
+  })
+
+  it("blocks weak or mismatched passwords before sending a request", async () => {
+    const user = userEvent.setup()
+    renderActions()
+    await user.click(
+      screen.getByRole("button", { name: "Change password for Avery Student" }),
+    )
+    const dialog = await screen.findByRole("dialog")
+    await user.type(within(dialog).getByLabelText("New password"), "weak")
+    await user.type(
+      within(dialog).getByLabelText("Confirm new password"),
+      "different",
+    )
+    await user.click(
+      within(dialog).getByRole("button", { name: "Change password" }),
+    )
+    expect(
+      await within(dialog).findByText("Use at least 8 characters."),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText("Passwords do not match."),
+    ).toBeInTheDocument()
+    expect(requests("POST")).toHaveLength(0)
+  })
+
+  it("keeps the dialog open and displays account setup refusal without claiming success", async () => {
+    fetchMock.mockResolvedValue(
+      errorResponse(
+        409,
+        "Only an active account that has completed setup can have its password changed.",
+      ),
+    )
+    const user = userEvent.setup()
+    renderActions()
+    await user.click(
+      screen.getByRole("button", { name: "Change password for Avery Student" }),
+    )
+    const dialog = await screen.findByRole("dialog")
+    await user.type(
+      within(dialog).getByLabelText("New password"),
+      "A-strong-password-2026!",
+    )
+    await user.type(
+      within(dialog).getByLabelText("Confirm new password"),
+      "A-strong-password-2026!",
+    )
+    await user.click(
+      within(dialog).getByRole("button", { name: "Change password" }),
+    )
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Only an active account",
+    )
+    expect(toast.success).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
+  it("does not offer password changes on an archived account", () => {
+    renderActions({ ...account, isArchived: true })
+    expect(
+      screen.queryByRole("button", {
+        name: "Change password for Avery Student",
+      }),
+    ).not.toBeInTheDocument()
+  })
+
   it("sends only the fields that changed when an account is edited", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify(accountResponse({ last_name: "Santos" }))),
