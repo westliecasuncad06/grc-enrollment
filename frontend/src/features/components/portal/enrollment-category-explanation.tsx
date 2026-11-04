@@ -35,7 +35,7 @@ export function EnrollmentCategoryExplanation({
       <AlertDescription>
         {isIrregular
           ? "You'll enroll by picking a section per subject instead of a whole block. This happens when a subject from a semester you've already completed still needs to be resolved — failed, marked Incomplete, Not Complete, Dropped, or never taken, shown as “Backlog” below — when a subject of your block is already credited from your previous school or curriculum, or when a prerequisite is not met yet. A subject you are already credited for is not offered again. Once none of these applies and your grades are finalized, you'll return to Regular automatically."
-          : "You have no unresolved subject from any semester you've already completed — so you'll enroll by picking one section for your whole block. If a subject from a finished semester is ever left unresolved, you'll switch to Irregular and enroll per subject until it's cleared."}
+          : "Your current category is Regular, so you'll enroll by picking one section for your whole block. Each subject must still meet its prerequisites. If an earlier subject is missing or unresolved, ask the Registrar to review your academic record; your category may change to Irregular."}
       </AlertDescription>
     </Alert>
   )

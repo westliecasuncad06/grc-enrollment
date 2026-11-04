@@ -221,11 +221,12 @@ function overallStages(
   enrollment: Enrollment | undefined,
   isRegular: boolean,
   paysFirst = false,
+  freshmanPaymentConfirmed = false,
 ): readonly StatusStepperStage[] {
   const submitted = enrollment !== undefined
   const programHeadApproved = enrollment?.program_head_decided_at != null
   const approved = enrollment?.registrar_decided_at != null
-  const paid = enrollment?.payment_confirmed_at != null
+  const paid = enrollment?.payment_confirmed_at != null || freshmanPaymentConfirmed
   const enrolled = enrollment?.enrolled_at != null
 
   // A freshman pays at the Cashier before the Registrar approves (2026-10-04), so the payment
@@ -234,7 +235,7 @@ function overallStages(
     return [
       { label: selectionLabel, done: submitted, current: !submitted },
       { label: "Payment confirmed", done: true, current: false },
-      { label: "Registrar approved", done: false, current: true },
+      { label: "Registrar approved", done: false, current: submitted },
       { label: "Enrolled", done: false, current: false },
     ]
   }
@@ -479,6 +480,19 @@ export function EnrollmentWorkspace() {
     isRegularAudience ? selectedTermId : null,
   )
   const blocks = useMemo(() => blocksQuery.data ?? [], [blocksQuery.data])
+  const paidFreshmanBlockState = !blocksQuery.isSuccess
+    ? "checking"
+    : blocks.some((block) => block.is_selectable && block.seats_remaining > 0)
+      ? "ready"
+      : blocks.some(
+            (block) =>
+              block.seats_remaining > 0 &&
+              block.reasons.some((reason) => reason.code === "prerequisite"),
+          )
+        ? "prerequisite"
+        : blocks.some((block) => block.seats_remaining > 0)
+          ? "unavailable"
+          : "full"
 
   // `selections`/`selectedBlockCode` can carry entries restored from a
   // persisted draft (see below) that the live data no longer backs — a
@@ -957,6 +971,8 @@ export function EnrollmentWorkspace() {
                 ? activeEnrollment.student_enrollment_category === "regular"
                 : isRegularAudience,
             transfereeMustPayFirst,
+            studentType === "freshman" &&
+              studentProfileQuery.data?.freshman_payment_confirmed_at != null,
           )}
         />
       )}
@@ -980,12 +996,27 @@ export function EnrollmentWorkspace() {
         ) : (
           <Alert>
             <AlertCircle className="h-5 w-5" />
-            <AlertTitle>Payment received — waiting for a section</AlertTitle>
+            <AlertTitle>
+              {paidFreshmanBlockState === "ready"
+                ? "Payment received — choose your section"
+                : paidFreshmanBlockState === "prerequisite"
+                  ? "Payment received — prerequisite needs review"
+                  : paidFreshmanBlockState === "unavailable"
+                    ? "Payment received — section needs review"
+                    : paidFreshmanBlockState === "checking"
+                      ? "Payment received — checking sections"
+                      : "Payment received — waiting for a section"}
+            </AlertTitle>
             <AlertDescription>
-              Your payment is on file, but every section for your year level was
-              full when you paid. You will be notified as soon as a section
-              opens. Choose it here and submit your enrollment; once Registrar
-              Staff approve it you are enrolled — you do not pay again.
+              {paidFreshmanBlockState === "prerequisite"
+                ? "Your payment is on file and this section has open seats, but a prerequisite is not recorded as completed. Ask the Registrar to check your academic record. You do not pay again."
+                : paidFreshmanBlockState === "ready"
+                  ? "Your payment is on file. Choose an available section here and submit your enrollment. Once Registrar Staff approve it, you are enrolled — you do not pay again."
+                  : paidFreshmanBlockState === "unavailable"
+                    ? "Your payment is on file and a section has open seats, but another enrollment requirement prevents selection. Check the reason on the section card and ask the Registrar for help. You do not pay again."
+                    : paidFreshmanBlockState === "checking"
+                      ? "Your payment is on file. Checking which sections you can select. You do not pay again."
+                      : "Your payment is on file, but every section for your year level is full. You will be notified as soon as a section opens. Choose it here and submit your enrollment; once Registrar Staff approve it you are enrolled — you do not pay again."}
             </AlertDescription>
           </Alert>
         ))}

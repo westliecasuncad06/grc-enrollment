@@ -2281,6 +2281,7 @@ describe("EnrollmentWorkspace", () => {
       freshmanStatus: string | null,
       category: "regular" | "irregular" = "regular",
       advancePaymentHeld = false,
+      blocks: unknown = [enrollmentBlock],
     ) {
       fetchMock.mockImplementation((input, init) => {
         if (url(input).endsWith("/student-profile"))
@@ -2297,20 +2298,61 @@ describe("EnrollmentWorkspace", () => {
               }),
             ),
           )
-        return mockRegularRoutes()(input, init)
+        return mockRegularRoutes({ blocks })(input, init)
       })
       renderWithSession(<EnrollmentWorkspace />, {
         session: regularStudentSession,
       })
     }
 
-    it("is told the payment was received and that a section will be announced", async () => {
-      renderFreshman("awaiting_section")
+    it("explains when every section is full without asking for another payment", async () => {
+      renderFreshman("awaiting_section", "regular", false, [
+        {
+          ...enrollmentBlock,
+          seats_remaining: 0,
+          is_selectable: false,
+          reasons: [{ code: "block_full", message: "No open seats." }],
+        },
+      ])
 
       expect(
         await screen.findByText("Payment received — waiting for a section"),
       ).toBeInTheDocument()
       expect(screen.getByText(/you do not pay again/i)).toBeInTheDocument()
+    })
+
+    it("shows the missing prerequisite instead of claiming a section with seats is full", async () => {
+      renderFreshman("awaiting_section", "regular", false, [
+        {
+          ...enrollmentBlock,
+          block_code: "IT101",
+          seats_remaining: 40,
+          is_selectable: false,
+          reasons: [
+            {
+              code: "prerequisite",
+              message: "LEAD2 requires LEAD1: The prerequisite subject has not yet been completed.",
+            },
+          ],
+        },
+      ])
+
+      expect(
+        await screen.findByText("Payment received — prerequisite needs review"),
+      ).toBeInTheDocument()
+      expect(screen.getByText(/ask the registrar to check your academic record/i)).toBeInTheDocument()
+      expect(screen.queryByText("Payment received — waiting for a section")).not.toBeInTheDocument()
+      expect(screen.getByText("Payment confirmed")).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Choose IT101" })).toBeDisabled()
+    })
+
+    it("invites a paid freshman to choose a newly available section", async () => {
+      renderFreshman("awaiting_section")
+
+      expect(
+        await screen.findByText("Payment received — choose your section"),
+      ).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Choose IT201" })).toBeEnabled()
     })
 
     it("after submitting is told the payment is on file, not to go and claim a queue number", async () => {

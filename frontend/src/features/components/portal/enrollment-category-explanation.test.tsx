@@ -43,7 +43,8 @@ describe("EnrollmentCategoryExplanation", () => {
     )
 
     expect(screen.queryByText(/passing, on-time grade/)).not.toBeInTheDocument()
-    expect(screen.getByText(/no unresolved subject/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no unresolved subject/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/each subject must still meet its prerequisites/i)).toBeInTheDocument()
   })
 
   it("explains Irregular standing and mentions Backlog for the irregular audience", () => {
