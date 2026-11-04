@@ -33,6 +33,7 @@ import { useEnrollmentScheduleQuery } from "@/features/hooks/use-enrollment-wind
 import { useHealthQuery } from "@/features/hooks/use-health-query"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { useStudentQueueQuery } from "@/features/hooks/use-student-queue"
+import { cn } from "@/features/lib/utils"
 import { isConnectedModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import {
@@ -114,7 +115,12 @@ export function GrcConnectPage() {
           </p>
         </div>
 
-        <div className="portal-module-grid">
+        <div
+          className={cn(
+            "portal-module-grid",
+            availableModules.length === 2 && "portal-module-grid--pair",
+          )}
+        >
           {availableModules.map((module, index) => {
             const Icon = module.icon
             const isPrimary = index === 0
@@ -223,7 +229,8 @@ export function GrcConnectPage() {
                 Retry queue status
               </Button>
             </Alert>
-          ) : studentQueueQuery.data && studentQueueQuery.data.stage !== "enrolled" ? (
+          ) : studentQueueQuery.data &&
+            studentQueueQuery.data.stage !== "enrolled" ? (
             <StudentQueueLivePanel
               queue={studentQueueQuery.data}
               mode="compact"

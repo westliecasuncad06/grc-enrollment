@@ -128,6 +128,52 @@ function formatAmountDue(enrollment: Enrollment | undefined) {
   return total ? `₱${total}` : "—"
 }
 
+function QueuePages({
+  label,
+  page,
+  lastPage,
+  pending,
+  onPage,
+}: {
+  label: string
+  page: number
+  lastPage: number
+  pending: boolean
+  onPage: (page: number) => void
+}) {
+  if (lastPage <= 1) return null
+  return (
+    <nav
+      aria-label={`${label} pages`}
+      className="mt-3 flex flex-wrap items-center justify-end gap-3"
+    >
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label={`Previous ${label.toLowerCase()} page`}
+        disabled={pending || page <= 1}
+        onClick={() => onPage(page - 1)}
+      >
+        Previous
+      </Button>
+      <span className="text-sm text-muted-foreground">
+        Page {page} of {lastPage}
+      </span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label={`Next ${label.toLowerCase()} page`}
+        disabled={pending || page >= lastPage}
+        onClick={() => onPage(page + 1)}
+      >
+        Next
+      </Button>
+    </nav>
+  )
+}
+
 /**
  * The enrollment payment rule agreed for the Cashier workflow, also enforced by
  * the API (`ConfirmPaymentRequest`): an explicit first payment is at least this.
@@ -432,13 +478,34 @@ export function AccountingPaymentWorkspace() {
     isTransferee: boolean
   } | null>(null)
 
+  const [waitingPage, setWaitingPage] = useState(1)
+  const [servedPage, setServedPage] = useState(1)
+  const [approvedPage, setApprovedPage] = useState(1)
   const ticketsQuery = useQueueTicketsQuery(
-    { cycle: "open", page: 1, per_page: 100 },
+    { cycle: "open", status: "waiting", page: waitingPage, per_page: 20 },
+    { enabled: authorized },
+  )
+  const servingQuery = useQueueTicketsQuery(
+    { cycle: "open", status: "serving", page: 1, per_page: 1 },
+    { enabled: authorized },
+  )
+  const servedQuery = useQueueTicketsQuery(
+    { cycle: "open", status: "served", page: servedPage, per_page: 20 },
+    { enabled: authorized },
+  )
+  const firstWaitingQuery = useQueueTicketsQuery(
+    { cycle: "open", status: "waiting", page: 1, per_page: 20 },
     { enabled: authorized },
   )
   const ticketMutation = useUpdateQueueTicketMutation()
   const pendingPaymentQuery = useEnrollmentsListQuery(
-    { status: "pending_payment", page: 1, per_page: 100 },
+    {
+      status: "pending_payment",
+      without_queue_ticket: true,
+      current_term: true,
+      page: approvedPage,
+      per_page: 20,
+    },
     { enabled: authorized },
   )
   const paymentMutation = useConfirmPaymentMutation()
@@ -450,16 +517,61 @@ export function AccountingPaymentWorkspace() {
   const claimMutation = useClaimQueueTicketMutation()
   const [cuttingOff, setCuttingOff] = useState(false)
 
+  // Removing the last entry on a page must not strand the Cashier on an empty page.
+  if (
+    pendingPaymentQuery.data &&
+    !pendingPaymentQuery.isPlaceholderData &&
+    approvedPage > pendingPaymentQuery.data.meta.last_page
+  )
+    setApprovedPage(pendingPaymentQuery.data.meta.last_page)
+  if (
+    ticketsQuery.data &&
+    !ticketsQuery.isPlaceholderData &&
+    waitingPage > ticketsQuery.data.meta.last_page
+  )
+    setWaitingPage(ticketsQuery.data.meta.last_page)
+  if (
+    servedQuery.data &&
+    !servedQuery.isPlaceholderData &&
+    servedPage > servedQuery.data.meta.last_page
+  )
+    setServedPage(servedQuery.data.meta.last_page)
+
   const tickets = ticketsQuery.data?.data ?? []
   const enrollments = pendingPaymentQuery.data?.data ?? []
   const enrollmentFor = (ticket: QueueTicket): Enrollment | undefined =>
+    ticketEnrollmentsQuery.data?.data.find(
+      (enrollment) => enrollment.id === ticket.enrollment_id,
+    ) ??
     enrollments.find((enrollment) => enrollment.id === ticket.enrollment_id)
 
-  const nowServing = tickets.find((ticket) => ticket.status === "serving")
+  const nowServing = servingQuery.data?.data.find(
+    (ticket) => ticket.status === "serving",
+  )
+  const ticketEnrollmentIds = [
+    ...new Set(
+      [
+        ...tickets.map((ticket) => ticket.enrollment_id),
+        nowServing?.enrollment_id,
+      ].filter((id): id is number => id != null),
+    ),
+  ].sort((a, b) => a - b)
+  // Fetch by exact id rather than joining only the first page of approved enrollments.
+  const ticketEnrollmentsQuery = useEnrollmentsListQuery(
+    {
+      status: "pending_payment",
+      enrollment_ids: ticketEnrollmentIds.length
+        ? ticketEnrollmentIds
+        : undefined,
+      page: 1,
+      per_page: 100,
+    },
+    { enabled: authorized && ticketEnrollmentIds.length > 0 },
+  )
   const waiting = [...tickets]
     .filter((ticket) => ticket.status === "waiting")
     .sort(byQueueOrder)
-  const servedToday = [...tickets]
+  const servedTickets = [...(servedQuery.data?.data ?? [])]
     .filter((ticket) => ticket.status === "served")
     .sort((a, b) => {
       const aTime = a.served_at ? new Date(a.served_at).getTime() : 0
@@ -560,7 +672,9 @@ export function AccountingPaymentWorkspace() {
     (confirming && promissoryRequired && !promissoryNoteOnFile)
 
   const callNext = () => {
-    const next = waiting[0]
+    const next = firstWaitingQuery.data?.data
+      .filter((ticket) => ticket.status === "waiting")
+      .sort(byQueueOrder)[0]
     if (!next) return
     ticketMutation.mutate({ id: next.id, action: "serve" })
     playQueueAlert(next.ticket_number)
@@ -686,12 +800,10 @@ export function AccountingPaymentWorkspace() {
     playQueueAlert(candidate.ticket.ticket_number)
   }
 
-  const issueTicketForCandidate = async () => {
-    const candidate = candidateQuery.data
-    if (!candidate) return
+  const issueTicketForStudent = async (studentNumber: string) => {
     setError("")
     try {
-      await claimMutation.mutateAsync(candidate.student_number)
+      await claimMutation.mutateAsync(studentNumber)
     } catch {
       setError(
         "The queue ticket could not be issued. Check the connection and try again.",
@@ -729,6 +841,9 @@ export function AccountingPaymentWorkspace() {
       unauthorized={!authorized}
       lastUpdated={Math.max(
         ticketsQuery.dataUpdatedAt,
+        servingQuery.dataUpdatedAt,
+        servedQuery.dataUpdatedAt,
+        ticketEnrollmentsQuery.dataUpdatedAt,
         pendingPaymentQuery.dataUpdatedAt,
         accountQuery.dataUpdatedAt,
         cycleQuery.dataUpdatedAt,
@@ -801,6 +916,75 @@ export function AccountingPaymentWorkspace() {
       )}
       <Card>
         <CardHeader>
+          <CardTitle level={2}>Approved for payment</CardTitle>
+          <CardDescription>
+            Registrar-approved students who have not taken a queue number yet.
+            Issue a ticket when the student arrives at the Cashier.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AsyncBoundary
+            query={{
+              ...pendingPaymentQuery,
+              data: pendingPaymentQuery.data?.data,
+            }}
+            loadingLabel="Loading approved students…"
+          >
+            {(approved) => (
+              <DataTable
+                caption="Approved for payment"
+                rows={approved}
+                rowKey={(enrollment) => enrollment.id}
+                emptyMessage="No approved students are waiting for a queue ticket."
+                columns={[
+                  {
+                    key: "student",
+                    header: "Student number",
+                    render: (enrollment) => enrollment.student_number,
+                  },
+                  {
+                    key: "amount",
+                    header: "Amount due",
+                    render: (enrollment) => formatAmountDue(enrollment),
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    render: (enrollment) =>
+                      enrollment.queue_ticket ? (
+                        <Badge variant="secondary">
+                          {enrollment.queue_ticket.ticket_number}
+                        </Badge>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={claimMutation.isPending}
+                          onClick={() =>
+                            void issueTicketForStudent(
+                              enrollment.student_number,
+                            )
+                          }
+                        >
+                          Issue queue ticket
+                        </Button>
+                      ),
+                  },
+                ]}
+              />
+            )}
+          </AsyncBoundary>
+          <QueuePages
+            label="Approved students"
+            page={approvedPage}
+            lastPage={pendingPaymentQuery.data?.meta.last_page ?? 1}
+            pending={pendingPaymentQuery.isFetching}
+            onPage={setApprovedPage}
+          />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
           <CardTitle level={2}>Find student</CardTitle>
           <CardDescription>
             Search a student number, student name, or email before serving an
@@ -831,7 +1015,7 @@ export function AccountingPaymentWorkspace() {
               Find student
             </Button>
           </form>
-          {candidateQuery.isPending && (
+          {candidateQuery.isFetching && (
             <p className="text-sm text-muted-foreground">
               Finding eligible payment ticket…
             </p>
@@ -860,7 +1044,11 @@ export function AccountingPaymentWorkspace() {
                 <Button
                   type="button"
                   disabled={claimMutation.isPending}
-                  onClick={() => void issueTicketForCandidate()}
+                  onClick={() =>
+                    void issueTicketForStudent(
+                      candidateQuery.data.student_number,
+                    )
+                  }
                 >
                   Issue queue ticket
                 </Button>
@@ -918,13 +1106,32 @@ export function AccountingPaymentWorkspace() {
       </Card>
       <AsyncBoundary
         query={{
-          isPending: ticketsQuery.isPending || pendingPaymentQuery.isPending,
-          isError: ticketsQuery.isError || pendingPaymentQuery.isError,
-          error: ticketsQuery.error ?? pendingPaymentQuery.error,
+          isPending:
+            ticketsQuery.isPending ||
+            servingQuery.isPending ||
+            servedQuery.isPending ||
+            (nowServing?.enrollment_id != null &&
+              ticketEnrollmentsQuery.isPending),
+          isError:
+            ticketsQuery.isError ||
+            servingQuery.isError ||
+            servedQuery.isError ||
+            firstWaitingQuery.isError ||
+            ticketEnrollmentsQuery.isError,
+          error:
+            ticketsQuery.error ??
+            servingQuery.error ??
+            servedQuery.error ??
+            firstWaitingQuery.error ??
+            ticketEnrollmentsQuery.error,
           data: tickets,
           refetch: () => {
             void ticketsQuery.refetch()
-            void pendingPaymentQuery.refetch()
+            void servingQuery.refetch()
+            void servedQuery.refetch()
+            void firstWaitingQuery.refetch()
+            if (ticketEnrollmentIds.length > 0)
+              void ticketEnrollmentsQuery.refetch()
           },
         }}
         loadingLabel="Loading the payment queue…"
@@ -935,7 +1142,8 @@ export function AccountingPaymentWorkspace() {
               <CardHeader>
                 <CardTitle level={2}>Now serving</CardTitle>
                 <CardDescription>
-                  {waiting.length} waiting · {servedToday.length} served today
+                  {ticketsQuery.data?.meta.total ?? waiting.length} waiting ·{" "}
+                  {servedQuery.data?.meta.total ?? servedTickets.length} served
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
@@ -1204,7 +1412,11 @@ export function AccountingPaymentWorkspace() {
                     <Button
                       type="button"
                       disabled={
-                        ticketMutation.isPending || waiting.length === 0
+                        ticketMutation.isPending ||
+                        firstWaitingQuery.isFetching ||
+                        !firstWaitingQuery.data?.data.some(
+                          (ticket) => ticket.status === "waiting",
+                        )
                       }
                       onClick={callNext}
                       className="w-fit"
@@ -1218,7 +1430,9 @@ export function AccountingPaymentWorkspace() {
 
             <Card>
               <CardHeader>
-                <CardTitle level={2}>Waiting ({waiting.length})</CardTitle>
+                <CardTitle level={2}>
+                  Waiting ({ticketsQuery.data?.meta.total ?? waiting.length})
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <DataTable
@@ -1289,20 +1503,28 @@ export function AccountingPaymentWorkspace() {
                     />
                   )}
                 />
+                <QueuePages
+                  label="Waiting"
+                  page={waitingPage}
+                  lastPage={ticketsQuery.data?.meta.last_page ?? 1}
+                  pending={ticketsQuery.isFetching}
+                  onPage={setWaitingPage}
+                />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle level={2}>
-                  Served today ({servedToday.length})
+                  Served in this queue (
+                  {servedQuery.data?.meta.total ?? servedTickets.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <DataTable
-                  caption="Served today"
+                  caption="Served in this queue"
                   rowKey={(ticket) => ticket.id}
-                  rows={servedToday}
+                  rows={servedTickets}
                   columns={[
                     {
                       key: "ticket",
@@ -1324,6 +1546,13 @@ export function AccountingPaymentWorkspace() {
                     },
                   ]}
                   renderCard={(ticket) => <ServedTicketCard ticket={ticket} />}
+                />
+                <QueuePages
+                  label="Served"
+                  page={servedPage}
+                  lastPage={servedQuery.data?.meta.last_page ?? 1}
+                  pending={servedQuery.isFetching}
+                  onPage={setServedPage}
                 />
               </CardContent>
             </Card>
@@ -1530,9 +1759,8 @@ export function AccountingPaymentWorkspace() {
                       {isPartial && accountQuery.data && priorBalance <= 0 && (
                         <p className="text-[11px] text-muted-foreground font-medium pt-1">
                           * Note: Partial payment. The remaining{" "}
-                          {formatPhp(String(remaining.toFixed(2)))}{" "}
-                          stays on the student&apos;s account. No promissory
-                          note is needed
+                          {formatPhp(String(remaining.toFixed(2)))} stays on the
+                          student&apos;s account. No promissory note is needed
                           because there is no previous bill.
                         </p>
                       )}

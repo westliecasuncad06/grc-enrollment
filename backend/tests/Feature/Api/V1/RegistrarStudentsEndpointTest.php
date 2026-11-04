@@ -47,7 +47,7 @@ final class RegistrarStudentsEndpointTest extends TestCase
         }
     }
 
-    public function test_the_list_can_be_searched_by_number_and_by_name_and_is_paginated_in_number_order(): void
+    public function test_the_list_can_be_searched_by_number_and_by_name_and_is_paginated_in_descending_number_order(): void
     {
         $this->freshmanProfile('2026-10-00002');
         $this->freshmanProfile('2026-10-00001');
@@ -64,8 +64,12 @@ final class RegistrarStudentsEndpointTest extends TestCase
             ->assertJsonPath('data.0.student_number', '2026-10-00003');
 
         $page = $this->withToken($token)->getJson('/api/v1/students?per_page=2')->assertOk();
-        self::assertSame(['2026-10-00001', '2026-10-00002'], collect($page->json('data'))->pluck('student_number')->all());
+        self::assertSame(['2026-10-00003', '2026-10-00002'], collect($page->json('data'))->pluck('student_number')->all());
         self::assertSame(3, $page->json('meta.total'));
+
+        $nextPage = $this->withToken($token)->getJson('/api/v1/students?per_page=2&page=2')->assertOk();
+        self::assertSame(['2026-10-00001'], collect($nextPage->json('data'))->pluck('student_number')->all());
+        self::assertSame(2, $nextPage->json('meta.current_page'));
     }
 
     public function test_only_the_registrar_may_read_the_list(): void

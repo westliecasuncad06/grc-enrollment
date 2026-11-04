@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Domain\Academic\PrerequisiteEvaluator;
+use App\Mail\Transports\ResendHttpTransport;
 use App\Models\PersonalAccessToken;
 use App\Policies\AcademicRecordPolicy;
 use App\Policies\AttritionReportPolicy;
@@ -25,6 +26,7 @@ use Illuminate\Database\LazyLoadingViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
@@ -55,6 +57,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Separate from Laravel's SDK-based `resend` driver: use the installed HTTP
+        // client so Render Free can deliver mail without SMTP or another dependency.
+        Mail::extend('resend_http', fn (array $config): ResendHttpTransport => new ResendHttpTransport(
+            (string) config('services.resend.key', ''),
+            (int) ($config['timeout'] ?? 15),
+        ));
+
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
         $this->preventNPlusOneQueries();
 

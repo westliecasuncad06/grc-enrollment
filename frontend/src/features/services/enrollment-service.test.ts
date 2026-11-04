@@ -187,6 +187,15 @@ describe("enrollment-service", () => {
     )
   })
 
+  it("serializes bounded cashier enrollment ids and boolean queue filters", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta })))
+    await listEnrollments({ status: "pending_payment", enrollment_ids: [9, 120], without_queue_ticket: true, current_term: true })
+    const query = new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams
+    expect(query.getAll("enrollment_ids[]")).toEqual(["9", "120"])
+    expect(query.get("without_queue_ticket")).toBe("1")
+    expect(query.get("current_term")).toBe("1")
+  })
+
   it("applies a registrar decision", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(

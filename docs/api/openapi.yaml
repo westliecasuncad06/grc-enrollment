@@ -3709,6 +3709,32 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - name: enrollment_ids[]
+          in: query
+          required: false
+          description: Exact enrollment IDs to hydrate for the visible Cashier tickets; role visibility still applies.
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            uniqueItems: true
+            items:
+              type: integer
+              minimum: 1
+        - name: without_queue_ticket
+          in: query
+          required: false
+          description: Use `1` to list only enrollments without a queue ticket; this read never issues a ticket.
+          schema:
+            type: boolean
+        - name: current_term
+          in: query
+          required: false
+          description: Use `1` to restrict results to the ongoing academic term.
+          schema:
+            type: boolean
         - name: exceeds_unit_maximum
           in: query
           required: false
@@ -5656,9 +5682,12 @@ paths:
       operationId: getQueueTickets
       summary: List the payment queue
       description: >
-        Accounting Staff only. Ordered deterministically by `queue_date`
-        then `id` (arrival order) — PRD §17 leaves any reset or priority
-        policy unconfirmed, so no ordering beyond plain arrival is asserted.
+        Accounting Staff only. The unfiltered list follows arrival/requeue order.
+        A `waiting` filter applies the Cashier's existing priority tiers before
+        pagination, then service date and arrival/requeue order. A `served`
+        filter returns the most recently served tickets first, with ID descending
+        as the tie-break. Status-specific pages keep completed tickets from
+        hiding the current waiting line or serving ticket.
       security:
         - bearerAuth: []
       tags:

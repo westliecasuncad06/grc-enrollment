@@ -19,9 +19,9 @@ export const queueTicketsQueryKey = (
 /**
  * Polls every 5s so the Cashier's own queue stays current without a
  * manual reload — this hook drives `nowServing`/`waiting`/`servedToday`
- * directly in `AccountingPaymentWorkspace`, unlike `useEnrollmentsListQuery`
- * on the same screen, which only enriches ticket rows with payment data
- * (see that hook's own JSDoc). Matches the interval already used for the
+ * directly in `AccountingPaymentWorkspace`. `useEnrollmentsListQuery`
+ * separately lists approved students awaiting a ticket and hydrates the
+ * visible tickets' payment data. Matches the interval already used for the
  * schedule-proposals queue, the notification bell, and
  * `useEnrollmentsListQuery` (see
  * docs/superpowers/specs/2026-08-03-realtime-schedule-refresh-design.md and
@@ -70,13 +70,17 @@ export function useClaimQueueTicketMutation() {
 
   return useMutation({
     mutationFn: (studentNumber?: string) => claimQueueTicket(studentNumber),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["queue-tickets", session?.userId ?? null],
-      })
-      void queryClient.invalidateQueries({
-        queryKey: ["cashier-payment-candidate", session?.userId ?? null],
-      })
-    },
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["queue-tickets", session?.userId ?? null],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["cashier-payment-candidate", session?.userId ?? null],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["enrollments-list", session?.userId ?? null],
+        }),
+      ]),
   })
 }

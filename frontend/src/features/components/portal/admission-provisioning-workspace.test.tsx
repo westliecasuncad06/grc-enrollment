@@ -351,6 +351,112 @@ describe("Student Records workspace", () => {
     return bodyOf(call?.[1])
   }
 
+  it.each(["failed", "not_sent"])(
+    "keeps a created account and warns when its setup email is %s",
+    async (deliveryStatus) => {
+      const defaultImplementation = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((input, init) => {
+        if (
+          urlOf(input).endsWith("/api/v1/student-profiles") &&
+          init?.method === "POST"
+        ) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: {
+                  ...profile,
+                  student_type: "transferee",
+                  invitation_delivery_status: deliveryStatus,
+                },
+              }),
+              { status: 201 },
+            ),
+          )
+        }
+        return defaultImplementation!(input, init)
+      })
+      const user = userEvent.setup()
+      renderWorkspace()
+      await fillAccountBasics(user)
+      await chooseStudentType(user, "Transferee")
+      await user.click(
+        screen.getByRole("button", { name: "Create account and email setup" }),
+      )
+
+      await waitFor(() =>
+        expect(toast.warning).toHaveBeenCalledWith(
+          `Account created, but the setup email could not be sent to ${profile.email}. Check the email service or address, then use Resend setup email.`,
+        ),
+      )
+      expect(toast.success).not.toHaveBeenCalled()
+      expect(
+        screen.getByRole("button", { name: "Resend setup email" }),
+      ).toBeInTheDocument()
+    },
+  )
+
+  it.each(["creation result", "directory", "record dialog"])(
+    "reports a failed resend from the %s without a success message",
+    async (location) => {
+      const defaultImplementation = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((input, init) => {
+        if (urlOf(input).endsWith("/account-setup-invitations")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: { ...profile, invitation_delivery_status: "failed" },
+              }),
+            ),
+          )
+        }
+        return defaultImplementation!(input, init)
+      })
+      const user = userEvent.setup()
+      renderWorkspace()
+      if (location === "creation result") {
+        await fillAccountBasics(user)
+        await chooseStudentType(user, "Transferee")
+        await user.click(
+          screen.getByRole("button", {
+            name: "Create account and email setup",
+          }),
+        )
+        await screen.findByRole("button", { name: "Resend setup email" })
+      } else {
+        await user.click(screen.getByRole("tab", { name: "Student Directory" }))
+        const table = await screen.findByRole("table", {
+          name: "Student directory",
+        })
+        if (location === "record dialog") {
+          await user.click(
+            await within(table).findByRole("button", { name: profile.name }),
+          )
+        }
+      }
+
+      vi.mocked(toast.success).mockClear()
+      const target =
+        location === "directory"
+          ? within(screen.getByRole("table", { name: "Student directory" }))
+          : location === "record dialog"
+            ? within(screen.getByRole("dialog", { name: profile.name }))
+            : screen
+      await user.click(
+        target.getByRole("button", {
+          name:
+            location === "directory" ? "Resend email" : "Resend setup email",
+        }),
+      )
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          `The setup email could not be sent to ${profile.email}. Check the email service or address, then try again.`,
+        ),
+      )
+      expect(toast.success).not.toHaveBeenCalled()
+    },
+  )
+
   it("uses one four-part workspace and creates an account with the details, type and ticked requirements Admission chose", async () => {
     const user = userEvent.setup()
     renderWorkspace()

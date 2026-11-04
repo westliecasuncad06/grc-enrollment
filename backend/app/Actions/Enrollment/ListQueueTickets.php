@@ -21,9 +21,10 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
  * order (`COALESCE(requeued_at, created_at)`, then the requeued-regime
  * split, then `id`) -- plain arrival order for a never-skipped ticket, or
  * requeue order for one that was skipped. §17 leaves any reset or priority
- * policy unconfirmed, so no priority-tier ordering is asserted at this
- * list level (the Cashier's own waiting-line display sorts by priority
- * tier itself; see `byQueueOrder` in `accounting-payment-workspace.tsx`).
+ * policy unconfirmed. A status-filtered waiting list follows the Cashier's
+ * existing priority ordering before pagination, so a priority ticket cannot
+ * disappear behind a page of regular tickets. A served list is newest first.
+ * The unfiltered list retains its historical arrival ordering.
  *
  * A tie on that effective order (routine under a fast test suite, and not
  * impossible at a real front desk, since `created_at`/`requeued_at` are
@@ -74,6 +75,8 @@ final readonly class ListQueueTickets
 
                 $query->where('queue_cycle_id', $openCycleId);
             })
+            ->when($status === 'waiting', fn ($query) => $query->orderByRaw("CASE WHEN priority = 'priority' THEN 0 ELSE 1 END"))
+            ->when($status === 'served', fn ($query) => $query->orderByDesc('served_at')->orderByDesc('id'))
             ->orderBy('queue_date')
             ->orderByRaw('COALESCE(requeued_at, created_at)')
             ->orderByRaw('requeued_at IS NOT NULL')

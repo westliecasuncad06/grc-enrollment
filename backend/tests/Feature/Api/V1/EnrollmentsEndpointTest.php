@@ -1200,6 +1200,30 @@ final class EnrollmentsEndpointTest extends TestCase
         $stillFiltered->assertOk()->assertJsonCount(0, 'data');
     }
 
+    public function test_cashier_can_list_approved_current_students_without_tickets_and_fetch_ticket_enrollments_by_id(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $approved = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingPayment);
+        $withTicket = $this->makeEnrollment($this->makeStudentWithEmail($curriculum, 'cashier.ticket@grc.test', '2026-0004'), $term, EnrollmentStatus::PendingPayment);
+        $pending = $this->makeEnrollment($this->makeStudentWithEmail($curriculum, 'cashier.pending@grc.test', '2026-0005'), $term, EnrollmentStatus::PendingRegistrarApproval);
+        $pastTerm = AcademicTerm::create(['school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived]);
+        $this->makeEnrollment($student, $pastTerm, EnrollmentStatus::PendingPayment);
+        $cycle = QueueCycle::create(['opened_on' => now()->toDateString(), 'last_ticket_sequence' => 1]);
+        QueueTicket::create([
+            'enrollment_id' => $withTicket->id, 'ticket_number' => 'Q001', 'queue_date' => now()->toDateString(),
+            'queue_cycle_id' => $cycle->id, 'ticket_sequence' => 1, 'status' => 'waiting',
+        ]);
+        $token = $this->tokenForNewStaff(UserRole::AccountingStaff, 'accounting.approved.list@grc.test');
+
+        $this->withToken($token)->getJson('/api/v1/enrollments?status=pending_payment&without_queue_ticket=1&current_term=1')
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $approved->id);
+        $this->withToken($token)->getJson('/api/v1/enrollments?enrollment_ids[]='.$withTicket->id.'&enrollment_ids[]='.$pending->id)
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $withTicket->id);
+        $this->assertDatabaseCount('queue_tickets', 1);
+    }
+
     public function test_dean_can_list_enrollments_and_receives_student_name_and_year(): void
     {
         $term = $this->makeTerm();

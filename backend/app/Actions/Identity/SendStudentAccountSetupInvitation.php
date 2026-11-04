@@ -13,6 +13,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use App\Support\Auth\AccountSetupCodes;
+use App\Support\Mail\EnsureExternalMailTransport;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -22,6 +23,7 @@ final class SendStudentAccountSetupInvitation
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
         private readonly AccountSetupCodes $setupCodes,
+        private readonly EnsureExternalMailTransport $mailTransport,
     ) {}
 
     public function handle(
@@ -53,8 +55,8 @@ final class SendStudentAccountSetupInvitation
 
         $setupCode = $this->setupCodes->issue($student);
 
-        $origin = request()?->header('Origin');
-        $referer = request()?->header('Referer');
+        $origin = request()->header('Origin');
+        $referer = request()->header('Referer');
         $baseUrl = null;
         if (is_string($origin) && filter_var($origin, FILTER_VALIDATE_URL)) {
             $parsed = parse_url($origin);
@@ -80,6 +82,7 @@ final class SendStudentAccountSetupInvitation
         $setupUrl = rtrim($baseUrl, '/').'/account-setup';
 
         try {
+            $this->mailTransport->check();
             Mail::to($student->email)->send(new StudentAccountSetupMail(
                 $student->name,
                 $setupUrl,

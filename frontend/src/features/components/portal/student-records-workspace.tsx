@@ -106,6 +106,16 @@ const GENDER_OPTIONS = [
 ] as const
 type CreateValues = z.infer<typeof provisionStudentSchema>
 
+function notifySetupEmailResend(profile: StudentProfile) {
+  if (profile.invitation_delivery_status !== "sent") {
+    toast.error(
+      `The setup email could not be sent to ${profile.email}. Check the email service or address, then try again.`,
+    )
+    return
+  }
+  toast.success(`Setup email resent to ${profile.email}`)
+}
+
 /** The freshman's queue number and whether the emailed link reached them. */
 function QueueTicketSummary({ profile }: { profile: StudentProfile }) {
   if (profile.queue_ticket_number === null) return null
@@ -119,7 +129,7 @@ function QueueTicketSummary({ profile }: { profile: StudentProfile }) {
         {profile.queue_ticket_number}
       </p>
       <p className="text-sm text-muted-foreground">
-        {profile.queue_link_delivery_status === "failed"
+        {profile.queue_link_delivery_status !== "sent"
           ? "The email could not be sent. Tell the student this number, then resend the link."
           : `The live queue link was emailed to ${profile.email}.`}
       </p>
@@ -240,7 +250,7 @@ function CreateAccountPanel() {
       setPrivacyShown(false)
       if (profile.queue_ticket_number !== null) {
         // A freshman: a queue number and a live-queue link, not the account setup email.
-        if (profile.queue_link_delivery_status === "failed") {
+        if (profile.queue_link_delivery_status !== "sent") {
           toast.warning(
             `Student saved and queue number ${profile.queue_ticket_number} issued, but the email could not be sent. Tell the student the number, or resend the link.`,
           )
@@ -249,6 +259,10 @@ function CreateAccountPanel() {
             `Student saved. Queue number ${profile.queue_ticket_number} was emailed to ${profile.email}.`,
           )
         }
+      } else if (profile.invitation_delivery_status !== "sent") {
+        toast.warning(
+          `Account created, but the setup email could not be sent to ${profile.email}. Check the email service or address, then use Resend setup email.`,
+        )
       } else {
         toast.success(
           `Account created and setup email sent to ${profile.email}.`,
@@ -793,9 +807,7 @@ function CreateAccountPanel() {
                         .mutateAsync(created.id)
                         .then((updated) => {
                           setCreated(updated)
-                          toast.success(
-                            `Setup email resent to ${updated.email}`,
-                          )
+                          notifySetupEmailResend(updated)
                         })
                         .catch(() => {
                           toast.error("Failed to resend setup email.")
@@ -1248,7 +1260,7 @@ function StudentRecordDialog({
                     void resend
                       .mutateAsync(profile.id)
                       .then((updated) => {
-                        toast.success(`Setup email resent to ${updated.email}`)
+                        notifySetupEmailResend(updated)
                       })
                       .catch(() => {
                         toast.error("Failed to resend setup email.")
@@ -1353,16 +1365,15 @@ function StudentDirectoryPanel() {
               size="sm"
               variant="secondary"
               disabled={resendingId === profile.id || resend.isPending}
-              onClick={async () => {
+              onClick={() => {
                 setResendingId(profile.id)
-                try {
-                  const updated = await resend.mutateAsync(profile.id)
-                  toast.success(`Setup email resent to ${updated.email}`)
-                } catch {
-                  toast.error("Failed to resend setup email.")
-                } finally {
-                  setResendingId(null)
-                }
+                void resend
+                  .mutateAsync(profile.id)
+                  .then(notifySetupEmailResend)
+                  .catch(() => {
+                    toast.error("Failed to resend setup email.")
+                  })
+                  .finally(() => setResendingId(null))
               }}
             >
               {resendingId === profile.id ? "Resending…" : "Resend email"}

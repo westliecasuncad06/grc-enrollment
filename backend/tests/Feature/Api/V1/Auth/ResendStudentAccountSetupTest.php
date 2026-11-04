@@ -2,6 +2,9 @@
 
 namespace Tests\Feature\Api\V1\Auth;
 
+use App\Actions\Identity\SendStudentAccountSetupInvitation;
+use App\Domain\Audit\AuditAction;
+use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AcademicStanding;
@@ -9,9 +12,11 @@ use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\ProgramStatus;
+use App\Http\Resources\Api\V1\StudentProfileResource;
 use App\Mail\StudentAccountSetupMail;
 use App\Models\Curriculum;
 use App\Models\Program;
+use App\Models\QueueTicket;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -129,5 +134,46 @@ final class ResendStudentAccountSetupTest extends TestCase
         $response->assertUnprocessable()
             ->assertJsonPath('error.code', 'VALIDATION_FAILED')
             ->assertJsonPath('error.errors.email.0', fn ($msg) => is_string($msg));
+    }
+
+    public function test_production_array_mail_is_recorded_as_failed_without_losing_the_pending_account(): void
+    {
+        Mail::fake();
+        $profile = $this->createPendingStudent();
+        $this->app->detectEnvironment(fn (): string => 'production');
+        config()->set('mail.default', 'array');
+
+        $result = app(SendStudentAccountSetupInvitation::class)
+            ->handle($profile, $profile->user, new AuditRequestContext('test', null));
+
+        self::assertSame('failed', $result);
+        self::assertNull($profile->user->fresh()->account_setup_invitation_sent_at);
+        self::assertNotNull($profile->user->fresh()->account_setup_invitation_failed_at);
+        $this->assertDatabaseHas('users', ['id' => $profile->user_id, 'status' => 'disabled']);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditAction::STUDENT_ACCOUNT_SETUP_INVITATION_FAILED,
+            'auditable_id' => $profile->id,
+        ]);
+        Mail::assertNothingSent();
+    }
+
+    public function test_a_failed_resend_in_the_same_second_as_a_previous_send_is_shown_as_failed(): void
+    {
+        $this->freezeTime();
+        $profile = $this->createPendingStudent()->load(['user', 'program', 'curriculum']);
+        $profile->user->forceFill([
+            'account_setup_invitation_sent_at' => now(),
+            'account_setup_invitation_failed_at' => now(),
+        ]);
+        $profile->setRelation('queueTicket', new QueueTicket([
+            'ticket_number' => 'Q001',
+            'link_sent_at' => now(),
+            'link_failed_at' => now(),
+        ]));
+
+        $data = StudentProfileResource::make($profile)->resolve(request());
+
+        self::assertSame('failed', $data['invitation_delivery_status']);
+        self::assertSame('failed', $data['queue_link_delivery_status']);
     }
 }

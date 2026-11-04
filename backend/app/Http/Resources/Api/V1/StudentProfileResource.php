@@ -134,7 +134,7 @@ final class StudentProfileResource extends JsonResource
             'invitation_delivery_status' => match (true) {
                 $user->account_setup_invitation_failed_at !== null
                     && ($user->account_setup_invitation_sent_at === null
-                        || $user->account_setup_invitation_failed_at->greaterThan($user->account_setup_invitation_sent_at)) => 'failed',
+                        || $user->account_setup_invitation_failed_at->greaterThanOrEqualTo($user->account_setup_invitation_sent_at)) => 'failed',
                 $user->account_setup_invitation_sent_at !== null => 'sent',
                 default => 'not_sent',
             },
@@ -149,7 +149,7 @@ final class StudentProfileResource extends JsonResource
                 $queueTicket === null => null,
                 $queueTicket->link_failed_at !== null
                     && ($queueTicket->link_sent_at === null
-                        || $queueTicket->link_failed_at->greaterThan($queueTicket->link_sent_at)) => 'failed',
+                        || $queueTicket->link_failed_at->greaterThanOrEqualTo($queueTicket->link_sent_at)) => 'failed',
                 $queueTicket->link_sent_at !== null => 'sent',
                 default => 'not_sent',
             },

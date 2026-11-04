@@ -133,6 +133,33 @@ final class QueueTicketsEndpointTest extends TestCase
         $response->assertJsonPath('data.1.id', $later->id);
     }
 
+    public function test_waiting_pages_place_priority_tickets_before_regular_tickets(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $this->makeTicket($this->makeStudent($curriculum), $term, 'Q001');
+        $priority = $this->makeTicket($this->makeStudent($curriculum, 'priority.page@grc.test', '2026-0002'), $term, 'Q002');
+        $priority->update(['priority' => QueueTicketPriority::Priority]);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.priority.page@grc.test');
+
+        $this->withToken($token)->getJson('/api/v1/queue-tickets?status=waiting&per_page=1')
+            ->assertOk()->assertJsonPath('data.0.id', $priority->id)->assertJsonPath('meta.total', 2);
+    }
+
+    public function test_served_pages_show_the_latest_served_ticket_first(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $older = $this->makeTicket($this->makeStudent($curriculum), $term, 'Q001', status: QueueTicketStatus::Served);
+        $older->update(['served_at' => now()->subMinutes(5)]);
+        $newer = $this->makeTicket($this->makeStudent($curriculum, 'served.page@grc.test', '2026-0002'), $term, 'Q002', status: QueueTicketStatus::Served);
+        $newer->update(['served_at' => now()]);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.served.page@grc.test');
+
+        $this->withToken($token)->getJson('/api/v1/queue-tickets?status=served&per_page=1')
+            ->assertOk()->assertJsonPath('data.0.id', $newer->id)->assertJsonPath('meta.total', 2);
+    }
+
     public function test_index_can_filter_by_status_and_queue_date(): void
     {
         $term = $this->makeTerm();

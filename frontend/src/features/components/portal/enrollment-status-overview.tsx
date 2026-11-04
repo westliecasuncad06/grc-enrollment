@@ -159,7 +159,7 @@ export function EnrollmentStatusOverviewPanel({
                   </p>
                 )}
                 <EnrollmentGroupBar groups={department.groups} />
-                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <ul className="grid grid-cols-2 gap-2">
                   {ENROLLMENT_GROUPS.map((group) => {
                     const presentation = ENROLLMENT_GROUP_PRESENTATION[group]
                     const Icon = presentation.icon
@@ -171,10 +171,10 @@ export function EnrollmentStatusOverviewPanel({
                           style={{ color: presentation.color }}
                           aria-hidden="true"
                         />
-                        <span className="text-xs text-muted-foreground">
+                        <span className="min-w-0 text-xs text-muted-foreground">
                           {presentation.label}
                         </span>
-                        <span className="ml-auto text-sm font-medium">
+                        <span className="text-sm font-medium tabular-nums">
                           {formatCount(count)}
                         </span>
                       </>
@@ -187,12 +187,12 @@ export function EnrollmentStatusOverviewPanel({
                             type="button"
                             aria-label={`${department.label}, ${presentation.label}: ${formatCount(count)}`}
                             onClick={() => onOpenDepartment(code, group)}
-                            className="flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            className="grid min-h-11 w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 rounded-md px-1.5 py-1 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           >
                             {content}
                           </button>
                         ) : (
-                          <span className="flex items-center gap-1.5 px-1.5 py-1">
+                          <span className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 px-1.5 py-1">
                             {content}
                           </span>
                         )}
@@ -202,7 +202,9 @@ export function EnrollmentStatusOverviewPanel({
                 </ul>
                 {drillable && onSelectDepartmentQueue && (
                   <div className="flex items-center justify-between border-t pt-2 mt-0.5">
-                    <span className="text-xs text-muted-foreground">Department queue</span>
+                    <span className="text-xs text-muted-foreground">
+                      Department queue
+                    </span>
                     <button
                       type="button"
                       onClick={() => onSelectDepartmentQueue(code)}

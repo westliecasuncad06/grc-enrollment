@@ -236,6 +236,13 @@ export const enrollmentFiltersSchema = z
   .object({
     status: z.enum(enrollmentStatusValues).optional(),
     academic_term_id: z.number().int().positive().optional(),
+    enrollment_ids: z
+      .array(z.number().int().positive())
+      .min(1)
+      .max(100)
+      .optional(),
+    without_queue_ticket: z.boolean().optional(),
+    current_term: z.boolean().optional(),
     search: z.string().trim().optional(),
     // Only the enrollments whose load is over the unit maximum they were measured against.
     exceeds_unit_maximum: z.boolean().optional(),

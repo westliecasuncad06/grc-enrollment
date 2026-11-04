@@ -337,7 +337,9 @@ function mockRoutes(
       return Promise.resolve(
         new Response(
           JSON.stringify({
-            data: [pendingPaymentEnrollment],
+            data: new URL(target).searchParams.get("without_queue_ticket") === "1"
+              && (overrides.tickets ?? [servingTicket, waitingTicket]).some((ticket) => (ticket as { enrollment_id?: number }).enrollment_id === pendingPaymentEnrollment.id)
+              ? [] : [pendingPaymentEnrollment],
             links: paginationLinks,
             meta: paginationMeta,
           }),
@@ -465,6 +467,86 @@ describe("AccountingPaymentWorkspace", () => {
     expect(
       screen.getByText("This workspace is not available for your role."),
     ).toBeInTheDocument()
+  })
+
+  it("shows Registrar-approved students before they claim a ticket and issues one only on request", async () => {
+    fetchMock.mockImplementation(mockRoutes({ tickets: [] }))
+    const user = userEvent.setup()
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    const table = await screen.findByRole("table", { name: "Approved for payment" })
+    expect(within(table).getByText("2026-0001")).toBeInTheDocument()
+    expect(screen.queryByText("Finding eligible payment ticket…")).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false)
+    await user.click(within(table).getByRole("button", { name: "Issue queue ticket" }))
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/queue-tickets"),
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ student_number: "2026-0001" }) }),
+    )
+  })
+
+  it("pages approved students and the waiting line while Call next keeps the first ticket", async () => {
+    const fallback = mockRoutes({ tickets: [] })
+    const laterTicket = { ...waitingTicket, id: 22, ticket_number: "Q022", student_number: "2026-0022" }
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      const params = new URL(target).searchParams
+      const page = Number(params.get("page") ?? 1)
+      if (target.includes("/queue-tickets") && init?.method === "GET" && params.get("status") === "waiting") {
+        return Promise.resolve(new Response(JSON.stringify({ data: page === 1 ? [waitingTicket] : [laterTicket], links: paginationLinks, meta: { ...paginationMeta, current_page: page, last_page: 2, total: 21 } })))
+      }
+      if (target.includes("/enrollments?") && params.get("without_queue_ticket") === "1") {
+        return Promise.resolve(new Response(JSON.stringify({ data: [{ ...pendingPaymentEnrollment, student_number: page === 1 ? "2026-0001" : "2026-0099" }], links: paginationLinks, meta: { ...paginationMeta, current_page: page, last_page: 2, total: 21 } })))
+      }
+      return fallback(input, init)
+    })
+    const user = userEvent.setup()
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await user.click(await screen.findByRole("button", { name: "Next approved students page" }))
+    await waitFor(() => expect(within(screen.getByRole("table", { name: "Approved for payment" })).getByText("2026-0099")).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: "Next waiting page" }))
+    await waitFor(() => expect(within(screen.getByRole("table", { name: "Waiting" })).getByText("Q022")).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: "Call next →" }))
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/queue-tickets/2"), expect.objectContaining({ method: "PATCH", body: JSON.stringify({ action: "serve" }) }))
+  })
+
+  it("keeps new waiting and serving tickets visible after a full page of served tickets", async () => {
+    const fallback = mockRoutes()
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/queue-tickets") && init?.method === "GET") {
+        const status = new URL(target).searchParams.get("status")
+        const tickets = status === "serving" ? [servingTicket] : status === "waiting" ? [waitingTicket] : []
+        return Promise.resolve(new Response(JSON.stringify({ data: tickets, links: paginationLinks, meta: paginationMeta })))
+      }
+      return fallback(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    expect(await screen.findByText("Q001")).toBeInTheDocument()
+    const waiting = await screen.findByRole("table", { name: "Waiting" })
+    expect(within(waiting).getByText("Q002")).toBeInTheDocument()
+  })
+
+  it("loads the serving enrollment by its exact id when it is outside the approved list page", async () => {
+    const fallback = mockRoutes()
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/enrollments?") && init?.method === "GET") {
+        const exactIds = new URL(target).searchParams.getAll("enrollment_ids[]")
+        return Promise.resolve(new Response(JSON.stringify({
+          data: exactIds.includes("9") ? [pendingPaymentEnrollment] : [],
+          links: paginationLinks,
+          meta: paginationMeta,
+        })))
+      }
+      return fallback(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Confirm payment" })).toBeEnabled())
+    expect(screen.getByText(/10.5 units/)).toBeInTheDocument()
   })
 
   it("shows the currently serving ticket with its amount due", async () => {

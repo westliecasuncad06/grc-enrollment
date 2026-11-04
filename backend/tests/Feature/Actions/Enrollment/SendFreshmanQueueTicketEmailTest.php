@@ -82,6 +82,24 @@ final class SendFreshmanQueueTicketEmailTest extends TestCase
         self::assertStringNotContainsString('one-time code', $html);
     }
 
+    public function test_production_array_mail_keeps_the_queue_number_and_records_a_delivery_failure(): void
+    {
+        Mail::fake();
+        [, $issued, $admission] = $this->issued();
+        $this->app->detectEnvironment(fn (): string => 'production');
+        config()->set('mail.default', 'array');
+
+        $result = app(SendFreshmanQueueTicketEmail::class)
+            ->handle($issued->ticket, (string) $issued->plainToken, $admission, new AuditRequestContext('test', null));
+
+        self::assertSame('failed', $result);
+        self::assertSame('Q001', $issued->ticket->fresh()->ticket_number);
+        self::assertNull($issued->ticket->fresh()->link_sent_at);
+        self::assertNotNull($issued->ticket->fresh()->link_failed_at);
+        self::assertSame(1, AuditLog::query()->where('action', AuditAction::FRESHMAN_QUEUE_LINK_EMAIL_SEND_FAILED)->count());
+        Mail::assertNothingSent();
+    }
+
     /**
      * @return array{StudentProfile, IssuedFreshmanQueueTicket, User}
      */

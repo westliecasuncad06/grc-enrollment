@@ -2,6 +2,7 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Domain\Organization\AcademicTermStatus;
 use App\Models\Enrollment;
 use App\Models\QueueTicket;
 use App\Models\User;
@@ -33,6 +34,9 @@ final readonly class ListEnrollments
             ->with(['student.user', 'student.curriculum', 'academicTerm.enrollmentWindows', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items', 'revisions'])
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->when($academicTermId !== null, fn ($query) => $query->where('academic_term_id', $academicTermId))
+            ->when(isset($filters['enrollment_ids']), fn ($query) => $query->whereKey($filters['enrollment_ids']))
+            ->when(filter_var($filters['without_queue_ticket'] ?? false, FILTER_VALIDATE_BOOLEAN), fn ($query) => $query->whereDoesntHave('queueTicket'))
+            ->when(filter_var($filters['current_term'] ?? false, FILTER_VALIDATE_BOOLEAN), fn ($query) => $query->whereHas('academicTerm', fn ($term) => $term->where('status', AcademicTermStatus::SemesterOngoing)))
             ->when($overMaximumOnly, fn ($query) => $query->whereNotNull('unit_maximum')->whereColumn('total_units', '>', 'unit_maximum'))
             ->when($search !== null && $search !== '', function ($query) use ($search) {
                 $query->where(function ($sub) use ($search) {

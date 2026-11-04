@@ -67,6 +67,12 @@ return [
             'transport' => 'resend',
         ],
 
+        // HTTPS alternative for hosts such as Render Free that block SMTP.
+        'resend_http' => [
+            'transport' => 'resend_http',
+            'timeout' => (int) env('MAIL_HTTP_TIMEOUT', 15),
+        ],
+
         'sendmail' => [
             'transport' => 'sendmail',
             'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),

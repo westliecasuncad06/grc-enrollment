@@ -12,6 +12,7 @@ use App\Models\QueueTicket;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use App\Support\Http\FrontendBaseUrl;
+use App\Support\Mail\EnsureExternalMailTransport;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
@@ -29,7 +30,10 @@ use Throwable;
  */
 final class SendFreshmanQueueTicketEmail
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly EnsureExternalMailTransport $mailTransport,
+    ) {}
 
     public function handle(QueueTicket $ticket, string $plainToken, User $actor, AuditRequestContext $context): string
     {
@@ -38,6 +42,7 @@ final class SendFreshmanQueueTicketEmail
         $liveUrl = FrontendBaseUrl::resolve().'/queue/live?t='.$plainToken;
 
         try {
+            $this->mailTransport->check();
             // A transferee already has an account and still has to choose their subjects, so their
             // email says so; a freshman's account is set up only after they pay.
             $mailable = $profile->student_type === StudentType::Transferee

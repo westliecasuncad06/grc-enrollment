@@ -33,8 +33,8 @@ final readonly class ListRegistrarStudents
                         ->orWhereHas('user', fn (Builder $userQuery): Builder => $userQuery->where('name', 'like', $pattern));
                 });
             })
-            ->orderBy('student_profiles.student_number')
-            ->orderBy('student_profiles.id')
+            ->orderByDesc('student_profiles.student_number')
+            ->orderByDesc('student_profiles.id')
             ->paginate($perPage, ['*'], 'page', $page)
             ->withQueryString();
     }
