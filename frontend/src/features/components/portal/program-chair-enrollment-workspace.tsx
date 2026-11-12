@@ -482,7 +482,6 @@ export function ProgramChairEnrollmentWorkspace({
   const termsQuery = useAcademicTermsQuery()
   const curriculaQuery = useCurriculaQuery()
   const programsQuery = useProgramsQuery()
-  const sectionsQuery = useSectionsQuery()
   const directoryQuery = useFacultyDirectoryQuery()
   const subjectsQuery = useSubjectsQuery()
   const preferencesQuery = useFacultySubjectPreferencesQuery()
@@ -516,6 +515,9 @@ export function ProgramChairEnrollmentWorkspace({
 
     return term
   }, [termsQuery.data])
+  const sectionsQuery = useSectionsQuery({
+    academicTermId: currentTerm?.id ?? 0,
+  })
   const proposalsQuery = useScheduleProposalsQuery({
     enabled: currentTerm !== null,
   })
@@ -649,7 +651,6 @@ export function ProgramChairEnrollmentWorkspace({
       setForecastOpen(true)
       void queryClient.invalidateQueries({
         queryKey: sectionsQueryKey(session?.userId ?? null),
-        exact: true,
       })
       void queryClient.invalidateQueries({
         queryKey: ["section-plans", session?.userId ?? null, termId],
@@ -682,7 +683,6 @@ export function ProgramChairEnrollmentWorkspace({
           if (run.status !== "queued" && run.status !== "running") {
             void queryClient.invalidateQueries({
               queryKey: sectionsQueryKey(session?.userId ?? null),
-              exact: true,
             })
             void queryClient.invalidateQueries({
               queryKey: ["section-plans", session?.userId ?? null, termId],

@@ -235,7 +235,7 @@ export function ScheduleWorkspace() {
   const termSelection = useAcademicTermSelection()
   const { term, termId, sortedTerms, isCurrentTerm, setSelectedTermId } =
     termSelection
-  const sectionsQuery = useSectionsQuery()
+  const sectionsQuery = useSectionsQuery({ academicTermId: termId })
   const subjectsQuery = useSubjectsQuery()
   const facultyQuery = useFacultyDirectoryQuery()
   const preferencesQuery = useFacultySubjectPreferencesQuery()
@@ -587,7 +587,6 @@ export function ScheduleWorkspace() {
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: sectionsQueryKey(session?.userId ?? null),
-          exact: true,
         }),
         queryClient.invalidateQueries({
           queryKey: ["room-occupancy"],
@@ -599,7 +598,6 @@ export function ScheduleWorkspace() {
           queryKey: ["rooms"],
         }),
       ])
-      await sectionsQuery.refetch()
     },
   })
 
@@ -621,7 +619,6 @@ export function ScheduleWorkspace() {
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: sectionsQueryKey(session?.userId ?? null),
-          exact: true,
         }),
         queryClient.invalidateQueries({ queryKey: ["rooms"] }),
       ])

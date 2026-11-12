@@ -255,6 +255,14 @@ describe("MasterScheduleWorkspace", () => {
       await screen.findByRole("tab", { name: "For review", selected: true }),
     ).toBeInTheDocument()
     expect(screen.queryByText(/ENG101/)).not.toBeInTheDocument()
+    await screen.findByText("No schedule decisions are currently available.")
+    // The review view needs proposals only. History references stay available
+    // on demand without competing with the initial review request.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/schedule-proposals"),
+      expect.any(Object),
+    )
     await user.click(screen.getByRole("tab", { name: "Decision History" }))
     const sectionCard = await screen.findByRole("article", { name: "A section" })
     expect(sectionCard).toBeInTheDocument()
@@ -428,6 +436,7 @@ describe("MasterScheduleWorkspace", () => {
     expect(
       screen.getByText("This workspace is not available for your role."),
     ).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

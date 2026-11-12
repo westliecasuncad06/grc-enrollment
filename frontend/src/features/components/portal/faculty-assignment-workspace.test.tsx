@@ -125,6 +125,23 @@ describe("FacultyAssignmentWorkspace", () => {
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
+  it("keeps the term selector available when no current term is configured", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ data: [] }))),
+    )
+    renderWithSession(<FacultyAssignmentWorkspace />, {
+      session: {
+        userId: "4",
+        displayName: "Chair",
+        role: "program_chair",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    expect(await screen.findByLabelText("Academic term")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Loading faculty assignment data…")).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([input]) => url(input).includes("/sections"))).toBe(false)
+  })
+
   it("uses a faculty member's term-independent availability for the selected term", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input, init) =>

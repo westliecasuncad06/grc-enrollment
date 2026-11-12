@@ -11,12 +11,16 @@ use App\Domain\Organization\CollegeCode;
 use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermSectionPlan;
 use App\Models\AuditLog;
+use App\Models\Curriculum;
+use App\Models\Program;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 final class SectionsEndpointTest extends TestCase
@@ -72,6 +76,8 @@ final class SectionsEndpointTest extends TestCase
 
         $response->assertOk()->assertHeader('Cache-Control', 'no-store, private');
         self::assertCount(1, $response->json('data'));
+        $this->withToken($token)->getJson('/api/v1/sections?academic_term_id='.$term->id)
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.status', 'published');
     }
 
     public function test_section_responses_use_canonical_three_letter_day_codes(): void
@@ -90,6 +96,81 @@ final class SectionsEndpointTest extends TestCase
             ->getJson('/api/v1/sections');
 
         $response->assertOk()->assertJsonPath('data.0.schedule_days', 'TUE/THU');
+    }
+
+    public function test_term_filter_returns_the_same_records_without_downloading_other_terms(): void
+    {
+        $term = $this->makeTerm();
+        $subject = $this->makeSubject('TERM-FILTER');
+        Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'CURRENT', 'capacity' => 40, 'status' => SectionStatus::Published]);
+        $history = AcademicTerm::create(['school_year' => '2025-2026', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed]);
+        for ($i = 0; $i < 9; $i++) {
+            Section::create(['academic_term_id' => $history->id, 'subject_id' => $subject->id, 'section_code' => 'HISTORY-'.$i, 'capacity' => 40, 'status' => SectionStatus::Closed]);
+        }
+        $token = $this->tokenFor(UserRole::Student, 'student.term-filter@grc.test');
+
+        $all = $this->withToken($token)->getJson('/api/v1/sections')->assertOk()->assertJsonCount(10, 'data');
+        $filtered = $this->withToken($token)->getJson('/api/v1/sections?academic_term_id='.$term->id)
+            ->assertOk()->assertJsonCount(1, 'data')->assertHeader('Cache-Control', 'no-store, private');
+
+        self::assertSame(
+            array_values(array_filter($all->json('data'), fn (array $section): bool => $section['academic_term_id'] === $term->id)),
+            $filtered->json('data'),
+        );
+        self::assertLessThan(strlen($all->getContent()) / 5, strlen($filtered->getContent()));
+        $this->withToken($token)->getJson('/api/v1/sections?academic_term_id='.$history->id)
+            ->assertOk()->assertJsonCount(9, 'data');
+        $this->withToken($token)->getJson('/api/v1/sections?academic_term_id=999999')
+            ->assertOk()->assertExactJson(['data' => []]);
+    }
+
+    public function test_term_filter_keeps_program_chair_college_visibility(): void
+    {
+        $term = $this->makeTerm();
+        $subject = $this->makeSubject('COLLEGE-FILTER');
+        foreach (['ccs', 'coa'] as $college) {
+            $program = Program::create([
+                'code' => 'FILTER-'.strtoupper($college), 'name' => 'Filter test program',
+                'college' => $college, 'status' => 'active',
+            ]);
+            $curriculum = Curriculum::create([
+                'program_id' => $program->id, 'name' => 'Filter test curriculum',
+                'effective_school_year' => '2026-2027', 'status' => 'active',
+            ]);
+            $plan = AcademicTermSectionPlan::create([
+                'academic_term_id' => $term->id, 'college' => $college, 'curriculum_id' => $curriculum->id,
+                'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => 'draft',
+            ]);
+            Section::create([
+                'academic_term_id' => $term->id, 'subject_id' => $subject->id,
+                'section_plan_id' => $plan->id, 'section_code' => strtoupper($college),
+                'capacity' => 40, 'status' => SectionStatus::Planned,
+            ]);
+        }
+
+        $this->withToken($this->tokenFor(UserRole::ProgramChair, 'chair.term-filter@grc.test'))
+            ->getJson('/api/v1/sections?academic_term_id='.$term->id)
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.section_code', 'CCS');
+    }
+
+    #[DataProvider('invalidTermFilters')]
+    public function test_invalid_term_filter_is_rejected(string $filter): void
+    {
+        $this->withToken($this->tokenFor(UserRole::Student, 'student.invalid-filter@grc.test'))
+            ->getJson('/api/v1/sections?'.$filter)
+            ->assertUnprocessable()->assertJsonValidationErrors('academic_term_id', 'error.errors');
+    }
+
+    /** @return array<string, array{string}> */
+    public static function invalidTermFilters(): array
+    {
+        return [
+            'zero' => ['academic_term_id=0'],
+            'negative' => ['academic_term_id=-1'],
+            'fraction' => ['academic_term_id=1.5'],
+            'text' => ['academic_term_id=all'],
+            'array' => ['academic_term_id[]=1'],
+        ];
     }
 
     /**
@@ -207,6 +288,8 @@ final class SectionsEndpointTest extends TestCase
             [$ownPublished->id, $ownClosed->id],
             array_column($response->json('data'), 'id'),
         );
+        $this->withToken($token)->getJson('/api/v1/sections?academic_term_id='.$term->id)
+            ->assertOk()->assertExactJson(['data' => $response->json('data')]);
     }
 
     public function test_an_executive_director_receives_only_published_sections(): void
@@ -222,6 +305,8 @@ final class SectionsEndpointTest extends TestCase
 
         $response->assertOk()->assertJsonCount(1, 'data');
         self::assertSame([$published->id], array_column($response->json('data'), 'id'));
+        $this->getJson('/api/v1/sections?academic_term_id='.$term->id)
+            ->assertOk()->assertExactJson(['data' => $response->json('data')]);
     }
 
     public function test_a_program_chair_can_create_a_section(): void

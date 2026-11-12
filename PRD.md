@@ -926,6 +926,13 @@ DELETE /api/v1/super-admin/users/{user}
 
 The final route inventory must be documented in an OpenAPI specification or equivalent API reference.
 
+`GET /api/v1/sections` accepts an optional positive integer `academic_term_id`
+to return only that term's authorized sections. Omitting it preserves the full
+authorized history and the existing `data` array response. An unknown term
+returns an empty list. All role/college visibility and professor-disclosure rules
+and private, non-cacheable HTTP headers still apply. Term-specific planning
+views use this filter; history views retain access to every authorized term.
+
 ---
 
 ## 9. Authentication, CORS, and Security

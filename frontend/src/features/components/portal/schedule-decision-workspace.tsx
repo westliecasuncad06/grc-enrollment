@@ -100,7 +100,6 @@ export function ScheduleDecisionControls({
         }),
         queryClient.invalidateQueries({
           queryKey: sectionsQueryKey(session?.userId ?? null),
-          exact: true,
         }),
       ])
       setPending(null)

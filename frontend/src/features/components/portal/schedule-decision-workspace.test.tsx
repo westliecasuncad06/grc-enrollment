@@ -222,7 +222,6 @@ describe("ScheduleDecisionWorkspace", () => {
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: sectionsQueryKey("5"),
-      exact: true,
     })
   })
 

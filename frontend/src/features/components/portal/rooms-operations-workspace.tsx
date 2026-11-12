@@ -101,7 +101,7 @@ export function RoomsOperationsWorkspace() {
   }))
   const isProgramChair = session?.role === "program_chair"
 
-  const sectionsQuery = useSectionsQuery()
+  const sectionsQuery = useSectionsQuery({ academicTermId: termId })
   const subjectsQuery = useSubjectsQuery()
   const facultyQuery = useFacultyDirectoryQuery()
   const [assigningSection, setAssigningSection] = useState<Section | null>(null)
@@ -160,7 +160,6 @@ export function RoomsOperationsWorkspace() {
       setAssigningSection(null)
       void queryClient.invalidateQueries({
         queryKey: sectionsQueryKey(session?.userId ?? null),
-        exact: true,
       })
       void queryClient.invalidateQueries({
         queryKey: roomOccupancyQueryKey(
@@ -177,7 +176,7 @@ export function RoomsOperationsWorkspace() {
     isPending:
       termSelection.termsQuery.isPending ||
       roomsQuery.isPending ||
-      sectionsQuery.isPending ||
+      (termId > 0 && sectionsQuery.isPending) ||
       subjectsQuery.isPending ||
       facultyQuery.isPending,
     isError:

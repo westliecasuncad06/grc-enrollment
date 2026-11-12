@@ -332,7 +332,7 @@ describe("RoomsOperationsWorkspace", () => {
         return Promise.resolve(new Response(JSON.stringify(rooms)))
       if (url.includes("/room-occupancy"))
         return Promise.resolve(new Response(JSON.stringify(roomOccupancy)))
-      if (url.endsWith("/sections"))
+      if (new URL(url).pathname.endsWith("/sections"))
         return Promise.resolve(new Response(JSON.stringify(sections)))
       if (url.endsWith("/subjects"))
         return Promise.resolve(new Response(JSON.stringify(subjects)))
@@ -344,6 +344,16 @@ describe("RoomsOperationsWorkspace", () => {
   })
 
   afterEach(() => vi.unstubAllGlobals())
+
+  it("keeps room inventory available when no academic terms are configured", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ data: [] }))),
+    )
+    renderWorkspace()
+    expect(await screen.findByRole("heading", { name: "Find a room" })).toBeInTheDocument()
+    expect(screen.queryByLabelText("Loading room availability…")).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("/sections"))).toBe(false)
+  })
 
   it("opens a room's detail dialog with its true occupancy and hides its CCS lecture component", async () => {
     const user = userEvent.setup()

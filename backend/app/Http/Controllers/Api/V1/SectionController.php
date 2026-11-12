@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Scheduling\CreateSection;
+use App\Actions\Scheduling\ListSections;
 use App\Actions\Scheduling\UpdateSection;
 use App\Domain\Scheduling\PublishedSectionLock;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Section\IndexSectionRequest;
 use App\Http\Requests\Api\V1\Section\StoreSectionRequest;
 use App\Http\Requests\Api\V1\Section\UpdateSectionRequest;
 use App\Http\Resources\Api\V1\SectionResource;
@@ -21,19 +23,14 @@ final class SectionController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function index(Request $request): JsonResponse
+    public function index(IndexSectionRequest $request, ListSections $action): JsonResponse
     {
         $user = $this->authenticatedUser($request);
 
         $this->authorize('viewAny', Section::class);
 
-        $sections = Section::query()
-            ->visibleTo($user)
-            ->with('professor:id,name')
-            ->orderBy('academic_term_id')
-            ->orderBy('subject_id')
-            ->orderBy('section_code')
-            ->get();
+        $termId = $request->validated('academic_term_id');
+        $sections = $action->execute($user, $termId === null ? null : (int) $termId);
 
         return $this->cachePrivateResponse(SectionResource::collection($sections)->response($request));
     }

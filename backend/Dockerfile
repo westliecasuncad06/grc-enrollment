@@ -11,7 +11,10 @@ RUN apk add --no-cache \
     libzip-dev \
     oniguruma-dev \
     ca-certificates \
-    && docker-php-ext-install bcmath pdo_mysql mbstring pcntl xml zip
+    && docker-php-ext-install bcmath pdo_mysql mbstring pcntl xml zip opcache
+
+# Share compiled PHP bytecode across FPM requests on the existing free host.
+COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/zz-grc-opcache.ini
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

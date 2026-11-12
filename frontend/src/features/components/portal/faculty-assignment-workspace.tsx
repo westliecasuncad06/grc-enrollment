@@ -61,7 +61,6 @@ export function FacultyAssignmentWorkspace() {
   const queryClient = useQueryClient()
   const termsQuery = useAcademicTermsQuery()
   const subjectsQuery = useSubjectsQuery()
-  const sectionsQuery = useSectionsQuery()
   const directoryQuery = useFacultyDirectoryQuery()
   const availabilitiesQuery = useFacultyAvailabilitiesQuery()
   const preferencesQuery = useFacultySubjectPreferencesQuery()
@@ -71,6 +70,7 @@ export function FacultyAssignmentWorkspace() {
   const [requestError, setRequestError] = useState("")
   const activeTerm = getActiveAcademicTerm(termsQuery.data)
   const selectedTermId = termId === 0 ? (activeTerm?.id ?? 0) : termId
+  const sectionsQuery = useSectionsQuery({ academicTermId: selectedTermId })
   const unassigned = (sectionsQuery.data ?? []).filter(
     (section) =>
       section.academic_term_id === selectedTermId &&
@@ -103,7 +103,6 @@ export function FacultyAssignmentWorkspace() {
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: sectionsQueryKey(session?.userId ?? null),
-        exact: true,
       }),
   })
   const save = async () => {
@@ -139,7 +138,7 @@ export function FacultyAssignmentWorkspace() {
     isPending:
       termsQuery.isPending ||
       subjectsQuery.isPending ||
-      sectionsQuery.isPending ||
+      (selectedTermId > 0 && sectionsQuery.isPending) ||
       directoryQuery.isPending ||
       availabilitiesQuery.isPending ||
       preferencesQuery.isPending,

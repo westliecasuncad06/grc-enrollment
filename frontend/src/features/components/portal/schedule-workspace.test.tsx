@@ -349,18 +349,21 @@ describe("ScheduleWorkspace", () => {
       }
       if (url.endsWith("/room-options")) return Promise.resolve(new Response(JSON.stringify(rooms)))
       if (url.includes("/room-occupancy")) return Promise.resolve(new Response(JSON.stringify(roomOccupancy)))
+      if (new URL(url).pathname.endsWith("/sections")) {
+        const termId = Number(new URL(url).searchParams.get("academic_term_id"))
+        const rows = section11Published
+          ? [
+              { ...sections.data[0], status: "published", status_label: "Published" },
+              ...sections.data.slice(1),
+            ]
+          : sections.data
+        return Promise.resolve(new Response(JSON.stringify({
+          data: rows.filter((section) => section.academic_term_id === termId),
+        })))
+      }
       const body = url.endsWith("/academic-terms")
         ? terms
-        : url.endsWith("/sections")
-          ? section11Published
-            ? {
-                data: [
-                  { ...sections.data[0], status: "published", status_label: "Published" },
-                  ...sections.data.slice(1),
-                ],
-              }
-            : sections
-          : url.endsWith("/subjects")
+        : url.endsWith("/subjects")
             ? subjects
             : url.includes("/faculty-members")
               ? faculty
@@ -504,6 +507,9 @@ describe("ScheduleWorkspace", () => {
     const archivedCard = await screen.findByRole("article", { name: "OLD101 section" })
     await user.click(within(archivedCard).getByRole("button", { name: /View schedule & assign/ }))
     expect(screen.getByRole("button", { name: "Archived" })).toBeDisabled()
+    expect(fetchMock.mock.calls.some(([input]) =>
+      requestUrl(input).endsWith(`/sections?academic_term_id=${archivedTerm.id}`),
+    )).toBe(true)
   })
 
   it("lets the Program Chair pick a room and an open calendar slot, then save with an override reason", async () => {

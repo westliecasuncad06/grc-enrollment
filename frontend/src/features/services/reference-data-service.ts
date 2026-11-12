@@ -234,8 +234,13 @@ export async function getCurricula(
 
 export async function getSections(
   signal?: AbortSignal,
+  academicTermId?: number,
 ): Promise<readonly Section[]> {
-  const payload = await getAuthenticatedJson(SECTIONS_PATH, signal)
+  const path =
+    academicTermId === undefined
+      ? SECTIONS_PATH
+      : `${SECTIONS_PATH}?academic_term_id=${academicTermId}`
+  const payload = await getAuthenticatedJson(path, signal)
   return parseResponse(sectionsEnvelopeSchema, payload, "sections").data
 }
 

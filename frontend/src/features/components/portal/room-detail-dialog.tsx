@@ -111,7 +111,10 @@ export function RoomDetailDialog({
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const occupancyQuery = useRoomOccupancyQuery(room, termId)
-  const sectionsQuery = useSectionsQuery()
+  const sectionsQuery = useSectionsQuery({
+    academicTermId: termId,
+    enabled: room !== null,
+  })
   const subjectsQuery = useSubjectsQuery()
   const facultyQuery = useFacultyDirectoryQuery()
   const [view, setView] = useState<"table" | "calendar">("calendar")
@@ -271,7 +274,6 @@ export function RoomDetailDialog({
       setEditingSectionId(null)
       void queryClient.invalidateQueries({
         queryKey: sectionsQueryKey(session?.userId ?? null),
-        exact: true,
       })
       void queryClient.invalidateQueries({
         queryKey: roomOccupancyQueryKey(session?.userId ?? null, room, termId),

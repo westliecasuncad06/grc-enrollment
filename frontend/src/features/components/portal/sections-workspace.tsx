@@ -117,7 +117,6 @@ export function SectionsWorkspace() {
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: sectionsQueryKey(userId),
-        exact: true,
       }),
   })
 

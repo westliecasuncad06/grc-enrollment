@@ -26,11 +26,22 @@ export const subjectsQueryKey = (userId: string | null) =>
   ["subjects", userId] as const
 export const curriculaQueryKey = (userId: string | null) =>
   ["curricula", userId] as const
-export const sectionsQueryKey = (userId: string | null) =>
-  ["sections", userId] as const
+// The unfiltered key is also the invalidation prefix for every term's list.
+export const sectionsQueryKey = (
+  userId: string | null,
+  academicTermId?: number,
+) =>
+  academicTermId === undefined
+    ? (["sections", userId] as const)
+    : (["sections", userId, academicTermId] as const)
 
 interface ReferenceDataQueryOptions {
   enabled?: boolean
+}
+
+interface SectionsQueryOptions extends ReferenceDataQueryOptions {
+  /** Omit for history across terms; zero waits until a term is selected. */
+  academicTermId?: number
 }
 
 interface AcademicTermsQueryOptions extends ReferenceDataQueryOptions {
@@ -187,12 +198,16 @@ export function useCurriculaQuery({
 
 export function useSectionsQuery({
   enabled = true,
-}: ReferenceDataQueryOptions = {}) {
+  academicTermId,
+}: SectionsQueryOptions = {}) {
   const { session } = useAuth()
 
   return useQuery({
-    queryKey: sectionsQueryKey(session?.userId ?? null),
-    queryFn: ({ signal }) => getSections(signal),
-    enabled: enabled && session !== null,
+    queryKey: sectionsQueryKey(session?.userId ?? null, academicTermId),
+    queryFn: ({ signal }) => getSections(signal, academicTermId),
+    enabled:
+      enabled &&
+      session !== null &&
+      (academicTermId === undefined || academicTermId > 0),
   })
 }
