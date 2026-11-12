@@ -154,6 +154,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 ### 3.2 Admission Staff
 
 - Create new student accounts and initial profiles.
+- Admission derives the entry year from the explicitly selected current academic term, including draft and approval preparation, so intake can happen before classes begin. Closed or archived selected terms cannot provision accounts; a legacy installation without a selected term may use its ongoing term. Missing term or curriculum configuration returns an actionable validation error without creating an account.
 - Record and view admission status.
 - Issue a temporary credential or approved invitation flow. For a **freshman** the invitation
   is not sent at intake: Admission issues a Cashier **queue number** instead and emails it with a
@@ -410,6 +411,8 @@ The system captures curriculum rules, faculty availability, subject preferences,
 - **1.4 Approve and Publish Schedule** — applies Dean approval and Executive Director authorization, stores the final schedule, and distributes teaching schedules, rosters, status, and alerts.
 
 The Program Chair must see the Section Demand Forecast produced by Process 4.0 before finalizing the proposed section plan. This closes the planning feedback loop while preserving human approval.
+
+**Scheduling amendment (2026-11-12, owner direction; ADR 0057):** Generate Schedule uses validated historical enrollment aggregates directly in Laravel and never calls or trains a machine-learning model. For the approved prior-cohort reference, the latest historical enrollment rate is applied to the current cohort headcount, and the historical block count is retained as an editable recommendation. Synthetic-only inputs are excluded; missing history is reported instead of invented. The deterministic baseline has no statistical confidence interval. Existing curriculum, faculty availability, room conflicts, manual overrides and human approvals still govern the draft. This scheduling rule supersedes the section-demand ML candidates below for this workflow; the independent analytics service remains runnable.
 
 #### Requirements
 

@@ -206,6 +206,12 @@ function CreateAccountPanel() {
   const requirementsQuery = useAdmissionRequirementSelectionQuery(
     studentType ?? null,
   )
+  const configurationErrors =
+    isApiClientError(mutation.error) && mutation.error.status === 422
+      ? Object.entries(mutation.error.fieldErrors ?? {})
+          .filter(([field]) => !(field in provisionStudentSchema.shape))
+          .flatMap(([, messages]) => messages)
+      : []
   const applicableIds = useMemo(
     () =>
       (requirementsQuery.data?.categories ?? []).flatMap((group) =>
@@ -710,6 +716,8 @@ function CreateAccountPanel() {
                             ? "No student record or queue number was created, so the same details can be sent again."
                             : "No account was created, so the same details can be sent again."}
                         </>
+                      ) : configurationErrors.length > 0 ? (
+                        configurationErrors.join(" ")
                       ) : studentType === "freshman" ? (
                         "Review the form details and try again. No student record or queue number was created, so nothing is left to clean up."
                       ) : (

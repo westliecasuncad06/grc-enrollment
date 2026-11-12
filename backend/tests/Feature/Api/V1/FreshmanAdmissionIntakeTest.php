@@ -86,6 +86,57 @@ final class FreshmanAdmissionIntakeTest extends TestCase
         });
     }
 
+    public function test_admission_can_create_a_freshman_while_the_selected_current_term_is_still_draft(): void
+    {
+        Mail::fake();
+        $payload = $this->payload('draft.intake@grc.test', 'freshman');
+        $term = AcademicTerm::query()->sole();
+        $term->update(['status' => AcademicTermStatus::Draft]);
+        DB::table('academic_term_current_slots')->updateOrInsert(['id' => 1], ['academic_term_id' => $term->id]);
+
+        $this->withToken($this->admissionToken())->postJson('/api/v1/student-profiles', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.entry_year', 2026)
+            ->assertJsonPath('data.queue_ticket_number', 'Q001')
+            ->assertJsonPath('data.account_setup_status', 'awaiting_payment');
+
+        Mail::assertSent(FreshmanQueueTicketMail::class);
+        Mail::assertNotSent(StudentAccountSetupMail::class);
+    }
+
+    public function test_admission_uses_the_selected_current_term_instead_of_a_stale_ongoing_term(): void
+    {
+        Mail::fake();
+        $payload = $this->payload('current.intake@grc.test', 'transferee');
+        $current = AcademicTerm::create([
+            'school_year' => '2027-2028', 'semester' => '1st', 'status' => AcademicTermStatus::ForDeanApproval,
+        ]);
+        DB::table('academic_term_current_slots')->updateOrInsert(['id' => 1], ['academic_term_id' => $current->id]);
+
+        $this->withToken($this->admissionToken())->postJson('/api/v1/student-profiles', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.entry_year', 2027)
+            ->assertJsonPath('data.invitation_delivery_status', 'sent');
+    }
+
+    public function test_a_closed_selected_term_does_not_fall_back_to_a_stale_ongoing_term(): void
+    {
+        Mail::fake();
+        $payload = $this->payload('closed.intake@grc.test', 'freshman');
+        $closed = AcademicTerm::create([
+            'school_year' => '2027-2028', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed,
+        ]);
+        DB::table('academic_term_current_slots')->updateOrInsert(['id' => 1], ['academic_term_id' => $closed->id]);
+
+        $this->withToken($this->admissionToken())->postJson('/api/v1/student-profiles', $payload)
+            ->assertUnprocessable()
+            ->assertJsonPath('error.errors.academic_term.0', 'Ask the Registrar to select a current academic term before creating student accounts.');
+
+        self::assertSame(0, StudentProfile::query()->count());
+        self::assertSame(0, QueueTicket::query()->count());
+        Mail::assertNothingSent();
+    }
+
     public function test_a_failure_while_issuing_the_queue_number_leaves_no_half_created_student_behind(): void
     {
         $this->travelTo(Carbon::parse('2027-08-15 10:00:00', 'Asia/Manila'));

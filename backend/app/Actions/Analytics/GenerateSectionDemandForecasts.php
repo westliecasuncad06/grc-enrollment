@@ -17,7 +17,6 @@ use App\Models\ScheduleGenerationRun;
 use App\Models\SectionDemandForecast;
 use App\Models\SectionDemandObservation;
 use App\Models\StudentProfile;
-use App\Services\Analytics\SectionDemandPredictionClient;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -31,7 +30,6 @@ final class GenerateSectionDemandForecasts
 {
     public function __construct(
         private readonly HistoricalCohortResolver $historicalCohortResolver,
-        private readonly SectionDemandPredictionClient $predictionClient,
         private readonly ApplyDemandForecastToDraft $applyDemandForecastToDraft,
         private readonly GenerateFacultyAssignmentRecommendations $facultyRecommendations,
     ) {}
@@ -50,7 +48,7 @@ final class GenerateSectionDemandForecasts
         $predictionRun = PredictionRun::create([
             'type' => PredictionType::SectionDemand,
             'academic_term_id' => $term->id,
-            'model_version' => 'section-demand-rf-v2',
+            'model_version' => 'section-demand-historical-v1',
             'feature_schema_version' => 'v2',
             'status' => PredictionRunStatus::Running,
             'started_at' => now(),
@@ -71,7 +69,6 @@ final class GenerateSectionDemandForecasts
             $forecastByCohort = [];
             $warnings = [];
             $totalObservationCount = 0;
-            $serviceFallbackCount = 0;
 
             foreach ($cohorts as $cohort) {
                 $history = $this->historicalCohortResolver->resolve(
@@ -94,31 +91,12 @@ final class GenerateSectionDemandForecasts
                     'semester' => $term->semester,
                 ]];
 
-                try {
-                    $response = $this->predictionClient->predict($observations, $target);
-                    $strategy = (string) ($response['strategy'] ?? 'unknown');
-                } catch (Throwable $exception) {
-                    report($exception);
-                    $response = $this->localBaselineResponse($observations, $target);
-                    $strategy = 'historical_baseline';
-                    $serviceFallbackCount++;
-                    $warnings[] = [
-                        'type' => ScheduleGenerationWarningType::PredictionServiceUnavailable->value,
-                        'message' => 'Prediction service was unavailable; generated an editable draft from validated historical cohort data.',
-                        'entity_id' => $cohort['curriculum_id'],
-                    ];
-                }
+                // Schedule planning uses validated enrollment history only. No HTTP call,
+                // model training, retry or prediction-service timeout belongs in this path.
+                $response = $this->historicalBaselineResponse($observations, $target);
+                $strategy = 'historical_baseline';
 
-                $forecast = collect($response['forecasts'] ?? [])->firstWhere('key', $cohort['key']);
-                if (! is_array($forecast)) {
-                    $warnings[] = [
-                        'type' => ScheduleGenerationWarningType::NoForecastReturned->value,
-                        'message' => "No demand forecast returned for {$cohort['key']}.",
-                        'entity_id' => $cohort['curriculum_id'],
-                    ];
-
-                    continue;
-                }
+                $forecast = $response['forecasts'][0];
 
                 $forecastByCohort[$cohort['key']] = [
                     'forecast' => $forecast,
@@ -172,20 +150,15 @@ final class GenerateSectionDemandForecasts
                 }
             });
 
-            $hasRandomForest = collect($forecastByCohort)->contains(fn (array $res): bool => $res['strategy'] === 'random_forest');
-            $overallStrategy = $hasRandomForest ? 'random_forest' : 'historical_baseline';
-
             $predictionRun->update([
                 'status' => PredictionRunStatus::Succeeded,
-                'model_version' => $serviceFallbackCount === count($forecastByCohort)
-                    ? 'section-demand-local-baseline-v1'
-                    : 'section-demand-rf-v2',
+                'model_version' => 'section-demand-historical-v1',
                 'feature_schema_version' => 'v2',
                 'metrics' => [
                     'forecast_count' => count($forecastByCohort),
                     'observation_count' => $totalObservationCount,
-                    'strategy' => $overallStrategy,
-                    'service_fallback_count' => $serviceFallbackCount,
+                    'strategy' => 'historical_baseline',
+                    'service_fallback_count' => 0,
                 ],
                 'completed_at' => now(),
             ]);
@@ -294,14 +267,14 @@ final class GenerateSectionDemandForecasts
     /**
      * @param  list<array{cohort_size: int, enrolled_count: int, section_count: int, offered_capacity: int, year_level: int, semester: string}>  $observations
      * @param  list<array{key: string, cohort_size: int, section_count: int, recommended_capacity: int, year_level: int, semester: string}>  $targets
-     * @return array{model_version: string, feature_schema_version: string, strategy: string, forecasts: list<array{key: string, predicted_demand: float, confidence_lower: float, confidence_upper: float, suggested_section_count: int}>}
+     * @return array{model_version: string, feature_schema_version: string, strategy: string, forecasts: list<array{key: string, predicted_demand: float, confidence_lower: null, confidence_upper: null, suggested_section_count: int}>}
      */
-    private function localBaselineResponse(array $observations, array $targets): array
+    private function historicalBaselineResponse(array $observations, array $targets): array
     {
         $latest = $observations[array_key_last($observations)];
 
         return [
-            'model_version' => 'section-demand-local-baseline-v1',
+            'model_version' => 'section-demand-historical-v1',
             'feature_schema_version' => 'v2',
             'strategy' => 'historical_baseline',
             'forecasts' => array_map(function (array $target) use ($latest): array {
@@ -311,8 +284,9 @@ final class GenerateSectionDemandForecasts
                 return [
                     'key' => $target['key'],
                     'predicted_demand' => $predictedDemand,
-                    'confidence_lower' => $predictedDemand,
-                    'confidence_upper' => $predictedDemand,
+                    // A historical rate is a deterministic estimate, not a trained confidence interval.
+                    'confidence_lower' => null,
+                    'confidence_upper' => null,
                     'suggested_section_count' => max(1, $latest['section_count']),
                 ];
             }, $targets),
@@ -323,7 +297,7 @@ final class GenerateSectionDemandForecasts
     {
         $predictionRun->update([
             'status' => PredictionRunStatus::Succeeded,
-            'metrics' => ['forecast_count' => 0],
+            'metrics' => ['forecast_count' => 0, 'observation_count' => 0, 'strategy' => 'historical_baseline'],
             'completed_at' => now(),
         ]);
         $generationRun->update([

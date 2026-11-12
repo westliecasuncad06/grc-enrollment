@@ -24,6 +24,7 @@ use App\Models\RoomCatalogEntry;
 use App\Models\ScheduleGenerationRun;
 use App\Models\Section;
 use App\Models\User;
+use Illuminate\Support\Collection;
 
 /** Builds editable, persisted faculty recommendations from declared inputs. */
 final class GenerateFacultyAssignmentRecommendations
@@ -69,10 +70,23 @@ final class GenerateFacultyAssignmentRecommendations
                 'entity_id' => null,
             ]];
         }
+        // These inputs are reused by every block. Read them once per run, rather than
+        // repeating the same remote database round trips for hundreds of sections.
+        $referencePlacements = CurriculumSubject::query()
+            ->whereIn('curriculum_id', $sections->map(fn (Section $section): ?int => $section->sectionPlan?->curriculum_id)->filter()->unique())
+            ->whereIn('subject_id', $sections->pluck('subject_id')->unique())
+            ->get()
+            ->keyBy(fn (CurriculumSubject $placement): string => $placement->curriculum_id.':'.$placement->subject_id);
+        $roomCatalog = RoomCatalogEntry::query()
+            ->where('college', $run->college)
+            ->whereNotNull('capacity')
+            ->whereNotNull('room_type')
+            ->orderBy('name')
+            ->get();
         $warnings = [];
         foreach ($sections as $section) {
-            $this->fillReferenceSchedule($section);
-            $roomWarning = $this->assignConfiguredRoom($run, $section);
+            $this->fillReferenceSchedule($section, $referencePlacements->get($section->sectionPlan?->curriculum_id.':'.$section->subject_id));
+            $roomWarning = $this->assignConfiguredRoom($section, $roomCatalog);
             if ($roomWarning !== null) {
                 $warnings[] = $roomWarning;
             }
@@ -211,15 +225,11 @@ final class GenerateFacultyAssignmentRecommendations
         return array_values(array_unique($warnings, SORT_REGULAR));
     }
 
-    private function fillReferenceSchedule(Section $section): void
+    private function fillReferenceSchedule(Section $section, ?CurriculumSubject $placement): void
     {
         if ($section->sectionPlan === null) {
             return;
         }
-        $placement = CurriculumSubject::query()
-            ->where('curriculum_id', $section->sectionPlan->curriculum_id)
-            ->where('subject_id', $section->subject_id)
-            ->first();
         if ($placement === null) {
             return;
         }
@@ -276,7 +286,6 @@ final class GenerateFacultyAssignmentRecommendations
         }
         if ($changes !== []) {
             $section->update($changes);
-            $section->refresh();
         }
     }
 
@@ -291,31 +300,22 @@ final class GenerateFacultyAssignmentRecommendations
      * must also see every other college's booking in that room this term,
      * not just its own draft plan's.
      *
+     * @param  Collection<int, RoomCatalogEntry>  $roomCatalog
      * @return ?array{type: string, message: string, entity_id: int}
      */
-    private function assignConfiguredRoom(ScheduleGenerationRun $run, Section $section): ?array
+    private function assignConfiguredRoom(Section $section, Collection $roomCatalog): ?array
     {
         $preassignedRoom = $this->normalizeRoomName($section->room);
         if ($preassignedRoom !== null && $section->room !== $preassignedRoom) {
             $section->update(['room' => $preassignedRoom]);
-            $section->refresh();
         }
 
         if ($preassignedRoom !== null) {
-            $matchedRoom = RoomCatalogEntry::query()
-                ->where('college', $run->college)
-                ->where(function ($query) use ($preassignedRoom): void {
-                    $query->where('name', $preassignedRoom)
-                        ->orWhereRaw('UPPER(name) = ?', [strtoupper($preassignedRoom)]);
-                })
-                ->whereNotNull('capacity')
-                ->whereNotNull('room_type')
-                ->first();
+            $matchedRoom = $roomCatalog->first(fn (RoomCatalogEntry $room): bool => strtoupper($room->name) === strtoupper($preassignedRoom));
 
             if ($matchedRoom !== null) {
                 if ($section->room !== $matchedRoom->name) {
                     $section->update(['room' => $matchedRoom->name]);
-                    $section->refresh();
                     $preassignedRoom = $matchedRoom->name;
                 }
 
@@ -327,7 +327,6 @@ final class GenerateFacultyAssignmentRecommendations
                 // Rather than abandoning room placement, clear it so the catalog-matching fallback
                 // below can assign an available room of the subject's required room type.
                 $section->update(['room' => null]);
-                $section->refresh();
                 $preassignedRoom = null;
             }
         }
@@ -361,19 +360,13 @@ final class GenerateFacultyAssignmentRecommendations
             ];
         }
 
-        $rooms = RoomCatalogEntry::query()
-            ->where('college', $run->college)
-            ->where('room_type', $section->subject->room_requirement)
-            ->whereNotNull('capacity')
-            ->orderBy('name')
-            ->get();
+        $rooms = $roomCatalog->where('room_type', $section->subject->room_requirement);
         foreach ($rooms as $room) {
             if ($room->capacity < $section->capacity) {
                 continue;
             }
             if (! $this->roomIsOccupied($section, $room->name)) {
                 $section->update(['room' => $room->name]);
-                $section->refresh();
 
                 return null;
             }

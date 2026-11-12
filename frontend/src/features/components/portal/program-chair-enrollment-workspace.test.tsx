@@ -1109,7 +1109,7 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     // The editable generated-schedule card is gone entirely while pending
     // review — not shown-but-disabled.
     expect(
-      screen.queryByText("Predictive schedule planning"),
+      screen.queryByText("Historical schedule planning"),
     ).not.toBeInTheDocument()
     expect(screen.queryByText("IT101")).not.toBeInTheDocument()
     expect(

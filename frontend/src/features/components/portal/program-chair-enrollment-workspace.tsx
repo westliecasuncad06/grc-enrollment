@@ -1422,7 +1422,7 @@ export function ProgramChairEnrollmentWorkspace({
       {!approvalLocked && (
         <Card>
           <CardHeader>
-            <CardTitle>Predictive schedule planning</CardTitle>
+            <CardTitle>Historical schedule planning</CardTitle>
             <CardDescription>
               {currentTerm
                 ? `${formatAcademicTerm(currentTerm)} · Generate advisory section demand first, then review and edit the resulting draft.`
@@ -1466,7 +1466,7 @@ export function ProgramChairEnrollmentWorkspace({
                 <AlertDescription>
                   {generationRun.status === "queued" ||
                   generationRun.status === "running"
-                    ? "Your predictive schedule is being generated. You can continue reviewing the current editable draft."
+                    ? "Your schedule is being generated from historical enrollment data. You can continue reviewing the current editable draft."
                     : generationRun.status === "failed"
                       ? (generationRun.error_summary ??
                         "The forecast could not be generated.")
@@ -2360,7 +2360,7 @@ export function ProgramChairEnrollmentWorkspace({
                         override_reason: event.target.value,
                       })
                     }
-                    placeholder="Required when changing this AI-generated recommendation."
+                    placeholder="Required when changing this historical recommendation."
                   />
                   <FieldDescription>
                     The original recommendation remains in the audit trail.

@@ -159,8 +159,8 @@ describe("DemandForecastDialog", () => {
           completed_at: null,
           created_at: null,
           model: {
-            strategy: "random_forest",
-            model_version: "section-demand-rf-v1",
+            strategy: "historical_baseline",
+            model_version: "section-demand-historical-v1",
             training_observation_count: 12,
             mae: 2.1,
             rmse: 2.8,
@@ -181,7 +181,7 @@ describe("DemandForecastDialog", () => {
                 year_level: 1,
               },
               rationale: {
-                model_strategy: "random_forest",
+                model_strategy: "historical_baseline",
                 section_formula:
                   "ceil(predicted demand / recommended capacity)",
                 recommended_capacity: 40,
@@ -210,7 +210,9 @@ describe("DemandForecastDialog", () => {
 
     const dialog = screen.getByRole("dialog")
     expect(dialog).toHaveTextContent("Demand Forecast")
-    expect(dialog).toHaveTextContent("Random Forest")
+    expect(dialog).toHaveTextContent("Historical enrollment data")
+    expect(dialog).toHaveTextContent("Validated enrollment history")
+    expect(dialog).not.toHaveTextContent("Sparse data fallback")
     expect(dialog).toHaveTextContent("Faculty Loading Support")
     expect(dialog).toHaveTextContent(
       "No historical data was available for this term.",

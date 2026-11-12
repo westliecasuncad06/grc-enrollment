@@ -32,11 +32,37 @@ use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 final class FacultyAssignmentRecommendationsEndpointTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_schedule_generation_reads_reference_data_once_for_multiple_blocks(): void
+    {
+        [$section, $run] = $this->recommendationContext();
+        RoomCatalogEntry::create(['name' => '3A', 'college' => CollegeCode::Ccs, 'capacity' => 45, 'room_type' => 'lecture']);
+        CurriculumSubject::query()->where('subject_id', $section->subject_id)->update(['reference_room' => '3A']);
+        for ($number = 2; $number <= 8; $number++) {
+            $copy = $section->replicate();
+            $copy->section_code = 'IT20'.$number;
+            $copy->save();
+        }
+
+        DB::enableQueryLog();
+        try {
+            app(GenerateFacultyAssignmentRecommendations::class)->execute($run);
+            $queries = collect(DB::getQueryLog())->pluck('query');
+        } finally {
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+        }
+
+        self::assertCount(1, $queries->filter(fn (string $sql): bool => str_contains($sql, 'from `curriculum_subjects`')));
+        self::assertCount(1, $queries->filter(fn (string $sql): bool => str_contains($sql, 'from `room_catalog_entries`')));
+        self::assertSame(8, FacultyAssignmentRecommendation::query()->where('schedule_generation_run_id', $run->id)->count());
+    }
 
     public function test_a_primary_specialization_outranks_a_bare_preference(): void
     {

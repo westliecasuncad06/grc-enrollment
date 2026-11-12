@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, useReducedMotion } from "motion/react"
-import { BrainCircuit, ChartSpline, Gauge, UsersRound } from "lucide-react"
+import { ChartSpline, Gauge, History, UsersRound } from "lucide-react"
 import Link from "next/link"
 import type { ReactNode } from "react"
 
@@ -78,9 +78,9 @@ export function DemandForecastDialog({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="grid gap-2">
                 <div className="flex items-center gap-2 text-primary">
-                  <BrainCircuit className="size-4" aria-hidden="true" />
+                  <History className="size-4" aria-hidden="true" />
                   <span className="text-xs font-semibold tracking-[0.16em] uppercase">
-                    Predictive planning
+                    Historical planning
                   </span>
                 </div>
                 <DialogTitle>Demand Forecast</DialogTitle>
@@ -149,13 +149,13 @@ export function DemandForecastDialog({
           {run?.model && (
             <div className="grid gap-3 sm:grid-cols-3">
               <ForecastStat
-                icon={<BrainCircuit />}
-                label="Model strategy"
+                icon={<History />}
+                label="Planning method"
                 value={
                   run.model.strategy === "random_forest"
                     ? "Random Forest"
                     : run.model.strategy === "historical_baseline"
-                      ? "Historical baseline"
+                      ? "Historical enrollment data"
                       : run.model.strategy ===
                           "service_unavailable_historical_baseline"
                         ? "Historical fallback"
@@ -169,7 +169,7 @@ export function DemandForecastDialog({
                 value={String(run.model.training_observation_count)}
                 detail={
                   run.model.strategy === "historical_baseline"
-                    ? "Sparse data fallback"
+                    ? "Validated enrollment history"
                     : run.model.strategy ===
                         "service_unavailable_historical_baseline"
                       ? "Service fallback"
@@ -237,7 +237,10 @@ export function DemandForecastDialog({
                                   : "Year not set"}
                               </span>
                               {group.curriculumVersion && (
-                                <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-mono">
+                                <Badge
+                                  variant="outline"
+                                  className="px-1.5 py-0 text-[10px] font-mono"
+                                >
                                   Curriculum {group.curriculumVersion}
                                 </Badge>
                               )}
@@ -306,7 +309,12 @@ export function DemandForecastDialog({
                       </p>
                       {recommendation.curriculum_effective_school_year && (
                         <Badge
-                          variant={recommendation.curriculum_effective_school_year === "2024-2029" ? "secondary" : "outline"}
+                          variant={
+                            recommendation.curriculum_effective_school_year ===
+                            "2024-2029"
+                              ? "secondary"
+                              : "outline"
+                          }
                           className="font-mono text-[11px]"
                         >
                           {recommendation.curriculum_effective_school_year}

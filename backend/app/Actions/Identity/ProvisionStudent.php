@@ -50,12 +50,19 @@ final class ProvisionStudent
         AuditRequestContext $context,
     ): StudentProfile {
         return DB::transaction(function () use ($data, $actor, $context): StudentProfile {
-            $currentTerm = AcademicTerm::query()
-                ->where('status', AcademicTermStatus::SemesterOngoing)
-                ->first();
+            // A newly selected term is still draft while schedules are prepared. Intake must
+            // follow that explicit selection, rather than require classes to have started.
+            $currentTermId = DB::table('academic_term_current_slots')->where('id', 1)->lockForUpdate()->value('academic_term_id');
+            $currentTerm = $currentTermId === null
+                ? AcademicTerm::query()->where('status', AcademicTermStatus::SemesterOngoing)->orderByDesc('school_year')->orderBy('semester')->first()
+                : AcademicTerm::query()->whereKey($currentTermId)->whereIn('status', [
+                    AcademicTermStatus::Draft,
+                    AcademicTermStatus::ForDeanApproval,
+                    AcademicTermStatus::SemesterOngoing,
+                ])->first();
             if ($currentTerm === null) {
                 throw ValidationException::withMessages([
-                    'entry_year' => 'No academic term is currently ongoing; entry year cannot be determined.',
+                    'academic_term' => 'Ask the Registrar to select a current academic term before creating student accounts.',
                 ]);
             }
             $entryYear = (int) substr($currentTerm->school_year, 0, 4);
@@ -70,7 +77,7 @@ final class ProvisionStudent
             );
             if ($curriculum === null) {
                 throw ValidationException::withMessages([
-                    'entry_year' => 'No curriculum version is configured for this program and entry year.',
+                    'program_id' => 'No curriculum version is configured for this program and entry year. Ask the Program Head to configure it.',
                 ]);
             }
 

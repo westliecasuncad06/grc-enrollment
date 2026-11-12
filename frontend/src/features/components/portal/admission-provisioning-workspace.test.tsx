@@ -884,6 +884,30 @@ describe("Student Records workspace", () => {
         ).not.toBeInTheDocument()
       })
 
+      it("shows a term configuration error even though academic_term is not an input", async () => {
+        const user = userEvent.setup()
+        const message =
+          "Ask the Registrar to select a current academic term before creating student accounts."
+        await submitWithServerError(
+          user,
+          "Freshman",
+          "Save student and issue queue number",
+          {
+            status: 422,
+            message: "The submitted data is invalid.",
+            errors: { academic_term: [message] },
+          },
+        )
+
+        expect(await screen.findByText(message)).toBeInTheDocument()
+        expect(screen.getByLabelText("Email address")).toHaveValue(
+          profile.email,
+        )
+        expect(
+          screen.queryByText(/Review the form details/),
+        ).not.toBeInTheDocument()
+      })
+
       it("still asks to review the form when the server rejected what was typed", async () => {
         const user = userEvent.setup()
         await submitWithServerError(

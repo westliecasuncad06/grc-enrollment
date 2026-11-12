@@ -5,10 +5,10 @@ namespace Tests\Feature\Actions\Analytics;
 use App\Actions\Analytics\GenerateSectionDemandForecasts;
 use App\Domain\Analytics\PredictionRunStatus;
 use App\Domain\Curriculum\CurriculumStatus;
+use App\Domain\Identity\AcademicStanding;
+use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
-use App\Domain\Identity\AdmissionStatus;
-use App\Domain\Identity\AcademicStanding;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
@@ -19,8 +19,8 @@ use App\Models\CurriculumSubject;
 use App\Models\Program;
 use App\Models\ScheduleGenerationRun;
 use App\Models\SectionDemandObservation;
-use App\Models\Subject;
 use App\Models\StudentProfile;
+use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -44,26 +44,8 @@ final class GenerateSectionDemandForecastsTest extends TestCase
         $chair = User::create(['name' => 'Chair', 'email' => 'chair.forecast@grc.test', 'password' => 'password', 'role' => UserRole::ProgramChair, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active]);
         $run = ScheduleGenerationRun::create(['academic_term_id' => $targetTerm->id, 'college' => 'ccs', 'initiated_by' => $chair->id, 'status' => ScheduleGenerationStatus::Queued]);
 
-        Http::fake([
-            'http://127.0.0.1:8100/internal/v1/section-demand/predict' => Http::response(['data' => [
-                'feature_schema_version' => 'v2',
-                'model_version' => 'section-demand-rf-v2',
-                'strategy' => 'historical_baseline',
-                'metrics' => [
-                    'training_observation_count' => 1,
-                    'validation_observation_count' => 0,
-                    'mae' => null,
-                    'rmse' => null,
-                ],
-                'forecasts' => [[
-                    'key' => "{$curriculum->id}:3",
-                    'predicted_demand' => 48.0,
-                    'confidence_lower' => 40.0,
-                    'confidence_upper' => 54.0,
-                    'suggested_section_count' => 2,
-                ]],
-            ]]),
-        ]);
+        Http::fake();
+        Http::preventStrayRequests();
 
         app(GenerateSectionDemandForecasts::class)->execute($run);
 
@@ -75,31 +57,16 @@ final class GenerateSectionDemandForecastsTest extends TestCase
         $this->assertSame('historical_baseline', $run->predictionRun->metrics['strategy']);
         $this->assertSame(1, $run->predictionRun->metrics['observation_count']);
         $this->assertSame(0, $run->predictionRun->metrics['service_fallback_count']);
-        Http::assertSent(function ($request) use ($curriculum, $subject): bool {
-            $payload = json_decode($request->body(), true, flags: JSON_THROW_ON_ERROR);
-
-            $this->assertSame([
-                'cohort_size' => 45,
-                'enrolled_count' => 42,
-                'section_count' => 2,
-                'offered_capacity' => 80,
-                'year_level' => 3,
-                'semester' => '1st',
-            ], $payload['data']['observations'][0]);
-            $this->assertSame([
-                'key' => "{$curriculum->id}:3",
-                'cohort_size' => 1,
-                'section_count' => 2,
-                'recommended_capacity' => 40,
-                'year_level' => 3,
-                'semester' => '2nd',
-            ], $payload['data']['targets'][0]);
-
-            return true;
-        });
+        $this->assertDatabaseHas('section_demand_forecasts', [
+            'prediction_run_id' => $run->prediction_run_id,
+            'predicted_demand' => 0.93,
+            'confidence_lower' => null,
+            'confidence_upper' => null,
+        ]);
+        Http::assertNothingSent();
     }
 
-    public function test_it_uses_real_cohort_history_and_the_random_forest_block_recommendation(): void
+    public function test_it_uses_real_cohort_history_and_excludes_synthetic_observations(): void
     {
         $targetTerm = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing]);
         $historyTerm = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
@@ -128,21 +95,8 @@ final class GenerateSectionDemandForecastsTest extends TestCase
         $chair = User::create(['name' => 'Chair', 'email' => 'chair.cohort-forecast@grc.test', 'password' => 'password', 'role' => UserRole::ProgramChair, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active]);
         $run = ScheduleGenerationRun::create(['academic_term_id' => $targetTerm->id, 'college' => CollegeCode::Ccs, 'initiated_by' => $chair->id, 'status' => ScheduleGenerationStatus::Queued]);
 
-        Http::fake([
-            'http://127.0.0.1:8100/internal/v1/section-demand/predict' => Http::response(['data' => [
-                'feature_schema_version' => 'v2',
-                'model_version' => 'section-demand-rf-v2',
-                'strategy' => 'random_forest',
-                'metrics' => ['training_observation_count' => 1, 'validation_observation_count' => 0, 'mae' => null, 'rmse' => null],
-                'forecasts' => [[
-                    'key' => "{$curriculum->id}:1",
-                    'predicted_demand' => 270.0,
-                    'confidence_lower' => 260.0,
-                    'confidence_upper' => 275.0,
-                    'suggested_section_count' => 9,
-                ]],
-            ]]),
-        ]);
+        Http::fake();
+        Http::preventStrayRequests();
 
         app(GenerateSectionDemandForecasts::class)->execute($run);
 
@@ -152,33 +106,12 @@ final class GenerateSectionDemandForecastsTest extends TestCase
             'subject_id' => $subject->id,
             'year_level' => 1,
             'suggested_section_count' => 9,
+            'predicted_demand' => 4.94,
         ]);
-        Http::assertSent(function ($request) use ($curriculum): bool {
-            $payload = json_decode($request->body(), true, flags: JSON_THROW_ON_ERROR);
-
-            $this->assertSame('v2', $payload['data']['feature_schema_version']);
-            $this->assertSame([[
-                'cohort_size' => 271,
-                'enrolled_count' => 268,
-                'section_count' => 9,
-                'offered_capacity' => 360,
-                'year_level' => 1,
-                'semester' => '1st',
-            ]], $payload['data']['observations']);
-            $this->assertSame([[
-                'key' => "{$curriculum->id}:1",
-                'cohort_size' => 5,
-                'section_count' => 9,
-                'recommended_capacity' => 40,
-                'year_level' => 1,
-                'semester' => '2nd',
-            ]], $payload['data']['targets']);
-
-            return true;
-        });
+        Http::assertNothingSent();
     }
 
-    public function test_it_creates_an_editable_historical_baseline_when_the_prediction_service_is_unavailable(): void
+    public function test_it_creates_an_editable_historical_baseline_without_contacting_the_prediction_service(): void
     {
         $targetTerm = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing]);
         $historyTerm = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
@@ -192,18 +125,18 @@ final class GenerateSectionDemandForecastsTest extends TestCase
         $chair = User::create(['name' => 'Chair', 'email' => 'chair.fallback@grc.test', 'password' => 'password', 'role' => UserRole::ProgramChair, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active]);
         $run = ScheduleGenerationRun::create(['academic_term_id' => $targetTerm->id, 'college' => CollegeCode::Ccs, 'initiated_by' => $chair->id, 'status' => ScheduleGenerationStatus::Queued]);
 
-        Http::fake([
-            'http://127.0.0.1:8100/internal/v1/section-demand/predict' => Http::failedConnection(),
-        ]);
+        Http::fake();
+        Http::preventStrayRequests();
 
         app(GenerateSectionDemandForecasts::class)->execute($run);
 
+        Http::assertNothingSent();
         $run->refresh();
         $this->assertSame(ScheduleGenerationStatus::Succeeded, $run->status);
         $this->assertDatabaseHas('section_demand_forecasts', ['academic_term_id' => $targetTerm->id, 'subject_id' => $subject->id, 'suggested_section_count' => 3]);
-        $this->assertSame('section-demand-local-baseline-v1', $run->predictionRun->model_version);
+        $this->assertSame('section-demand-historical-v1', $run->predictionRun->model_version);
         $this->assertSame('historical_baseline', $run->predictionRun->metrics['strategy']);
-        $this->assertContains('prediction_service_unavailable', array_column($run->warnings, 'type'));
+        $this->assertNotContains('prediction_service_unavailable', array_column($run->warnings, 'type'));
     }
 
     public function test_it_completes_with_an_insufficient_history_warning_without_calling_ml(): void
